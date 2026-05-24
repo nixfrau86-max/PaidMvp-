@@ -52,15 +52,15 @@ export default function CheckoutSuccess() {
               Locked in!<br />Order confirmed.
             </h1>
             <p className="text-[#3A3A3A] mb-8 max-w-md mx-auto">
-              You're part of this party. Once the supplier dispatches the batch, you'll get a tracking notification.
+              You're part of this wave. Once the supplier dispatches the batch, you'll get a tracking notification.
             </p>
             <div className="flex flex-wrap justify-center gap-3">
               <Link to="/dashboard" className="bg-[#FF5400] text-white border-2 border-ink font-bold uppercase tracking-wider px-6 py-3 text-sm shadow-brut hover-brut inline-flex items-center gap-2" data-testid="success-to-dashboard">
-                Go to My Parties <ArrowRight weight="bold" />
+                Go to My Waves <ArrowRight weight="bold" />
               </Link>
               {vppId && (
                 <Link to={`/vpp/${vppId}`} className="bg-white text-ink border-2 border-ink font-bold uppercase tracking-wider px-6 py-3 text-sm shadow-brut hover-brut">
-                  View Party
+                  View Wave
                 </Link>
               )}
             </div>

@@ -60,7 +60,7 @@ export default function VPPCard({ vpp }) {
         <div className="flex items-center justify-between border-t-2 border-ink pt-3 -mb-1">
           <span className="text-[11px] font-bold uppercase tracking-[0.15em] font-mono inline-flex items-center gap-1">
             <Lightning weight="fill" size={12} className="text-[#FF5400]" />
-            Join Party
+            Join Wave
           </span>
           <ArrowRight weight="bold" size={16} className="group-hover:translate-x-1 transition-transform" />
         </div>

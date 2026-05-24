@@ -30,7 +30,7 @@ export default function VPPDetail() {
     setLoading(false);
     if (prevState.current && prevState.current !== data.state && (data.state === "powered" || data.state === "locked")) {
       setShowConfetti(true);
-      toast.success("⚡ PARTY POWERED! Price locked.");
+      toast.success("⚡ WAVE POWERED! Price locked.");
       setTimeout(() => setShowConfetti(false), 4500);
     }
     prevState.current = data.state;
@@ -51,12 +51,12 @@ export default function VPPDetail() {
           }
           if (msg.type === "user_joined" && msg.user_name) {
             setParticipants((p) => [{ display_name: msg.user_name, joined_at: new Date().toISOString() }, ...p].slice(0, 10));
-            toast(`${msg.user_name} just joined the party ⚡`);
+            toast(`${msg.user_name} just joined the wave ⚡`);
           }
           if (msg.type === "state_change" && msg.vpp?.state && (msg.vpp.state === "powered" || msg.vpp.state === "locked")) {
             if (prevState.current !== msg.vpp.state) {
               setShowConfetti(true);
-              toast.success("⚡ PARTY POWERED! Price locked.");
+              toast.success("⚡ WAVE POWERED! Price locked.");
               setTimeout(() => setShowConfetti(false), 4500);
               prevState.current = msg.vpp.state;
             }
@@ -113,7 +113,7 @@ export default function VPPDetail() {
         {/* LEFT: Product */}
         <div className="lg:col-span-7">
           <Link to="/browse" className="text-xs font-mono uppercase tracking-widest text-[#3A3A3A] hover:text-ink mb-4 inline-block">
-            ← Back to parties
+            ← Back to waves
           </Link>
 
           <div className="border-2 border-ink bg-white shadow-brut overflow-hidden mb-6">
@@ -162,13 +162,13 @@ export default function VPPDetail() {
           </div>
         </div>
 
-        {/* RIGHT: Live Party Panel */}
+        {/* RIGHT: Live Wave Panel */}
         <div className="lg:col-span-5">
           <div className="sticky top-24 space-y-5">
             <div className="border-2 border-ink bg-ink text-white shadow-brut-lg p-6">
               <div className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono text-[#FFD600] mb-2 flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-[#FF5400] animate-pulse" />
-                Live Party
+                Live Wave
               </div>
 
               <div className="font-display text-5xl mb-1" data-testid="participants-count">
@@ -194,7 +194,7 @@ export default function VPPDetail() {
               </div>
 
               <div className="mb-5">
-                <div className="text-[10px] font-bold uppercase tracking-widest font-mono text-white/80 mb-2">Party closes in</div>
+                <div className="text-[10px] font-bold uppercase tracking-widest font-mono text-white/80 mb-2">Wave closes in</div>
                 <Countdown deadline={vpp.deadline} />
               </div>
 
@@ -219,14 +219,14 @@ export default function VPPDetail() {
                   onClick={handleJoin}
                   disabled={joining}
                   className="w-full bg-[#FF5400] text-white border-2 border-white font-bold uppercase tracking-wider px-6 py-4 text-base shadow-brut hover-brut flex items-center justify-center gap-2 disabled:opacity-60"
-                  data-testid="join-party-btn"
+                  data-testid="join-wave-btn"
                   id="join-vpp-button"
                 >
-                  <Lightning weight="fill" /> {joining ? "Joining..." : "Join Party"}
+                  <Lightning weight="fill" /> {joining ? "Joining..." : "Join Wave"}
                 </button>
               ) : (
                 <div className="bg-[#525252] text-white border-2 border-white p-4 flex items-center gap-2 font-bold uppercase tracking-wider text-sm">
-                  <ReceiptX weight="fill" size={20} /> Party {vpp.state}
+                  <ReceiptX weight="fill" size={20} /> Wave {vpp.state}
                 </div>
               )}
 

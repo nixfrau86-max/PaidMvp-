@@ -2,7 +2,7 @@ import React from "react";
 
 const MAP = {
   seed:      { label: "SEED",      bg: "#F4F4F4", fg: "#0A0A0A" },
-  active:    { label: "ACTIVE PARTY", bg: "#FFFFFF", fg: "#0A0A0A" },
+  active:    { label: "ACTIVE WAVE", bg: "#FFFFFF", fg: "#0A0A0A" },
   almost:    { label: "ALMOST POWERED", bg: "#FFD600", fg: "#0A0A0A" },
   powered:   { label: "POWERED",   bg: "#0021A5", fg: "#FFFFFF" },
   locked:    { label: "PRICE LOCKED", bg: "#FF5400", fg: "#FFFFFF" },

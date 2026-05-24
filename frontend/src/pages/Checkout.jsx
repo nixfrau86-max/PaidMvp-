@@ -58,7 +58,7 @@ export default function Checkout() {
       const { data } = await api.get(`/vpps/${vppId}`);
       setVpp(data);
       if (data.has_paid) {
-        toast.info("You've already confirmed this party.");
+        toast.info("You've already confirmed this wave.");
         navigate("/dashboard");
       }
     })();
@@ -115,7 +115,7 @@ export default function Checkout() {
             Lock your savings.
           </h1>
           <p className="text-[#3A3A3A] mt-2 text-sm">
-            Your payment method is reserved now. We only charge when the party powers up and the price locks.
+            Your payment method is reserved now. We only charge when the wave powers up and the price locks.
           </p>
         </div>
 

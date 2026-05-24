@@ -59,9 +59,9 @@ export default function Browse() {
       <Navbar />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10">
         <div className="mb-8">
-          <div className="text-[10px] font-bold uppercase tracking-[0.3em] font-mono text-[#FF5400] mb-3">Browse Parties</div>
+          <div className="text-[10px] font-bold uppercase tracking-[0.3em] font-mono text-[#FF5400] mb-3">Browse Waves</div>
           <h1 className="font-display text-5xl sm:text-6xl uppercase tracking-tighter leading-[0.9]">
-            Find your party.
+            Find your wave.
           </h1>
         </div>
 
@@ -72,7 +72,7 @@ export default function Browse() {
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search parties..."
+              placeholder="Search waves..."
               className="flex-1 border-0 outline-none bg-transparent font-mono text-sm"
               data-testid="search-input"
             />
@@ -110,7 +110,7 @@ export default function Browse() {
           <div className="font-mono text-sm uppercase tracking-widest text-[#3A3A3A]">Loading...</div>
         ) : filtered.length === 0 ? (
           <div className="border-2 border-ink p-10 text-center font-mono uppercase text-sm tracking-widest">
-            No parties match your filters.
+            No waves match your filters.
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
