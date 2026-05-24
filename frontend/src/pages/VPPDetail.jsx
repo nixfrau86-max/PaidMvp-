@@ -136,7 +136,7 @@ export default function VPPDetail() {
 
               <div className="grid grid-cols-3 gap-3">
                 <Tile label="Retail" value={`£${vpp.retail_price}`} muted />
-                <Tile label="Party Price" value={`£${vpp.customer_price}`} highlight />
+                <Tile label="Today's Collective Price" value={`£${vpp.customer_price}`} highlight />
                 <Tile label="You Save" value={`£${(vpp.retail_price - vpp.customer_price).toFixed(0)}`} accent />
               </div>
             </div>
@@ -230,8 +230,8 @@ export default function VPPDetail() {
                 </div>
               )}
 
-              <div className="mt-4 text-xs text-white/80 font-mono leading-relaxed">
-                Joining is free. You only pay when the party powers up and the price locks.
+              <div className="mt-4 text-xs text-white/85 font-mono leading-relaxed">
+                Joining is free. Your card is reserved — we only capture when the price locks.
               </div>
             </div>
 

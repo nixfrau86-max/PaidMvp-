@@ -49,7 +49,7 @@ api_router = APIRouter(prefix="/api")
 # =====================================================================
 VPPState = Literal["seed", "active", "powered", "locked", "executing", "completed"]
 UserRole = Literal["consumer", "supplier", "admin"]
-PaymentMethod = Literal["card", "open_banking", "bank_transfer"]
+PaymentMethod = Literal["card", "apple_pay", "open_banking", "bank_transfer"]
 
 
 class User(BaseModel):
@@ -230,9 +230,10 @@ manager = ConnectionManager()
 # UTILITIES
 # =====================================================================
 PAYMENT_DISCOUNTS = {
-    "card": 0.0,            # baseline
-    "open_banking": 0.03,   # 3% discount
-    "bank_transfer": 0.02,  # 2% discount
+    "card": 0.0,             # baseline
+    "apple_pay": 0.0,        # same as card
+    "open_banking": 0.01,    # 1% additional savings unlocked
+    "bank_transfer": 0.005,  # 0.5% additional savings unlocked
 }
 
 
@@ -1020,6 +1021,21 @@ async def seed(force: bool = False):
         await db.vpps.insert_one(vpp)
         inserted.append(vpp["vpp_id"])
     return {"seeded": True, "count": len(inserted)}
+
+
+@api_router.post("/waitlist")
+async def waitlist_signup(payload: dict):
+    email = (payload or {}).get("email", "").strip().lower()
+    if "@" not in email:
+        raise HTTPException(status_code=400, detail="Invalid email")
+    existing = await db.waitlist.find_one({"email": email}, {"_id": 0})
+    if existing:
+        return {"success": True, "already": True}
+    await db.waitlist.insert_one({
+        "email": email,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return {"success": True}
 
 
 @api_router.get("/")

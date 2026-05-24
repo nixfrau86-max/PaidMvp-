@@ -176,19 +176,19 @@ export default function Landing() {
       {/* SAVINGS SNAPSHOT */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 py-16 sm:py-24 grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
         <div>
-          <div className="text-[10px] font-bold uppercase tracking-[0.3em] font-mono text-[#FF5400] mb-3">Payment optimisation</div>
+          <div className="text-[10px] font-bold uppercase tracking-[0.3em] font-mono text-[#FF5400] mb-3">Unlock additional savings</div>
           <h2 className="font-display text-4xl sm:text-5xl uppercase tracking-tighter leading-[0.95] mb-5">
-            Pay smarter.<br />Save deeper.
+            Smarter rails.<br />Bigger savings.
           </h2>
           <p className="text-[#3A3A3A] mb-6 leading-relaxed">
-            Card payments are convenient but expensive to process. Choose Open Banking or Bank Transfer
-            and we pass the saved fees straight back to you — automatically.
+            Some payment methods settle faster and unlock additional savings. Pick the rail that suits you — you'll see the final price up front, no surprises at checkout.
           </p>
           <div className="space-y-3">
             {[
-              { method: "Card", fee: "2.0%", discount: "0%", color: "#F4F4F4" },
-              { method: "Bank Transfer", fee: "0.6%", discount: "−2%", color: "#FFD600" },
-              { method: "Open Banking", fee: "0.4%", discount: "−3%", color: "#00C853" },
+              { method: "Apple Pay / Google Pay", note: "One-tap wallet", final: "£384", color: "#F4F4F4" },
+              { method: "Debit / Credit Card", note: "Visa · Mastercard · Amex", final: "£384", color: "#F4F4F4" },
+              { method: "Bank Transfer", note: "Faster Payments", final: "£382", color: "#FFD600" },
+              { method: "Open Banking", note: "Recommended — instant settle", final: "£381", color: "#00C853" },
             ].map((row) => (
               <div
                 key={row.method}
@@ -196,16 +196,19 @@ export default function Landing() {
               >
                 <div className="px-4 py-3 flex-1">
                   <div className="font-bold uppercase text-sm">{row.method}</div>
-                  <div className="font-mono text-xs text-[#3A3A3A] mt-1">Processing cost: {row.fee}</div>
+                  <div className="font-mono text-xs text-[#3A3A3A] mt-1">{row.note}</div>
                 </div>
                 <div
-                  className="px-5 py-3 border-l-2 border-ink font-display text-2xl flex items-center justify-center min-w-[100px]"
+                  className="px-5 py-3 border-l-2 border-ink font-display text-2xl flex items-center justify-center min-w-[110px]"
                   style={{ background: row.color }}
                 >
-                  {row.discount}
+                  {row.final}
                 </div>
               </div>
             ))}
+          </div>
+          <div className="mt-5 text-[10px] font-mono uppercase tracking-widest text-[#3A3A3A]">
+            Example based on a £420 retail item. Actual savings vary by party.
           </div>
         </div>
 
@@ -215,16 +218,31 @@ export default function Landing() {
             Tonight, somewhere in the UK:
           </div>
           <div className="space-y-4 font-mono text-sm">
-            <Row label="DRIVERS JOINED" val={`${stats.members}`} />
+            <Row label="MEMBERS JOINED" val={`${stats.members}`} />
             <Row label="PARTIES LIVE" val={`${stats.active}`} />
             <Row label="COLLECTIVE SAVINGS" val={`£${stats.savings.toLocaleString()}`} />
           </div>
-          <div className="border-t-2 border-white mt-6 pt-6">
+          <div className="border-t-2 border-white/40 mt-6 pt-6">
             <div className="text-xs uppercase tracking-widest opacity-90 mb-2">Average member saves</div>
             <div className="font-display text-5xl text-[#FFD600]">£61</div>
           </div>
         </div>
       </section>
+
+      {/* MANIFESTO / POSITIONING */}
+      <section className="border-t-2 border-ink bg-[#F4F4F4]">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-16 sm:py-24">
+          <div className="text-[10px] font-bold uppercase tracking-[0.3em] font-mono text-[#FF5400] mb-4">Our principle</div>
+          <blockquote className="font-display text-3xl sm:text-5xl uppercase leading-[1.05] tracking-tighter">
+            <span className="text-[#3A3A3A]">"Most platforms monetise your attention.</span><br />
+            The Collective Savers monetises <span className="bg-[#FFD600] px-2 -mx-2 border-2 border-ink shadow-brut inline-block my-1">collective purchasing power</span> — when members save together,
+            <span className="text-[#FF5400]"> everyone wins.</span>"
+          </blockquote>
+        </div>
+      </section>
+
+      {/* WAITLIST / EARLY ACCESS */}
+      <Waitlist />
 
       {/* CTA */}
       <section className="border-t-2 border-ink bg-[#FF5400] text-white">
@@ -253,12 +271,71 @@ export default function Landing() {
             </span>
             <span className="font-display uppercase tracking-tighter">The Collective Savers™</span>
           </div>
-          <div className="font-mono text-xs uppercase tracking-widest opacity-90">
-            Real-time collective purchasing infrastructure.
+          <div className="font-mono text-xs uppercase tracking-widest opacity-90 flex flex-col sm:items-end gap-1">
+            <span>Real-time collective purchasing infrastructure.</span>
+            <a href="mailto:founder@thecollectivesavers.com" className="text-[#FFD600] hover:text-[#FF5400] underline-offset-4 hover:underline">
+              founder@thecollectivesavers.com
+            </a>
           </div>
         </div>
       </footer>
     </div>
+  );
+}
+
+function Waitlist() {
+  const [email, setEmail] = React.useState("");
+  const [submitted, setSubmitted] = React.useState(false);
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!email.includes("@")) return;
+    try {
+      await fetch(`${process.env.REACT_APP_BACKEND_URL}/api/waitlist`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+    } catch {}
+    setSubmitted(true);
+  };
+  return (
+    <section className="border-t-2 border-ink bg-white">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-16 sm:py-20">
+        <div className="border-2 border-ink shadow-brut-lg p-8 sm:p-10 bg-[#FFD600]">
+          <div className="text-[10px] font-bold uppercase tracking-[0.3em] font-mono mb-3">Early access</div>
+          <h2 className="font-display text-3xl sm:text-5xl uppercase tracking-tighter leading-[0.95] mb-4">
+            Get first dibs on the<br />next party.
+          </h2>
+          <p className="text-ink mb-6 max-w-xl">
+            Be the first to know when a new collective unlocks in your category. No spam — just power-ups.
+          </p>
+          {submitted ? (
+            <div className="border-2 border-ink bg-white shadow-brut-sm p-4 inline-flex items-center gap-2 font-bold uppercase tracking-wider text-sm" data-testid="waitlist-success">
+              <CheckCircle weight="fill" size={20} className="text-[#00C853]" /> You're on the list — see you at the next party.
+            </div>
+          ) : (
+            <form onSubmit={submit} className="flex flex-col sm:flex-row gap-3 max-w-lg" data-testid="waitlist-form">
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@email.com"
+                className="flex-1 border-2 border-ink bg-white p-3 font-mono text-sm placeholder-[#3A3A3A]/50 outline-none"
+                data-testid="waitlist-email-input"
+              />
+              <button
+                type="submit"
+                className="bg-ink text-white border-2 border-ink font-bold uppercase tracking-wider px-6 py-3 text-sm shadow-brut hover-brut whitespace-nowrap"
+                data-testid="waitlist-submit"
+              >
+                Get Early Access
+              </button>
+            </form>
+          )}
+        </div>
+      </div>
+    </section>
   );
 }
 
