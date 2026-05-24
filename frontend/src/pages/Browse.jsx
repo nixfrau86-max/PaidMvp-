@@ -107,7 +107,7 @@ export default function Browse() {
         </div>
 
         {loading ? (
-          <div className="font-mono text-sm uppercase tracking-widest text-[#525252]">Loading...</div>
+          <div className="font-mono text-sm uppercase tracking-widest text-[#3A3A3A]">Loading...</div>
         ) : filtered.length === 0 ? (
           <div className="border-2 border-ink p-10 text-center font-mono uppercase text-sm tracking-widest">
             No parties match your filters.

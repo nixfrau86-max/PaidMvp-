@@ -76,7 +76,7 @@ export default function SupplierDashboard() {
           </thead>
           <tbody>
             {orders.length === 0 ? (
-              <tr><td colSpan={6} className="text-center py-10 uppercase tracking-widest text-[#525252]">No batch orders yet.</td></tr>
+              <tr><td colSpan={6} className="text-center py-10 uppercase tracking-widest text-[#3A3A3A]">No batch orders yet.</td></tr>
             ) : orders.map(o => (
               <tr key={o.vpp_id} className="border-t-2 border-ink hover:bg-[#FAFAFA]" data-testid={`supplier-row-${o.vpp_id}`}>
                 <Td>
@@ -117,7 +117,7 @@ function Stat({ label, value, icon: Icon, accent }) {
   return (
     <div className="border-2 border-ink bg-white shadow-brut p-4">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-[10px] font-bold uppercase tracking-widest font-mono text-[#525252]">{label}</span>
+        <span className="text-[10px] font-bold uppercase tracking-widest font-mono text-[#3A3A3A]">{label}</span>
         <Icon weight="duotone" size={20} className="text-[#FF5400]" />
       </div>
       <div className="font-display text-3xl" style={accent ? { color: accent } : {}}>{value}</div>

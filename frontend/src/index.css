@@ -72,6 +72,10 @@ html, body {
 }
 
 .border-ink { border-color: var(--ink); }
+.bg-ink { background-color: var(--ink); }
+.text-ink { color: var(--ink); }
+.text-ink\/75 { color: rgba(10, 10, 10, 0.75); }
+.text-ink\/85 { color: rgba(10, 10, 10, 0.85); }
 
 /* Marquee container fallback */
 .kinetic-text {

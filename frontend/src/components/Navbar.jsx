@@ -23,8 +23,8 @@ export default function Navbar() {
           <span className="inline-flex items-center justify-center w-10 h-10 bg-white border-2 border-ink shadow-brut-sm overflow-hidden">
             <img src={LOGO_URL} alt="Collective Savers" className="w-full h-full object-contain p-0.5" />
           </span>
-          <span className="font-display text-lg sm:text-xl tracking-tighter uppercase leading-none">
-            The Collective<span className="text-[#FF5400]">.</span>
+          <span className="font-display text-base sm:text-lg tracking-tighter uppercase leading-none whitespace-nowrap">
+            The Collective Savers<span className="text-[#FF5400]">.</span>
           </span>
         </Link>
 

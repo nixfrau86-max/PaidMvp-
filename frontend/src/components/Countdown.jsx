@@ -33,9 +33,9 @@ export default function Countdown({ deadline, compact = false }) {
         ["MIN", t.m],
         ["SEC", t.s],
       ].map(([label, val]) => (
-        <div key={label} className="border-2 border-ink bg-white px-3 py-2 shadow-brut-sm min-w-[64px] text-center">
-          <div className="font-display text-2xl leading-none">{val}</div>
-          <div className="font-mono text-[9px] font-bold uppercase tracking-widest mt-1">{label}</div>
+        <div key={label} className="border-2 border-ink bg-white text-ink px-3 py-2 shadow-brut-sm min-w-[64px] text-center">
+          <div className="font-display text-2xl leading-none text-ink">{val}</div>
+          <div className="font-mono text-[9px] font-bold uppercase tracking-widest mt-1 text-ink">{label}</div>
         </div>
       ))}
     </div>

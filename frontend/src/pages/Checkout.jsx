@@ -103,7 +103,7 @@ export default function Checkout() {
                       </div>
                       <div className="flex-1">
                         <div className="font-bold uppercase tracking-wider text-sm">{opt.label}</div>
-                        <div className="font-mono text-xs text-[#525252] mt-0.5">{opt.sub}</div>
+                        <div className="font-mono text-xs text-[#3A3A3A] mt-0.5">{opt.sub}</div>
                       </div>
                       {opt.discount > 0 ? (
                         <div className="bg-[#00C853] text-ink border-2 border-ink font-mono text-xs font-bold uppercase tracking-widest px-2 py-1">
@@ -116,7 +116,7 @@ export default function Checkout() {
                   );
                 })}
               </div>
-              <div className="mt-5 flex items-center gap-2 text-xs font-mono uppercase tracking-widest text-[#525252]">
+              <div className="mt-5 flex items-center gap-2 text-xs font-mono uppercase tracking-widest text-[#3A3A3A]">
                 <ShieldCheck weight="bold" size={14} className="text-[#FF5400]" />
                 Payment-method discounts pass our savings on processing fees directly to you.
               </div>
@@ -131,7 +131,7 @@ export default function Checkout() {
                 <img src={vpp.image_url} alt={vpp.title} className="w-16 h-16 border-2 border-ink object-cover" />
                 <div className="min-w-0">
                   <div className="font-display text-lg uppercase line-clamp-2 leading-tight">{vpp.title}</div>
-                  <div className="font-mono text-[10px] uppercase tracking-widest text-[#525252] mt-1">{vpp.supplier_name}</div>
+                  <div className="font-mono text-[10px] uppercase tracking-widest text-[#3A3A3A] mt-1">{vpp.supplier_name}</div>
                 </div>
               </div>
               <Row label="Party Price" value={`£${basePrice.toFixed(2)}`} />
@@ -146,7 +146,7 @@ export default function Checkout() {
               >
                 <Lock weight="fill" /> {submitting ? "Processing..." : `Pay £${finalPrice.toFixed(2)}`}
               </button>
-              <div className="mt-3 text-[10px] font-mono uppercase tracking-widest text-[#525252] text-center">
+              <div className="mt-3 text-[10px] font-mono uppercase tracking-widest text-[#3A3A3A] text-center">
                 Encrypted · Locked Price · No Surprise Fees
               </div>
             </div>
@@ -160,7 +160,7 @@ export default function Checkout() {
 function Row({ label, value, bold, highlight }) {
   return (
     <div className="flex items-center justify-between py-1.5">
-      <span className={`text-sm ${bold ? "font-bold uppercase tracking-wider" : "text-[#525252]"}`}>{label}</span>
+      <span className={`text-sm ${bold ? "font-bold uppercase tracking-wider" : "text-[#3A3A3A]"}`}>{label}</span>
       <span className={`${bold ? "font-display text-2xl" : "font-mono text-sm font-bold"} ${highlight ? "text-[#00C853]" : ""}`}>{value}</span>
     </div>
   );

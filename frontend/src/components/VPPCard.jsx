@@ -25,7 +25,7 @@ export default function VPPCard({ vpp }) {
         </div>
       </div>
       <div className="p-5">
-        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#525252] mb-1 font-mono">
+        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#3A3A3A] mb-1 font-mono">
           {vpp.category}
         </div>
         <h3 className="font-display text-xl leading-tight uppercase mb-3 line-clamp-2 min-h-[3rem]">
@@ -34,7 +34,7 @@ export default function VPPCard({ vpp }) {
 
         <div className="flex items-baseline gap-2 mb-3">
           <span className="font-display text-3xl">£{vpp.customer_price}</span>
-          <span className="line-through text-[#525252] text-sm">£{vpp.retail_price}</span>
+          <span className="line-through text-[#3A3A3A] text-sm">£{vpp.retail_price}</span>
         </div>
 
         {/* Progress */}

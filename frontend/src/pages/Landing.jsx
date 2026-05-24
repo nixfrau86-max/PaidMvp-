@@ -50,7 +50,7 @@ export default function Landing() {
               Power the price.
             </h1>
 
-            <p className="text-base sm:text-lg text-[#525252] max-w-xl mb-8 leading-relaxed">
+            <p className="text-base sm:text-lg text-[#3A3A3A] max-w-xl mb-8 leading-relaxed">
               The Collective Savers turns fragmented consumer demand into coordinated purchasing power.
               Join a <strong className="text-ink">Party</strong>, watch it fill, and the moment we hit the threshold, the price locks
               and the order ships.
@@ -116,7 +116,7 @@ export default function Landing() {
           <h2 className="font-display text-4xl sm:text-5xl uppercase leading-[0.95] tracking-tighter mb-4">
             Four steps. One locked price.
           </h2>
-          <p className="text-[#525252]">
+          <p className="text-[#3A3A3A]">
             No haggling. No coupons. Just collective demand meeting supplier capacity at the right moment.
           </p>
         </div>
@@ -134,11 +134,11 @@ export default function Landing() {
               data-testid={`how-step-${step}`}
             >
               <div className="flex items-center justify-between mb-4">
-                <span className="font-mono text-xs font-bold tracking-widest text-[#525252]">STEP {step}</span>
+                <span className="font-mono text-xs font-bold tracking-widest text-[#3A3A3A]">STEP {step}</span>
                 <Icon weight="duotone" size={28} className="text-[#FF5400]" />
               </div>
               <h3 className="font-display text-xl uppercase mb-2 leading-tight">{title}</h3>
-              <p className="text-sm text-[#525252] leading-relaxed">{body}</p>
+              <p className="text-sm text-[#3A3A3A] leading-relaxed">{body}</p>
             </div>
           ))}
         </div>
@@ -165,7 +165,7 @@ export default function Landing() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
             {vpps.map(v => <VPPCard key={v.vpp_id} vpp={v} />)}
             {vpps.length === 0 && (
-              <div className="col-span-full text-center text-[#525252] font-mono text-sm py-10">
+              <div className="col-span-full text-center text-[#3A3A3A] font-mono text-sm py-10">
                 Loading parties...
               </div>
             )}
@@ -180,7 +180,7 @@ export default function Landing() {
           <h2 className="font-display text-4xl sm:text-5xl uppercase tracking-tighter leading-[0.95] mb-5">
             Pay smarter.<br />Save deeper.
           </h2>
-          <p className="text-[#525252] mb-6 leading-relaxed">
+          <p className="text-[#3A3A3A] mb-6 leading-relaxed">
             Card payments are convenient but expensive to process. Choose Open Banking or Bank Transfer
             and we pass the saved fees straight back to you — automatically.
           </p>
@@ -196,7 +196,7 @@ export default function Landing() {
               >
                 <div className="px-4 py-3 flex-1">
                   <div className="font-bold uppercase text-sm">{row.method}</div>
-                  <div className="font-mono text-xs text-[#525252] mt-1">Processing cost: {row.fee}</div>
+                  <div className="font-mono text-xs text-[#3A3A3A] mt-1">Processing cost: {row.fee}</div>
                 </div>
                 <div
                   className="px-5 py-3 border-l-2 border-ink font-display text-2xl flex items-center justify-center min-w-[100px]"
@@ -220,7 +220,7 @@ export default function Landing() {
             <Row label="COLLECTIVE SAVINGS" val={`£${stats.savings.toLocaleString()}`} />
           </div>
           <div className="border-t-2 border-white mt-6 pt-6">
-            <div className="text-xs uppercase tracking-widest opacity-70 mb-2">Average member saves</div>
+            <div className="text-xs uppercase tracking-widest opacity-90 mb-2">Average member saves</div>
             <div className="font-display text-5xl text-[#FFD600]">£61</div>
           </div>
         </div>
@@ -253,7 +253,7 @@ export default function Landing() {
             </span>
             <span className="font-display uppercase tracking-tighter">The Collective Savers™</span>
           </div>
-          <div className="font-mono text-xs uppercase tracking-widest opacity-70">
+          <div className="font-mono text-xs uppercase tracking-widest opacity-90">
             Real-time collective purchasing infrastructure.
           </div>
         </div>
@@ -264,8 +264,8 @@ export default function Landing() {
 
 function Row({ label, val }) {
   return (
-    <div className="flex items-center justify-between border-b border-white/20 pb-3">
-      <span className="opacity-70 text-xs tracking-widest">{label}</span>
+    <div className="flex items-center justify-between border-b border-white/40 pb-3">
+      <span className="opacity-90 text-xs tracking-widest">{label}</span>
       <span className="font-display text-2xl">{val}</span>
     </div>
   );
@@ -275,7 +275,7 @@ function LivePartyHero({ vpp }) {
   if (!vpp) {
     return (
       <div className="w-full bg-white border-2 border-ink shadow-brut-lg p-6">
-        <div className="font-mono text-xs uppercase tracking-widest text-[#525252]">Loading live party…</div>
+        <div className="font-mono text-xs uppercase tracking-widest text-[#3A3A3A]">Loading live party…</div>
       </div>
     );
   }
@@ -296,7 +296,7 @@ function LivePartyHero({ vpp }) {
             <h3 className="font-display text-xl sm:text-2xl uppercase leading-tight line-clamp-2 mb-2">{vpp.title}</h3>
             <div className="flex items-baseline gap-2">
               <span className="font-display text-3xl">£{vpp.customer_price}</span>
-              <span className="line-through text-[#525252] text-sm">£{vpp.retail_price}</span>
+              <span className="line-through text-[#3A3A3A] text-sm">£{vpp.retail_price}</span>
               <span className="bg-[#00C853] text-ink border-2 border-ink font-mono text-[10px] font-bold uppercase tracking-widest px-1.5 py-0.5 ml-1">−{vpp.savings_pct}%</span>
             </div>
           </div>
@@ -315,7 +315,7 @@ function LivePartyHero({ vpp }) {
             }}
           />
         </div>
-        <div className="font-mono text-[10px] uppercase tracking-widest text-[#525252]">
+        <div className="font-mono text-[10px] uppercase tracking-widest text-[#3A3A3A]">
           Party closes soon. {Math.max(0, vpp.threshold - vpp.participants_count)} more to power.
         </div>
       </div>

@@ -44,7 +44,7 @@ export default function MyParties() {
       {data.parties.length === 0 ? (
         <div className="border-2 border-ink bg-white shadow-brut p-10 text-center">
           <div className="font-display text-3xl uppercase mb-3">No parties yet.</div>
-          <p className="text-[#525252] mb-6">Find a party that matches what you need.</p>
+          <p className="text-[#3A3A3A] mb-6">Find a party that matches what you need.</p>
           <Link to="/browse" className="bg-[#FF5400] text-white border-2 border-ink font-bold uppercase tracking-wider px-6 py-3 text-sm shadow-brut hover-brut inline-flex items-center gap-2">
             Browse Parties <ArrowRight weight="bold" />
           </Link>
@@ -92,7 +92,7 @@ function PartyRow({ party }) {
           <StateBadge state={v.state} progressPct={v.progress_pct} />
         </div>
         <div className="font-display text-lg uppercase line-clamp-2 leading-tight mb-1">{v.title}</div>
-        <div className="font-mono text-xs uppercase tracking-widest text-[#525252]">
+        <div className="font-mono text-xs uppercase tracking-widest text-[#3A3A3A]">
           {party.paid ? `Paid via ${party.payment_method}` : `${v.participants_count}/${v.threshold} joined`}
         </div>
         <div className="mt-2 flex items-center justify-between">

@@ -193,7 +193,7 @@ function Field({ label, full, children }) {
 function Stat({ label, v, c, icon: Icon }) {
   return (
     <div className="border-2 border-ink bg-white shadow-brut-sm p-3">
-      <div className="text-[9px] font-bold uppercase tracking-widest font-mono text-[#525252] mb-1">{label}</div>
+      <div className="text-[9px] font-bold uppercase tracking-widest font-mono text-[#3A3A3A] mb-1">{label}</div>
       <div className="font-display text-2xl" style={c ? { color: c } : {}}>{v}</div>
     </div>
   );

@@ -51,7 +51,7 @@ export default function CheckoutSuccess() {
             <h1 className="font-display text-5xl sm:text-6xl uppercase tracking-tighter leading-[0.9] mb-4">
               Locked in!<br />Order confirmed.
             </h1>
-            <p className="text-[#525252] mb-8 max-w-md mx-auto">
+            <p className="text-[#3A3A3A] mb-8 max-w-md mx-auto">
               You're part of this party. Once the supplier dispatches the batch, you'll get a tracking notification.
             </p>
             <div className="flex flex-wrap justify-center gap-3">
@@ -75,7 +75,7 @@ export default function CheckoutSuccess() {
         ) : (
           <div className="border-2 border-ink bg-white shadow-brut p-10 inline-block">
             <div className="font-mono text-sm uppercase tracking-widest mb-2">▮ Confirming payment...</div>
-            <div className="font-mono text-xs text-[#525252]">Attempt {attempts + 1}/10</div>
+            <div className="font-mono text-xs text-[#3A3A3A]">Attempt {attempts + 1}/10</div>
           </div>
         )}
       </div>

@@ -112,7 +112,7 @@ export default function VPPDetail() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10 grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* LEFT: Product */}
         <div className="lg:col-span-7">
-          <Link to="/browse" className="text-xs font-mono uppercase tracking-widest text-[#525252] hover:text-ink mb-4 inline-block">
+          <Link to="/browse" className="text-xs font-mono uppercase tracking-widest text-[#3A3A3A] hover:text-ink mb-4 inline-block">
             ← Back to parties
           </Link>
 
@@ -124,7 +124,7 @@ export default function VPPDetail() {
                 <span className="border-2 border-ink bg-[#F4F4F4] px-2 py-1 text-[10px] font-bold uppercase tracking-widest font-mono">
                   {vpp.category}
                 </span>
-                <span className="inline-flex items-center gap-1 text-[10px] font-mono uppercase tracking-widest text-[#525252]">
+                <span className="inline-flex items-center gap-1 text-[10px] font-mono uppercase tracking-widest text-[#3A3A3A]">
                   <Storefront weight="bold" size={12} /> {vpp.supplier_name}
                 </span>
               </div>
@@ -132,7 +132,7 @@ export default function VPPDetail() {
               <h1 className="font-display text-3xl sm:text-5xl uppercase tracking-tighter leading-[0.95] mb-4" data-testid="vpp-title">
                 {vpp.title}
               </h1>
-              <p className="text-[#525252] leading-relaxed mb-6">{vpp.description}</p>
+              <p className="text-[#3A3A3A] leading-relaxed mb-6">{vpp.description}</p>
 
               <div className="grid grid-cols-3 gap-3">
                 <Tile label="Retail" value={`£${vpp.retail_price}`} muted />
@@ -144,9 +144,9 @@ export default function VPPDetail() {
 
           {/* Recent participants */}
           <div className="border-2 border-ink bg-white shadow-brut p-6">
-            <div className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono text-[#525252] mb-3">Recent joiners</div>
+            <div className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono text-[#3A3A3A] mb-3">Recent joiners</div>
             {participants.length === 0 ? (
-              <div className="font-mono text-sm uppercase tracking-widest text-[#525252]">Be the first to join.</div>
+              <div className="font-mono text-sm uppercase tracking-widest text-[#3A3A3A]">Be the first to join.</div>
             ) : (
               <div className="flex flex-wrap gap-2">
                 {participants.map((p, i) => (
@@ -172,9 +172,9 @@ export default function VPPDetail() {
               </div>
 
               <div className="font-display text-5xl mb-1" data-testid="participants-count">
-                {vpp.participants_count} <span className="text-2xl text-white/60">/ {vpp.threshold}</span>
+                {vpp.participants_count} <span className="text-2xl text-white/80">/ {vpp.threshold}</span>
               </div>
-              <div className="font-mono text-xs uppercase tracking-widest mb-5 text-white/70">
+              <div className="font-mono text-xs uppercase tracking-widest mb-5 text-white/85">
                 Members joined
               </div>
 
@@ -194,7 +194,7 @@ export default function VPPDetail() {
               </div>
 
               <div className="mb-5">
-                <div className="text-[10px] font-bold uppercase tracking-widest font-mono text-white/60 mb-2">Party closes in</div>
+                <div className="text-[10px] font-bold uppercase tracking-widest font-mono text-white/80 mb-2">Party closes in</div>
                 <Countdown deadline={vpp.deadline} />
               </div>
 
@@ -230,7 +230,7 @@ export default function VPPDetail() {
                 </div>
               )}
 
-              <div className="mt-4 text-xs text-white/60 font-mono leading-relaxed">
+              <div className="mt-4 text-xs text-white/80 font-mono leading-relaxed">
                 Joining is free. You only pay when the party powers up and the price locks.
               </div>
             </div>
@@ -258,8 +258,8 @@ function Tile({ label, value, muted, highlight, accent }) {
   const bg = highlight ? "#FFD600" : accent ? "#00C853" : "#F4F4F4";
   return (
     <div className="border-2 border-ink p-3 shadow-brut-sm" style={{ background: bg }}>
-      <div className="text-[10px] font-bold uppercase tracking-widest font-mono mb-1 text-ink/70">{label}</div>
-      <div className={`font-display text-2xl ${muted ? "line-through text-ink/60" : ""}`}>{value}</div>
+      <div className="text-[10px] font-bold uppercase tracking-widest font-mono mb-1 text-ink/85">{label}</div>
+      <div className={`font-display text-2xl ${muted ? "line-through text-ink/75" : ""}`}>{value}</div>
     </div>
   );
 }
