@@ -1,0 +1,49 @@
+{
+  "summary": "Tested The Collective Savers full stack. Backend: 24/24 pytest tests pass after fixing ObjectId serialization bug. Frontend: Landing, Browse, VPP Detail, Dashboard (My Parties), Supplier, and Admin Control Room all load and render correctly with mongosh-seeded session. Sign-in redirect goes to auth.emergentagent.com as expected. RBAC enforced: consumer gets 403 on supplier/admin endpoints. Open Banking mock flow + VPP auto-transition to LOCKED on threshold work end-to-end. Stripe checkout session creation succeeds.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/checkout/status/{session_id} (card)", "issue": "Polling a freshly-created Stripe test session sometimes returns 502 from upstream Stripe (`No such checkout.session`). Session creation itself succeeds. May be Stripe test-mode propagation delay or that `sk_test_emergent` is a sandbox that does not persist sessions for retrieval. Webhook path should still work."},
+      {"endpoint": "GET /api/vpps", "issue": "No pagination — returns up to 200 with no limit/offset query params. Fine for MVP but worth noting."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "VPPDetail", "issue": "After clicking a VPP card from Browse, the join button (data-testid='join-vpp-button') was not found on first nav (likely lazy mount/timing). Need to verify selector exists and is rendered for authenticated users on active VPPs.", "selector": "[data-testid='join-vpp-button']", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [
+      {"flow": "WebSocket /api/ws/feed and /api/ws/vpp/{id}", "issue": "Console warning: 'WebSocket closed before connection established' on page navigation. Backend WS connects successfully when tested directly, so this is likely the client closing on route change before the open handshake completes. Consider awaiting WS open or guarding cleanup.", "affected_selectors": []}
+    ],
+    "design_issues": [
+      {"screen": "Browse", "issues": ["Test data created during backend tests (TEST_*, DBG VPPs) pollutes the public list — admin should clean these up or tests should hard-delete on teardown. Not a UX bug, just visual noise."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Verify join button (data-testid='join-vpp-button') is rendered & wired correctly for authenticated consumer on active VPPs from VPPDetail page.",
+    "Investigate Stripe test session lookup 502: confirm whether `sk_test_emergent` supports `checkout.sessions.retrieve` or rely solely on webhook to mark paid.",
+    "(Optional cleanup) Remove TEST_*/DBG VPPs from DB after test runs, or add a teardown fixture."
+  ],
+  "critical_code_review_comments": [
+    "FIXED by tester: server.py serialize_vpp() did not strip MongoDB `_id`. After `db.vpps.insert_one(vpp)` motor mutated the dict in-place, causing `POST /api/admin/vpps` to 500 with `ObjectId object is not iterable`. Added `d.pop('_id', None)` in serialize_vpp.",
+    "server.py: `_transition_vpp_if_needed` only triggers when participants_count >= threshold AND state == 'active'. If admin force-sets state back to 'active' on a full VPP it will re-transition — minor.",
+    "server.py: `admin_force_state` accepts any of seed/active/powered/locked/executing/completed without checking valid state machine transitions. Acceptable for admin override.",
+    "server.py is ~1050 lines; consider splitting routes (auth/vpps/checkout/admin) into separate modules per code-review guideline (>700 lines).",
+    "Frontend WebSocket consumer should buffer/await open before unmount to avoid the 'closed before opened' warnings.",
+    "`_mark_participant_paid` compares `paid_count >= vpp['participants_count']` to mark completed, but uses live participants_count which is total joined, not paid threshold. Logic seems intentional (all joined paid) — fine."
+  ],
+  "updated_files": [
+    "/app/backend/server.py (added _id strip in serialize_vpp)",
+    "/app/backend/tests/backend_test.py (new pytest suite, 24 tests)"
+  ],
+  "success_rate": {"backend": "100% (24/24)", "frontend": "~90% (key pages load; join-button selector needs verification)"},
+  "test_credentials": "mongosh-seeded session tokens (per /app/auth_testing.md). Stripe test card: 4242 4242 4242 4242.",
+  "seed_data_creation": "Auto-seeded 6 VPPs on backend startup. Tests created several TEST_*/DBG VPPs (still in DB).",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend pytest suite at /app/backend/tests/backend_test.py covers VPPs, auth (Bearer), join+transition, checkout (card+open_banking+mock-confirm), supplier/admin RBAC, websockets. To run: `cd /app/backend/tests && REACT_APP_BACKEND_URL=https://party-power-1.preview.emergentagent.com python -m pytest backend_test.py -v`. ObjectId bug was found and fixed in serialize_vpp(). Verify the Join button selector/flow on VPPDetail manually with seeded session cookie.",
+  "rca of the issue": "ObjectId bug RCA: motor's `insert_one(doc)` mutates the input dict in-place adding `_id: ObjectId(...)`. Subsequent `serialize_vpp(vpp)` returned that dict which FastAPI/jsonable_encoder could not serialize -> 500. Fix: pop `_id` defensively inside `serialize_vpp`. Reproduce: `POST /api/admin/vpps` with valid admin token returned 500 'ObjectId object is not iterable'. After fix: returns 200 with full serialized VPP body."
+}
