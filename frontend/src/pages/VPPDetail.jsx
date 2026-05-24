@@ -39,28 +39,38 @@ export default function VPPDetail() {
   useEffect(() => { load(); }, [id]);
 
   useEffect(() => {
-    const ws = new WebSocket(wsUrl(`/api/ws/vpp/${id}`));
-    ws.onmessage = (e) => {
-      try {
-        const msg = JSON.parse(e.data);
-        if (msg.vpp) {
-          setVpp((prev) => ({ ...(prev || {}), ...msg.vpp, recent_participants: prev?.recent_participants || [] }));
-        }
-        if (msg.type === "user_joined" && msg.user_name) {
-          setParticipants((p) => [{ display_name: msg.user_name, joined_at: new Date().toISOString() }, ...p].slice(0, 10));
-          toast(`${msg.user_name} just joined the party ⚡`);
-        }
-        if (msg.type === "state_change" && msg.vpp?.state && (msg.vpp.state === "powered" || msg.vpp.state === "locked")) {
-          if (prevState.current !== msg.vpp.state) {
-            setShowConfetti(true);
-            toast.success("⚡ PARTY POWERED! Price locked.");
-            setTimeout(() => setShowConfetti(false), 4500);
-            prevState.current = msg.vpp.state;
+    let ws;
+    let closed = false;
+    try {
+      ws = new WebSocket(wsUrl(`/api/ws/vpp/${id}`));
+      ws.onmessage = (e) => {
+        try {
+          const msg = JSON.parse(e.data);
+          if (msg.vpp) {
+            setVpp((prev) => ({ ...(prev || {}), ...msg.vpp, recent_participants: prev?.recent_participants || [] }));
           }
-        }
+          if (msg.type === "user_joined" && msg.user_name) {
+            setParticipants((p) => [{ display_name: msg.user_name, joined_at: new Date().toISOString() }, ...p].slice(0, 10));
+            toast(`${msg.user_name} just joined the party ⚡`);
+          }
+          if (msg.type === "state_change" && msg.vpp?.state && (msg.vpp.state === "powered" || msg.vpp.state === "locked")) {
+            if (prevState.current !== msg.vpp.state) {
+              setShowConfetti(true);
+              toast.success("⚡ PARTY POWERED! Price locked.");
+              setTimeout(() => setShowConfetti(false), 4500);
+              prevState.current = msg.vpp.state;
+            }
+          }
+        } catch {}
+      };
+    } catch {}
+    return () => {
+      closed = true;
+      try {
+        if (ws && ws.readyState === WebSocket.OPEN) ws.close();
+        else if (ws) ws.onopen = () => ws.close();
       } catch {}
     };
-    return () => { try { ws.close(); } catch {} };
   }, [id]);
 
   const handleJoin = async () => {
@@ -210,6 +220,7 @@ export default function VPPDetail() {
                   disabled={joining}
                   className="w-full bg-[#FF5400] text-white border-2 border-white font-bold uppercase tracking-wider px-6 py-4 text-base shadow-brut hover-brut flex items-center justify-center gap-2 disabled:opacity-60"
                   data-testid="join-party-btn"
+                  id="join-vpp-button"
                 >
                   <Lightning weight="fill" /> {joining ? "Joining..." : "Join Party"}
                 </button>
