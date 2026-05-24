@@ -1,0 +1,146 @@
+{
+  "theme_and_archetype": {
+    "domain": "Collective Buying Platform",
+    "theme": "Light Theme",
+    "archetype": "Archetype 4 (Swiss & High-Contrast) + Energetic Accents",
+    "mood_and_vibe": "Energetic, collective movement, momentum, gathering, structured but bold."
+  },
+  "typography": {
+    "fonts": {
+      "heading": "Cabinet Grotesk",
+      "body": "Satoshi",
+      "mono": "JetBrains Mono"
+    },
+    "rules": {
+      "h1": "text-5xl sm:text-6xl+ font-black tracking-tighter leading-none uppercase",
+      "h2": "text-4xl sm:text-5xl font-extrabold tracking-tight leading-none uppercase",
+      "h3": "text-2xl sm:text-3xl font-bold tracking-tight",
+      "body": "text-base sm:text-lg font-medium leading-relaxed tracking-normal",
+      "labels_and_overlines": "text-xs font-bold uppercase tracking-[0.2em]",
+      "banned_fonts": ["Inter", "Space Grotesk", "Roboto", "Open Sans"]
+    }
+  },
+  "colors": {
+    "background": {
+      "primary": "#FFFFFF",
+      "secondary": "#F4F4F4",
+      "elevated": "#FAFAFA"
+    },
+    "text": {
+      "primary": "#0A0A0A",
+      "secondary": "#525252",
+      "inverse": "#FFFFFF"
+    },
+    "brand_accents": {
+      "blaze_orange": "#FF5400",
+      "klein_blue": "#0021A5",
+      "warning_yellow": "#FFD600",
+      "success_green": "#00C853"
+    },
+    "vpp_states": {
+      "seed_active": {
+        "bg": "#F4F4F4",
+        "border": "#0A0A0A",
+        "text": "#0A0A0A"
+      },
+      "almost_powered": {
+        "bg": "#FFD600",
+        "border": "#0A0A0A",
+        "text": "#0A0A0A"
+      },
+      "powered": {
+        "bg": "#0021A5",
+        "border": "#0A0A0A",
+        "text": "#FFFFFF"
+      },
+      "locked": {
+        "bg": "#FF5400",
+        "border": "#0A0A0A",
+        "text": "#FFFFFF"
+      },
+      "executing": {
+        "bg": "linear-gradient(45deg, #FF5400 25%, #FF7333 25%, #FF7333 50%, #FF5400 50%, #FF5400 75%, #FF7333 75%, #FF7333 100%)",
+        "border": "#0A0A0A",
+        "text": "#FFFFFF"
+      },
+      "completed": {
+        "bg": "#00C853",
+        "border": "#0A0A0A",
+        "text": "#0A0A0A"
+      }
+    },
+    "ui_elements": {
+      "borders": "#0A0A0A",
+      "dividers": "#E5E5E5"
+    }
+  },
+  "layout_and_spacing": {
+    "general": {
+      "generous_padding": true,
+      "container_max_width": "max-w-7xl",
+      "border_radius": "rounded-none",
+      "stroke_width": "border-2"
+    },
+    "grids": {
+      "marketing": "grid-cols-1 md:grid-cols-12 gap-6 md:gap-8",
+      "dashboards": "grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6",
+      "vpp_cards": "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+    },
+    "components": {
+      "cards": "border-2 border-[#0A0A0A] bg-white p-6 md:p-8 shadow-[4px_4px_0px_#0A0A0A] hover:-translate-y-1 hover:shadow-[6px_6px_0px_#0A0A0A] transition-all",
+      "buttons_primary": "bg-[#FF5400] text-white border-2 border-[#0A0A0A] font-bold uppercase tracking-wider py-4 px-8 shadow-[4px_4px_0px_#0A0A0A] hover:bg-[#FF7333] hover:translate-y-0.5 hover:shadow-[2px_2px_0px_#0A0A0A] transition-all",
+      "buttons_secondary": "bg-white text-[#0A0A0A] border-2 border-[#0A0A0A] font-bold uppercase tracking-wider py-4 px-8 shadow-[4px_4px_0px_#0A0A0A] hover:bg-[#F4F4F4] transition-all"
+    }
+  },
+  "ui_components": {
+    "navigation": "Sticky nav with solid white bg, sharp 2px bottom border. Large typography for links.",
+    "vpp_card": "Uses bento-style segmentation inside. Shows product image top, then deep divider, then live stats (current/threshold). State badge must be highly visible.",
+    "progress_bar": "Thick 2px borders, sharply rectangular. Fill color corresponds to VPP state.",
+    "alerts_toasts": "Brutalist blocky toasts (Sonner). High contrast, black borders.",
+    "icons": "Use @phosphor-icons/react (Duotone or Bold) for high contrast and modern structural feel."
+  },
+  "motion_and_interactions": {
+    "hover_states": "Hard translations (no soft floating). Use sharp drop-shadow shifting (e.g. shadow goes from 4px to 2px, box translates down 2px).",
+    "vpp_powered_celebration": "When hitting POWERED threshold, trigger Confetti or scale-bounce animation. Color flash from yellow to Klein Blue.",
+    "marquee": "Use react-fast-marquee with large uppercase outline text for 'POWER THE PARTY • LOCK THE PRICE' across section breaks.",
+    "loading": "ASCII or blocky terminal loaders for a slightly raw, technical feel."
+  },
+  "image_urls": {
+    "hero_background": {
+      "url": "https://static.prod-images.emergentagent.com/jobs/67e8fb00-1df5-4bd4-bb6c-b7cbff953d1b/images/5845498f9d244d8dea4a3f88b5bf738342fc574a220fdf8130936ae316163296.png",
+      "description": "Abstract 3D rendering of dynamic energy streams and particles merging into a solid shape, representing collective power.",
+      "category": "hero",
+      "usage": "Use in the main landing page hero section, either as background with overlay or as a prominent side visual."
+    },
+    "community_energy": {
+      "url": "https://images.unsplash.com/photo-1501386761578-eac5c94b800a?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1Mjh8MHwxfHNlYXJjaHwxfHxjcm93ZCUyMGVuZXJneSUyMGNoZWVyaW5nfGVufDB8fHx8MTc3OTYxNTc5M3ww&ixlib=rb-4.1.0&q=85",
+      "description": "Excited crowd cheering, conveying momentum and collective action.",
+      "category": "marketing",
+      "usage": "Use in 'How it Works' or 'Join the Party' sections to emphasize community power."
+    },
+    "product_tires": {
+      "url": "https://images.unsplash.com/photo-1601411101851-ea0e07766235?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAxODF8MHwxfHNlYXJjaHwyfHxjYXIlMjB0aXJlJTIwaXNvbGF0ZWR8ZW58MHx8fHwxNzc5NjE1NzkzfDA&ixlib=rb-4.1.0&q=85",
+      "description": "Black and silver car wheel",
+      "category": "product_demo",
+      "usage": "Use as a thumbnail for a sample 'Tyres' VPP."
+    },
+    "product_earphones": {
+      "url": "https://images.unsplash.com/photo-1606220588913-b3aacb4d2f46?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NTZ8MHwxfHNlYXJjaHwxfHx3aXJlbGVzcyUyMGVhcnBob25lcyUyMHNsZWVrfGVufDB8fHx8MTc3OTYxNTc5M3ww&ixlib=rb-4.1.0&q=85",
+      "description": "Sleek wireless earbuds",
+      "category": "product_demo",
+      "usage": "Use as a thumbnail for a sample 'Earphones' VPP."
+    }
+  },
+  "instructions_to_main_agent": [
+    "Strictly adhere to the font pairing: Cabinet Grotesk for Headings and Satoshi for Body. DO NOT use Inter or Space Grotesk.",
+    "Implement the brutalist/Swiss shadow style (solid black offsets like shadow-[4px_4px_0px_#0A0A0A]) on all cards and main buttons to reinforce the energetic, heavy, and locked-in feel.",
+    "Ensure the VPP states (SEED, ACTIVE, ALMOST POWERED, POWERED, LOCKED, EXECUTING, COMPLETED) use the precise color mapping provided.",
+    "Do not use generic Shadcn cards out of the box. Heavily customize them to use `rounded-none`, thick borders (`border-2 border-[#0A0A0A]`), and solid shadows.",
+    "Use data-testid attributes (kebab-case, role-based) on all interactive elements.",
+    "For the Landing page hero, do not use a standard gradient. Use the generated abstract 3D image url or a bold typographic kinetic marquee to set the 'movement' tone.",
+    "Payment routing / checkout components should feature high contrast and clearly display the payment method discount.",
+    "In dashboards, prioritize pure data clarity over visual flair (Control Room Grid). Use tight spacing (`p-4` or `p-6`) compared to the marketing pages.",
+    "NEVER use placeholder domains for images (e.g. via.placeholder.com). ONLY use the image URLs provided in this file.",
+    "Integrate Phosphor Icons (@phosphor-icons/react) instead of standard Lucide icons where possible for a bolder look."
+  ]
+}
