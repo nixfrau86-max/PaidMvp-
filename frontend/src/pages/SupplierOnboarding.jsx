@@ -1,0 +1,198 @@
+import React, { useEffect, useState } from "react";
+import { useNavigate, Link } from "react-router-dom";
+import { toast } from "sonner";
+import Navbar from "../components/Navbar";
+import { api } from "../lib/api";
+import { useAuth, loginRedirect } from "../lib/auth";
+import {
+  Storefront, CheckCircle, ArrowRight, Lightning, ShieldCheck, Package, ChartLineUp,
+} from "@phosphor-icons/react";
+
+const CATEGORIES = ["Tyres", "Electronics", "Home", "Automotive", "Consumer Goods", "Services", "Other"];
+
+export default function SupplierOnboarding() {
+  const navigate = useNavigate();
+  const { user, loading, setUser } = useAuth();
+  const [supplier, setSupplier] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [form, setForm] = useState({
+    business_name: "",
+    contact_email: "",
+    category: "Tyres",
+    description: "",
+    logo_url: "",
+  });
+
+  useEffect(() => {
+    if (loading) return;
+    if (!user) return; // will show login CTA
+    (async () => {
+      try {
+        const { data } = await api.get("/suppliers/me");
+        setSupplier(data);
+        // Already a supplier → redirect to dashboard
+        navigate("/supplier");
+      } catch {
+        // Pre-fill email
+        setForm((f) => ({ ...f, contact_email: user.email || "" }));
+      }
+    })();
+  }, [user, loading, navigate]);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setSubmitting(true);
+    try {
+      const { data } = await api.post("/suppliers/apply", form);
+      setSupplier(data);
+      // Refresh user role
+      try {
+        const me = await api.get("/auth/me");
+        setUser(me.data);
+      } catch {}
+      toast.success("You're in! Your sandbox is live.");
+      navigate("/supplier");
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Application failed");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (loading) {
+    return <div className="min-h-screen bg-white"><Navbar /></div>;
+  }
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-white">
+        <Navbar />
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 py-16 text-center">
+          <h1 className="font-display text-5xl uppercase tracking-tighter leading-[0.9] mb-4">
+            Sell into collective demand.
+          </h1>
+          <p className="text-[#3A3A3A] mb-6">Sign in with Google to start your supplier application.</p>
+          <button
+            onClick={loginRedirect}
+            className="bg-[#FF5400] text-white border-2 border-ink font-bold uppercase tracking-wider px-6 py-3 text-sm shadow-brut hover-brut"
+            data-testid="supplier-login-cta"
+          >
+            Sign in to Apply
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-white">
+      <Navbar />
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10 grid grid-cols-1 lg:grid-cols-5 gap-8">
+        {/* Left: pitch / why */}
+        <div className="lg:col-span-2">
+          <div className="text-[10px] font-bold uppercase tracking-[0.3em] font-mono text-[#FF5400] mb-3">Become a Supplier</div>
+          <h1 className="font-display text-4xl sm:text-5xl uppercase tracking-tighter leading-[0.9] mb-5">
+            Aggregated demand.<br />Guaranteed batches.
+          </h1>
+          <p className="text-[#3A3A3A] mb-8 leading-relaxed">
+            We turn fragmented consumer interest into committed batch orders. Less marketing spend, faster inventory movement, better forecasting.
+          </p>
+          <div className="space-y-3">
+            <Bullet icon={Package} title="Batch orders, not 1-by-1" body="Every Wave is a single batch order from confirmed buyers." />
+            <Bullet icon={ShieldCheck} title="Pre-validated demand" body="Wave only completes if threshold is hit. No demand risk." />
+            <Bullet icon={Lightning} title="Sandbox first" body="Your first Wave goes live immediately. Get verified to unlock more." />
+            <Bullet icon={ChartLineUp} title="Direct settlement (coming)" body="Stripe Connect support — funds split automatically once live." />
+          </div>
+        </div>
+
+        {/* Right: application form */}
+        <form onSubmit={submit} className="lg:col-span-3 border-2 border-ink bg-white shadow-brut-lg p-6 sm:p-8" data-testid="supplier-apply-form">
+          <div className="mb-6">
+            <div className="text-[10px] font-bold uppercase tracking-widest font-mono mb-1">Step 1 of 3 · Light info</div>
+            <h2 className="font-display text-3xl uppercase tracking-tighter">Tell us about your business.</h2>
+            <p className="text-xs text-[#3A3A3A] mt-1 font-mono">You can add VAT & bank details later to upgrade your tier.</p>
+          </div>
+          <div className="space-y-4">
+            <Field label="Business name *">
+              <input
+                required value={form.business_name}
+                onChange={(e) => setForm((f) => ({ ...f, business_name: e.target.value }))}
+                className="w-full border-2 border-ink p-3 font-mono text-sm"
+                placeholder="e.g. TyreDirect UK"
+                data-testid="apply-business-name"
+              />
+            </Field>
+            <Field label="Contact email *">
+              <input
+                required type="email" value={form.contact_email}
+                onChange={(e) => setForm((f) => ({ ...f, contact_email: e.target.value }))}
+                className="w-full border-2 border-ink p-3 font-mono text-sm"
+                data-testid="apply-contact-email"
+              />
+            </Field>
+            <Field label="Category *">
+              <select
+                value={form.category}
+                onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
+                className="w-full border-2 border-ink p-3 font-mono text-sm bg-white"
+                data-testid="apply-category"
+              >
+                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </Field>
+            <Field label="Short description *">
+              <textarea
+                required value={form.description}
+                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                className="w-full border-2 border-ink p-3 font-mono text-sm" rows={3}
+                placeholder="What you sell, where you deliver, why buyers should trust you."
+                data-testid="apply-description"
+              />
+            </Field>
+            <Field label="Logo URL (optional)">
+              <input
+                value={form.logo_url}
+                onChange={(e) => setForm((f) => ({ ...f, logo_url: e.target.value }))}
+                className="w-full border-2 border-ink p-3 font-mono text-sm"
+                placeholder="https://..."
+                data-testid="apply-logo"
+              />
+            </Field>
+          </div>
+          <button
+            type="submit" disabled={submitting}
+            className="mt-6 w-full bg-[#FF5400] text-white border-2 border-ink font-bold uppercase tracking-wider px-6 py-4 text-base shadow-brut hover-brut disabled:opacity-60 inline-flex items-center justify-center gap-2"
+            data-testid="apply-submit"
+          >
+            <Storefront weight="fill" /> {submitting ? "Submitting..." : "Open My Sandbox"}
+          </button>
+          <div className="mt-3 text-[10px] font-mono uppercase tracking-widest text-[#3A3A3A] text-center">
+            By applying you accept the supplier terms · No fees to list
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, children }) {
+  return (
+    <label className="block">
+      <div className="text-[10px] font-bold uppercase tracking-widest font-mono mb-1.5">{label}</div>
+      {children}
+    </label>
+  );
+}
+
+function Bullet({ icon: Icon, title, body }) {
+  return (
+    <div className="flex gap-3 border-2 border-ink bg-white shadow-brut-sm p-3">
+      <div className="w-9 h-9 bg-[#FFD600] border-2 border-ink flex items-center justify-center shrink-0">
+        <Icon weight="duotone" size={18} />
+      </div>
+      <div>
+        <div className="font-bold uppercase text-xs tracking-wider">{title}</div>
+        <div className="font-mono text-xs text-[#3A3A3A] mt-0.5">{body}</div>
+      </div>
+    </div>
+  );
+}

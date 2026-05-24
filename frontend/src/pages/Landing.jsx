@@ -244,6 +244,34 @@ export default function Landing() {
       {/* WAITLIST / EARLY ACCESS */}
       <Waitlist />
 
+      {/* SUPPLIER CTA */}
+      <section className="border-t-2 border-ink bg-ink text-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-16 sm:py-20 grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-[0.3em] font-mono text-[#FFD600] mb-3">For Suppliers</div>
+            <h2 className="font-display text-4xl sm:text-6xl uppercase tracking-tighter leading-[0.9] mb-5">
+              Sell into<br />pre-confirmed<br /><span className="text-[#FF5400]">batch demand.</span>
+            </h2>
+            <p className="text-white/85 mb-6 leading-relaxed max-w-md">
+              Skip the marketing spend. Every Wave is a committed batch order, only locked when the threshold is hit. List in 60 seconds — your first Wave goes live instantly.
+            </p>
+            <Link
+              to="/supplier/onboarding"
+              className="inline-flex items-center gap-2 bg-[#FF5400] text-white border-2 border-white font-bold uppercase tracking-wider px-6 py-3 text-sm shadow-brut hover-brut"
+              data-testid="become-supplier-cta"
+            >
+              Become a Supplier <ArrowRight weight="bold" />
+            </Link>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <SupplierCard num="60s" label="To apply" />
+            <SupplierCard num="0" label="Listing fees" />
+            <SupplierCard num="100%" label="Demand pre-validated" />
+            <SupplierCard num="1 batch" label="Per locked Wave" />
+          </div>
+        </div>
+      </section>
+
       {/* CTA */}
       <section className="border-t-2 border-ink bg-[#FF5400] text-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-16 sm:py-20 text-center">
@@ -397,5 +425,14 @@ function LivePartyHero({ vpp }) {
         </div>
       </div>
     </Link>
+  );
+}
+
+function SupplierCard({ num, label }) {
+  return (
+    <div className="border-2 border-white bg-ink p-5 text-center">
+      <div className="font-display text-4xl sm:text-5xl text-[#FFD600] leading-none mb-2">{num}</div>
+      <div className="font-mono text-[10px] font-bold uppercase tracking-widest">{label}</div>
+    </div>
   );
 }

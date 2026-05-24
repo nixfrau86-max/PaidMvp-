@@ -5,7 +5,7 @@ import StateBadge from "../components/StateBadge";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { toast } from "sonner";
-import { Plus, Trash, Lightning, CurrencyGbp, Users, ChartLineUp } from "@phosphor-icons/react";
+import { Plus, Trash, Lightning, CurrencyGbp, Users, ChartLineUp, CheckCircle, X, Storefront, Clock } from "@phosphor-icons/react";
 
 const STATES = ["seed", "active", "powered", "locked", "executing", "completed"];
 
@@ -14,15 +14,22 @@ export default function AdminPanel() {
   const { user, loading } = useAuth();
   const [stats, setStats] = useState(null);
   const [vpps, setVpps] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
+  const [pendingWaves, setPendingWaves] = useState([]);
   const [showForm, setShowForm] = useState(false);
+  const [tab, setTab] = useState("waves");
 
   const load = async () => {
-    const [s, v] = await Promise.all([
+    const [s, v, sup, pw] = await Promise.all([
       api.get("/admin/stats"),
       api.get("/admin/vpps"),
+      api.get("/admin/suppliers"),
+      api.get("/admin/waves/pending"),
     ]);
     setStats(s.data);
     setVpps(v.data);
+    setSuppliers(sup.data);
+    setPendingWaves(pw.data);
   };
 
   useEffect(() => {
@@ -47,6 +54,27 @@ export default function AdminPanel() {
     load();
   };
 
+  const verifySupplier = async (id) => {
+    await api.post(`/admin/suppliers/${id}/verify`, {});
+    toast.success("Supplier verified");
+    load();
+  };
+  const rejectSupplier = async (id) => {
+    const reason = prompt("Reason for rejection:") || "Did not meet criteria";
+    await api.post(`/admin/suppliers/${id}/reject`, { reason });
+    load();
+  };
+  const approveWave = async (id) => {
+    await api.post(`/admin/waves/${id}/approve`, {});
+    toast.success("Wave approved & live");
+    load();
+  };
+  const rejectWave = async (id) => {
+    const reason = prompt("Reason for rejection:") || "Did not meet criteria";
+    await api.post(`/admin/waves/${id}/reject`, { reason });
+    load();
+  };
+
   if (loading || !stats) return <Shell><div className="font-mono uppercase tracking-widest text-sm">Loading...</div></Shell>;
 
   return (
@@ -67,15 +95,37 @@ export default function AdminPanel() {
 
       {showForm && <CreateVPPForm onCreated={() => { setShowForm(false); load(); }} />}
 
-      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 mb-8">
-        <Stat label="Total VPPs" v={stats.total_vpps} />
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 mb-6">
+        <Stat label="Total Waves" v={stats.total_vpps} />
         <Stat label="Active" v={stats.active_vpps} c="#FF5400" />
         <Stat label="Locked" v={stats.locked_vpps} c="#0021A5" />
-        <Stat label="Completed" v={stats.completed_vpps} c="#00C853" />
-        <Stat label="Users" v={stats.total_users} icon={Users} />
+        <Stat label="Suppliers" v={stats.total_suppliers || 0} icon={Storefront} />
+        <Stat label="Pending Sup." v={stats.pending_suppliers || 0} c={stats.pending_suppliers ? "#FF5400" : undefined} />
         <Stat label="GMV" v={`£${stats.gmv.toFixed(0)}`} icon={CurrencyGbp} c="#00C853" />
       </div>
 
+      {/* Tabs */}
+      <div className="border-2 border-ink bg-white shadow-brut-sm flex mb-6 overflow-x-auto" data-testid="admin-tabs">
+        {[
+          { id: "waves", label: `All Waves (${vpps.length})` },
+          { id: "pending_waves", label: `Pending Waves (${pendingWaves.length})`, badge: pendingWaves.length },
+          { id: "suppliers", label: `Suppliers (${suppliers.length})`, badge: stats.pending_suppliers },
+        ].map(t => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            className={`px-4 py-3 text-[11px] font-bold uppercase tracking-widest font-mono border-r-2 border-ink last:border-r-0 whitespace-nowrap relative ${tab === t.id ? "bg-ink text-white" : "bg-white hover:bg-[#F4F4F4]"}`}
+            data-testid={`admin-tab-${t.id}`}
+          >
+            {t.label}
+            {t.badge > 0 && tab !== t.id && (
+              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-[#FF5400] animate-pulse" />
+            )}
+          </button>
+        ))}
+      </div>
+
+      {tab === "waves" && (
       <div className="border-2 border-ink bg-white shadow-brut overflow-x-auto">
         <table className="w-full font-mono text-sm">
           <thead className="bg-ink text-white">
@@ -123,8 +173,100 @@ export default function AdminPanel() {
           </tbody>
         </table>
       </div>
+      )}
+
+      {tab === "pending_waves" && (
+        <div className="border-2 border-ink bg-white shadow-brut overflow-x-auto">
+          {pendingWaves.length === 0 ? (
+            <div className="p-10 text-center font-mono uppercase text-sm tracking-widest text-[#3A3A3A]">No waves pending approval.</div>
+          ) : (
+            <table className="w-full font-mono text-sm">
+              <thead className="bg-ink text-white">
+                <tr><Th>Wave</Th><Th>Supplier</Th><Th>Category</Th><Th>Threshold</Th><Th>Retail / Collective</Th><Th>Actions</Th></tr>
+              </thead>
+              <tbody>
+                {pendingWaves.map(w => (
+                  <tr key={w.vpp_id} className="border-t-2 border-ink hover:bg-[#FAFAFA]" data-testid={`pending-wave-${w.vpp_id}`}>
+                    <Td>
+                      <div className="flex gap-2 items-center">
+                        <img src={w.image_url} alt="" className="w-10 h-10 border-2 border-ink object-cover" />
+                        <span className="font-bold uppercase text-xs">{w.title}</span>
+                      </div>
+                    </Td>
+                    <Td>{w.supplier_name}</Td>
+                    <Td>{w.category}</Td>
+                    <Td>{w.threshold}</Td>
+                    <Td>£{w.retail_price} / £{w.customer_price}</Td>
+                    <Td>
+                      <div className="flex gap-1">
+                        <button onClick={() => approveWave(w.vpp_id)} className="bg-[#00C853] text-ink border-2 border-ink font-bold uppercase tracking-wider px-2 py-1 text-[10px] shadow-brut-sm hover-brut inline-flex items-center gap-1" data-testid={`approve-wave-${w.vpp_id}`}>
+                          <CheckCircle weight="fill" size={10}/> Approve
+                        </button>
+                        <button onClick={() => rejectWave(w.vpp_id)} className="bg-white text-ink border-2 border-ink font-bold uppercase tracking-wider px-2 py-1 text-[10px] shadow-brut-sm hover-brut inline-flex items-center gap-1" data-testid={`reject-wave-${w.vpp_id}`}>
+                          <X weight="bold" size={10}/> Reject
+                        </button>
+                      </div>
+                    </Td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {tab === "suppliers" && (
+        <div className="border-2 border-ink bg-white shadow-brut overflow-x-auto">
+          {suppliers.length === 0 ? (
+            <div className="p-10 text-center font-mono uppercase text-sm tracking-widest text-[#3A3A3A]">No supplier applications yet.</div>
+          ) : (
+            <table className="w-full font-mono text-sm">
+              <thead className="bg-ink text-white">
+                <tr><Th>Business</Th><Th>Category</Th><Th>Tier</Th><Th>Info Level</Th><Th>Waves</Th><Th>Contact</Th><Th>Actions</Th></tr>
+              </thead>
+              <tbody>
+                {suppliers.map(s => (
+                  <tr key={s.supplier_id} className="border-t-2 border-ink hover:bg-[#FAFAFA]" data-testid={`supplier-row-${s.supplier_id}`}>
+                    <Td><div className="font-bold uppercase text-xs">{s.business_name}</div></Td>
+                    <Td>{s.category}</Td>
+                    <Td><SupplierStatusBadge status={s.status} /></Td>
+                    <Td className="capitalize">{s.info_level}</Td>
+                    <Td>{s.waves_published}</Td>
+                    <Td><a href={`mailto:${s.contact_email}`} className="underline">{s.contact_email}</a></Td>
+                    <Td>
+                      {s.status !== "verified" && s.status !== "payout_ready" && s.status !== "rejected" && (
+                        <div className="flex gap-1">
+                          <button onClick={() => verifySupplier(s.supplier_id)} className="bg-[#00C853] text-ink border-2 border-ink font-bold uppercase tracking-wider px-2 py-1 text-[10px] shadow-brut-sm hover-brut inline-flex items-center gap-1" data-testid={`verify-supplier-${s.supplier_id}`}>
+                            <CheckCircle weight="fill" size={10}/> Verify
+                          </button>
+                          <button onClick={() => rejectSupplier(s.supplier_id)} className="bg-white text-ink border-2 border-ink font-bold uppercase tracking-wider px-2 py-1 text-[10px] shadow-brut-sm hover-brut">
+                            <X weight="bold" size={10}/>
+                          </button>
+                        </div>
+                      )}
+                    </Td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
     </Shell>
   );
+}
+
+function SupplierStatusBadge({ status }) {
+  const M = {
+    provisional: { label: "Provisional", bg: "#FFD600" },
+    pending_review: { label: "Pending Review", bg: "#FF5400", text: "#fff" },
+    verified: { label: "Verified", bg: "#0021A5", text: "#fff" },
+    payout_ready: { label: "Payout Ready", bg: "#00C853" },
+    rejected: { label: "Rejected", bg: "#525252", text: "#fff" },
+  };
+  const s = M[status] || M.provisional;
+  return <span className="inline-flex items-center gap-1 border-2 border-ink px-2 py-1 text-[9px] font-bold uppercase tracking-widest font-mono"
+    style={{ background: s.bg, color: s.text || "#0A0A0A" }}>{s.label}</span>;
 }
 
 function CreateVPPForm({ onCreated }) {

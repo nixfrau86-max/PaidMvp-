@@ -20,17 +20,21 @@ The Collective Savers™ is a real-time demand aggregation platform powered by V
 (For MVP, threshold trigger auto-jumps active→locked, skipping a visible "powered" stage.)
 
 ## Core Features — V1 (Implemented 2026-05-24)
-- [x] Landing page with hero, signature Live Party Card, How-It-Works, payment optimisation table, live snapshot, CTA
-- [x] Browse parties with state/category/search filters; live updates via WebSocket
-- [x] VPP detail page with live progress, countdown, recent joiners, join flow, confetti on POWER
-- [x] Checkout with 3 payment methods: Stripe (real card), Open Banking (mocked, 3% discount), Bank Transfer (mocked, 2% discount)
+- [x] Landing page with hero, signature Live Wave Card, How-It-Works, payment optimisation table, manifesto, waitlist, supplier CTA, footer
+- [x] Browse waves with state/category/search filters; live updates via WebSocket
+- [x] Wave detail page with live progress, countdown, recent joiners, join flow, confetti on POWER
+- [x] Checkout with 4 payment methods (Apple Pay/GPay + Card via Stripe; Open Banking + Bank Transfer mocked) — fee-free UX, only Retail / Collective Price / You Save
 - [x] Stripe Checkout session creation + polling + webhook
-- [x] Consumer dashboard "My Parties" with total savings widget
-- [x] Supplier dashboard with batch orders + dispatch action
-- [x] Admin Control Room: stats, full VPP table, create form, force-state, delete
+- [x] Consumer dashboard "My Waves" with total savings widget
+- [x] **Supplier onboarding (Light info) → Provisional sandbox tier**
+- [x] **Supplier dashboard** with tier banner, My Waves tab, Orders tab, Profile (Light/Standard/Full)
+- [x] **Supplier-managed Wave creation** with live margin preview
+- [x] **Wave publish logic**: provisional first wave auto-live (capped 30/£500), subsequent waves → pending approval; verified suppliers self-publish unlimited
+- [x] **Admin verification flow**: Suppliers tab (verify/reject), Pending Waves tab (approve/reject)
+- [x] Auto-seeded 6 waves on startup (Tyres + Electronics)
+- [x] WebSocket real-time broadcast on join, state change, wave creation
 - [x] Emergent Google Auth: signin redirect, callback handler, /auth/me, logout, role switcher
-- [x] Auto-seeded 6 VPPs on startup (Tyres + Electronics)
-- [x] WebSocket real-time broadcast on join, state change, VPP creation
+- [x] Waitlist email capture (/api/waitlist)
 
 ## Backlog (P1)
 - Email/SMS notifications when Party powers

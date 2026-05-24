@@ -11,6 +11,8 @@ import Checkout from "./pages/Checkout";
 import CheckoutSuccess from "./pages/CheckoutSuccess";
 import MyParties from "./pages/MyParties";
 import SupplierDashboard from "./pages/SupplierDashboard";
+import SupplierOnboarding from "./pages/SupplierOnboarding";
+import SupplierWaveNew from "./pages/SupplierWaveNew";
 import AdminPanel from "./pages/AdminPanel";
 import AuthCallback from "./pages/AuthCallback";
 
@@ -29,6 +31,8 @@ function AppRouter() {
       <Route path="/checkout/success" element={<CheckoutSuccess />} />
       <Route path="/dashboard" element={<MyParties />} />
       <Route path="/supplier" element={<SupplierDashboard />} />
+      <Route path="/supplier/onboarding" element={<SupplierOnboarding />} />
+      <Route path="/supplier/waves/new" element={<SupplierWaveNew />} />
       <Route path="/admin" element={<AdminPanel />} />
     </Routes>
   );

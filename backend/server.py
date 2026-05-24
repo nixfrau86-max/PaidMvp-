@@ -59,7 +59,83 @@ class User(BaseModel):
     name: str
     picture: Optional[str] = None
     role: UserRole = "consumer"
+    supplier_id: Optional[str] = None  # if user is a supplier, links to Supplier doc
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+SupplierStatus = Literal["provisional", "pending_review", "verified", "payout_ready", "rejected"]
+
+
+class Supplier(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    supplier_id: str = Field(default_factory=lambda: f"sup_{uuid.uuid4().hex[:10]}")
+    user_id: str
+    # Light info
+    business_name: str
+    contact_email: str
+    category: str
+    description: str
+    logo_url: Optional[str] = None
+    # Standard info (optional at signup)
+    contact_phone: Optional[str] = None
+    vat_number: Optional[str] = None
+    company_reg: Optional[str] = None
+    address_line1: Optional[str] = None
+    address_line2: Optional[str] = None
+    city: Optional[str] = None
+    postcode: Optional[str] = None
+    # Full info (payouts)
+    bank_account_name: Optional[str] = None
+    bank_sort_code: Optional[str] = None
+    bank_account_number_last4: Optional[str] = None
+    # Status
+    status: SupplierStatus = "provisional"
+    info_level: str = "light"  # light | standard | full
+    waves_published: int = 0
+    provisional_cap: int = 1
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    verified_at: Optional[datetime] = None
+    rejected_at: Optional[datetime] = None
+    rejection_reason: Optional[str] = None
+
+
+class SupplierApplyRequest(BaseModel):
+    business_name: str
+    contact_email: str
+    category: str
+    description: str
+    logo_url: Optional[str] = None
+
+
+class SupplierUpdateRequest(BaseModel):
+    business_name: Optional[str] = None
+    contact_email: Optional[str] = None
+    category: Optional[str] = None
+    description: Optional[str] = None
+    logo_url: Optional[str] = None
+    contact_phone: Optional[str] = None
+    vat_number: Optional[str] = None
+    company_reg: Optional[str] = None
+    address_line1: Optional[str] = None
+    address_line2: Optional[str] = None
+    city: Optional[str] = None
+    postcode: Optional[str] = None
+    bank_account_name: Optional[str] = None
+    bank_sort_code: Optional[str] = None
+    bank_account_number: Optional[str] = None  # only last4 stored
+
+
+class SupplierWaveRequest(BaseModel):
+    title: str
+    description: str
+    category: str
+    image_url: str
+    supplier_cost: float
+    retail_price: float
+    customer_price: float
+    threshold: int
+    max_participants: int = 200
+    deadline_hours: int = 72
 
 
 class VPP(BaseModel):
@@ -70,6 +146,7 @@ class VPP(BaseModel):
     category: str
     image_url: str
     supplier_name: str
+    supplier_id: Optional[str] = None  # link to Supplier doc (None for admin-created seed waves)
     supplier_cost: float            # cost per unit from supplier
     retail_price: float             # standalone retail price
     customer_price: float           # VPP price per unit (locked)
@@ -78,10 +155,12 @@ class VPP(BaseModel):
     participants_count: int = 0
     deadline: datetime
     state: VPPState = "active"
+    publish_status: str = "live"    # live | pending_approval | rejected
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     powered_at: Optional[datetime] = None
     locked_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
+    rejection_reason: Optional[str] = None
 
 
 class VPPParticipant(BaseModel):
@@ -372,7 +451,7 @@ async def update_role(payload: UpdateRoleRequest, user: dict = Depends(get_curre
 # =====================================================================
 @api_router.get("/vpps")
 async def list_vpps(category: Optional[str] = None, state: Optional[str] = None):
-    q: Dict[str, Any] = {}
+    q = {"publish_status": "live"}
     if category:
         q["category"] = category
     if state:
@@ -728,15 +807,189 @@ async def _mark_participant_paid(vpp_id: str, user_id: str, payment_method: str)
 
 
 # =====================================================================
-# SUPPLIER ROUTES
+# SUPPLIER ROUTES — Onboarding
+# =====================================================================
+def _serialize_supplier(s: dict) -> dict:
+    d = dict(s)
+    d.pop("_id", None)
+    for k in ("created_at", "verified_at", "rejected_at"):
+        v = d.get(k)
+        if isinstance(v, datetime):
+            d[k] = v.isoformat()
+    return d
+
+
+async def _get_my_supplier(user: dict) -> Optional[dict]:
+    if not user.get("supplier_id"):
+        return None
+    return await db.suppliers.find_one({"supplier_id": user["supplier_id"]}, {"_id": 0})
+
+
+@api_router.post("/suppliers/apply")
+async def supplier_apply(payload: SupplierApplyRequest, user: dict = Depends(get_current_user)):
+    # If already a supplier, return existing
+    existing = await db.suppliers.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if existing:
+        return _serialize_supplier(existing)
+    supplier = Supplier(
+        user_id=user["user_id"],
+        business_name=payload.business_name,
+        contact_email=payload.contact_email,
+        category=payload.category,
+        description=payload.description,
+        logo_url=payload.logo_url,
+        status="provisional",
+        info_level="light",
+    ).model_dump()
+    supplier["created_at"] = supplier["created_at"].isoformat()
+    await db.suppliers.insert_one(supplier)
+    # Update user role & link
+    await db.users.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {"role": "supplier", "supplier_id": supplier["supplier_id"]}}
+    )
+    return _serialize_supplier(supplier)
+
+
+@api_router.get("/suppliers/me")
+async def supplier_me(user: dict = Depends(get_current_user)):
+    s = await db.suppliers.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if not s:
+        raise HTTPException(status_code=404, detail="No supplier profile")
+    return _serialize_supplier(s)
+
+
+@api_router.patch("/suppliers/me")
+async def supplier_update_me(payload: SupplierUpdateRequest, user: dict = Depends(get_current_user)):
+    s = await db.suppliers.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if not s:
+        raise HTTPException(status_code=404, detail="No supplier profile")
+    update: Dict[str, Any] = {}
+    for field in ("business_name", "contact_email", "category", "description", "logo_url",
+                  "contact_phone", "vat_number", "company_reg",
+                  "address_line1", "address_line2", "city", "postcode",
+                  "bank_account_name", "bank_sort_code"):
+        v = getattr(payload, field, None)
+        if v is not None:
+            update[field] = v
+    if payload.bank_account_number:
+        update["bank_account_number_last4"] = payload.bank_account_number[-4:]
+    if update:
+        await db.suppliers.update_one({"supplier_id": s["supplier_id"]}, {"$set": update})
+
+    # Compute new info_level
+    merged = {**s, **update}
+    has_standard = all(merged.get(f) for f in ("contact_phone", "vat_number", "address_line1", "city", "postcode"))
+    has_full = has_standard and merged.get("bank_account_name") and merged.get("bank_sort_code") and merged.get("bank_account_number_last4")
+    new_level = "full" if has_full else ("standard" if has_standard else "light")
+    if new_level != merged.get("info_level"):
+        await db.suppliers.update_one({"supplier_id": s["supplier_id"]}, {"$set": {"info_level": new_level}})
+
+    return await supplier_me(user)
+
+
+@api_router.post("/suppliers/me/request-verification")
+async def supplier_request_verification(user: dict = Depends(get_current_user)):
+    s = await db.suppliers.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if not s:
+        raise HTTPException(status_code=404, detail="No supplier profile")
+    if s["status"] in ("verified", "payout_ready"):
+        return _serialize_supplier(s)
+    if s.get("info_level") not in ("standard", "full"):
+        raise HTTPException(status_code=400, detail="Provide Standard info (phone, VAT, address) before requesting verification")
+    await db.suppliers.update_one({"supplier_id": s["supplier_id"]}, {"$set": {"status": "pending_review"}})
+    s = await db.suppliers.find_one({"supplier_id": s["supplier_id"]}, {"_id": 0})
+    return _serialize_supplier(s)
+
+
+@api_router.post("/suppliers/me/waves")
+async def supplier_create_wave(payload: SupplierWaveRequest, user: dict = Depends(get_current_user)):
+    supplier = await db.suppliers.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if not supplier:
+        raise HTTPException(status_code=403, detail="Apply as a supplier first")
+    if supplier["status"] == "rejected":
+        raise HTTPException(status_code=403, detail="Your supplier account was rejected")
+
+    # Provisional caps
+    if supplier["status"] == "provisional":
+        # Cap threshold & retail price
+        if payload.threshold > 30:
+            raise HTTPException(status_code=400, detail="Provisional suppliers: threshold capped at 30. Get verified to lift limits.")
+        if payload.retail_price > 500:
+            raise HTTPException(status_code=400, detail="Provisional suppliers: retail price capped at £500. Get verified to lift limits.")
+
+    # Decide publish_status:
+    # Provisional + first wave → auto-live
+    # Provisional + 2nd+ wave → pending_approval
+    # Verified/payout_ready → auto-live
+    if supplier["status"] in ("verified", "payout_ready"):
+        publish_status = "live"
+    elif supplier["status"] == "provisional" and supplier.get("waves_published", 0) < supplier.get("provisional_cap", 1):
+        publish_status = "live"
+    else:
+        publish_status = "pending_approval"
+
+    deadline = datetime.now(timezone.utc) + timedelta(hours=payload.deadline_hours)
+    vpp = VPP(
+        title=payload.title,
+        description=payload.description,
+        category=payload.category,
+        image_url=payload.image_url,
+        supplier_name=supplier["business_name"],
+        supplier_id=supplier["supplier_id"],
+        supplier_cost=payload.supplier_cost,
+        retail_price=payload.retail_price,
+        customer_price=payload.customer_price,
+        threshold=payload.threshold,
+        max_participants=payload.max_participants,
+        deadline=deadline,
+        state="active",
+        publish_status=publish_status,
+    ).model_dump()
+    vpp["created_at"] = vpp["created_at"].isoformat()
+    vpp["deadline"] = vpp["deadline"].isoformat()
+    await db.vpps.insert_one(vpp)
+    await db.suppliers.update_one(
+        {"supplier_id": supplier["supplier_id"]},
+        {"$inc": {"waves_published": 1}}
+    )
+    out = serialize_vpp(vpp)
+    if publish_status == "live":
+        await manager.broadcast("vpps:all", {"type": "vpp_created", "vpp": out})
+    return {**out, "publish_status": publish_status}
+
+
+@api_router.get("/suppliers/me/waves")
+async def supplier_my_waves(user: dict = Depends(get_current_user)):
+    supplier = await db.suppliers.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if not supplier:
+        raise HTTPException(status_code=404, detail="No supplier profile")
+    docs = await db.vpps.find(
+        {"supplier_id": supplier["supplier_id"]}, {"_id": 0}
+    ).sort("created_at", -1).to_list(200)
+    out = []
+    for d in docs:
+        paid = await db.vpp_participants.count_documents({"vpp_id": d["vpp_id"], "paid": True})
+        out.append({
+            **serialize_vpp(d),
+            "publish_status": d.get("publish_status", "live"),
+            "paid_count": paid,
+            "total_supplier_value": round(paid * d["supplier_cost"], 2),
+        })
+    return out
+
+
+# =====================================================================
+# SUPPLIER ROUTES — Orders / Fulfilment
 # =====================================================================
 @api_router.get("/supplier/orders")
 async def supplier_orders(user: dict = Depends(get_current_user)):
     await require_role(user, ["supplier", "admin"])
-    # Returns VPPs in locked/executing/completed states grouped as supplier orders
-    docs = await db.vpps.find(
-        {"state": {"$in": ["locked", "executing", "completed"]}}, {"_id": 0}
-    ).sort("locked_at", -1).to_list(100)
+    # If supplier, scope to own waves. If admin, return all.
+    q: Dict[str, Any] = {"state": {"$in": ["locked", "executing", "completed"]}}
+    if user.get("role") == "supplier" and user.get("supplier_id"):
+        q["supplier_id"] = user["supplier_id"]
+    docs = await db.vpps.find(q, {"_id": 0}).sort("locked_at", -1).to_list(100)
     out = []
     for d in docs:
         paid = await db.vpp_participants.count_documents({"vpp_id": d["vpp_id"], "paid": True})
@@ -804,8 +1057,76 @@ async def admin_list_vpps(user: dict = Depends(get_current_user)):
     out = []
     for d in docs:
         paid = await db.vpp_participants.count_documents({"vpp_id": d["vpp_id"], "paid": True})
-        out.append({**serialize_vpp(d), "paid_count": paid})
+        out.append({
+            **serialize_vpp(d),
+            "publish_status": d.get("publish_status", "live"),
+            "paid_count": paid,
+        })
     return out
+
+
+@api_router.get("/admin/suppliers")
+async def admin_list_suppliers(user: dict = Depends(get_current_user), status_filter: Optional[str] = None):
+    await require_role(user, ["admin"])
+    q: Dict[str, Any] = {}
+    if status_filter:
+        q["status"] = status_filter
+    docs = await db.suppliers.find(q, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return [_serialize_supplier(d) for d in docs]
+
+
+@api_router.post("/admin/suppliers/{supplier_id}/verify")
+async def admin_verify_supplier(supplier_id: str, body: dict, user: dict = Depends(get_current_user)):
+    await require_role(user, ["admin"])
+    s = await db.suppliers.find_one({"supplier_id": supplier_id}, {"_id": 0})
+    if not s:
+        raise HTTPException(status_code=404, detail="Supplier not found")
+    new_status = "payout_ready" if s.get("info_level") == "full" else "verified"
+    await db.suppliers.update_one(
+        {"supplier_id": supplier_id},
+        {"$set": {"status": new_status, "verified_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    return await db.suppliers.find_one({"supplier_id": supplier_id}, {"_id": 0})
+
+
+@api_router.post("/admin/suppliers/{supplier_id}/reject")
+async def admin_reject_supplier(supplier_id: str, body: dict, user: dict = Depends(get_current_user)):
+    await require_role(user, ["admin"])
+    reason = (body or {}).get("reason", "Did not meet criteria")
+    await db.suppliers.update_one(
+        {"supplier_id": supplier_id},
+        {"$set": {"status": "rejected", "rejected_at": datetime.now(timezone.utc).isoformat(), "rejection_reason": reason}}
+    )
+    return {"success": True}
+
+
+@api_router.get("/admin/waves/pending")
+async def admin_pending_waves(user: dict = Depends(get_current_user)):
+    await require_role(user, ["admin"])
+    docs = await db.vpps.find({"publish_status": "pending_approval"}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return [serialize_vpp(d) for d in docs]
+
+
+@api_router.post("/admin/waves/{vpp_id}/approve")
+async def admin_approve_wave(vpp_id: str, user: dict = Depends(get_current_user)):
+    await require_role(user, ["admin"])
+    await db.vpps.update_one({"vpp_id": vpp_id}, {"$set": {"publish_status": "live"}})
+    vpp = await db.vpps.find_one({"vpp_id": vpp_id}, {"_id": 0})
+    if vpp:
+        out = serialize_vpp(vpp)
+        await manager.broadcast("vpps:all", {"type": "vpp_created", "vpp": out})
+    return {"success": True}
+
+
+@api_router.post("/admin/waves/{vpp_id}/reject")
+async def admin_reject_wave(vpp_id: str, body: dict, user: dict = Depends(get_current_user)):
+    await require_role(user, ["admin"])
+    reason = (body or {}).get("reason", "Did not meet criteria")
+    await db.vpps.update_one(
+        {"vpp_id": vpp_id},
+        {"$set": {"publish_status": "rejected", "rejection_reason": reason}}
+    )
+    return {"success": True}
 
 
 @api_router.patch("/admin/vpps/{vpp_id}/state")
@@ -850,6 +1171,9 @@ async def admin_stats(user: dict = Depends(get_current_user)):
     # GMV
     txs = await db.payment_transactions.find({"payment_status": "paid"}, {"_id": 0, "amount": 1}).to_list(10000)
     gmv = round(sum(t["amount"] for t in txs), 2)
+    pending_suppliers = await db.suppliers.count_documents({"status": "pending_review"})
+    total_suppliers = await db.suppliers.count_documents({})
+    pending_waves = await db.vpps.count_documents({"publish_status": "pending_approval"})
     return {
         "total_vpps": total_vpps,
         "active_vpps": active,
@@ -858,6 +1182,9 @@ async def admin_stats(user: dict = Depends(get_current_user)):
         "total_users": total_users,
         "paid_orders": paid_count,
         "gmv": gmv,
+        "total_suppliers": total_suppliers,
+        "pending_suppliers": pending_suppliers,
+        "pending_waves": pending_waves,
     }
 
 
