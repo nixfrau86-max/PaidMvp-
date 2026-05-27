@@ -1596,13 +1596,20 @@ async def seed(force: bool = False):
 @api_router.post("/waitlist")
 async def waitlist_signup(payload: dict):
     email = (payload or {}).get("email", "").strip().lower()
+    roles = (payload or {}).get("roles", [])
     if "@" not in email:
         raise HTTPException(status_code=400, detail="Invalid email")
+    if not isinstance(roles, list):
+        roles = []
+    roles = [r for r in roles if r in ("consumer", "supplier", "garage")]
     existing = await db.waitlist.find_one({"email": email}, {"_id": 0})
     if existing:
+        if roles:
+            await db.waitlist.update_one({"email": email}, {"$addToSet": {"roles": {"$each": roles}}})
         return {"success": True, "already": True}
     await db.waitlist.insert_one({
         "email": email,
+        "roles": roles,
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
     return {"success": True}
