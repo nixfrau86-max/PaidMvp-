@@ -1,51 +1,41 @@
-# The Collective Savers™ — Product Requirements Document
+# The Collective Savers™ — PRD
 
-## Original Problem Statement
-The Collective Savers™ is a real-time demand aggregation platform powered by VPPs (Value Party Power Systems) that converts collective consumer intent into activated purchasing events with locked pricing, optimised payment routing, and supplier batch fulfilment.
+## Problem
+Build a real-time demand aggregation platform that turns fragmented consumer intent into **Waves** (collective buying events) with locked pricing, optimised payment rails, and supplier batch fulfilment.
 
-## Architecture
-- **Frontend**: React 19 + Tailwind + Shadcn UI + Phosphor Icons + react-fast-marquee + react-confetti + Sonner toasts
-- **Backend**: FastAPI + Motor (MongoDB async)
-- **Real-time**: Native FastAPI WebSockets (`/api/ws/feed`, `/api/ws/vpp/{id}`)
-- **Payments**: Stripe Checkout (real, test mode) for card; Mocked endpoints for Open Banking & Bank Transfer (per user spec)
-- **Auth**: Emergent-managed Google OAuth (httpOnly cookie + Bearer fallback)
+## Personas
+- **Member (consumer)** — browses & joins Waves, pre-authorises payment, books a fitter post-lock.
+- **Supplier** — distributors/manufacturers fulfilling Waves in bulk.
+- **Garage / Fitter** — verified place-of-business that receives tyre orders + member bookings.
+- **Admin** — platform operator (allowlist via `ADMIN_EMAILS`).
 
-## User Personas
-- **Consumer** — joins Parties, pays at lock, sees savings
-- **Supplier** — sees batch orders, dispatches
-- **Admin** — creates VPPs, monitors stats, force-controls state
+## Core requirements (locked)
+1. Waitlist-first landing page; no public pricing.
+2. Three persona login chooser (Consumer / Supplier / Garage), 3 auth methods (Google, Email+Password, SMS OTP).
+3. Wave lifecycle: SEED → ACTIVE → POWERED → LOCKED → EXECUTING → COMPLETED. Real-time over WebSockets.
+4. Tyres must ship to a **verified garage**, never a private address.
+5. Member books fitting **after the Wave locks** (not at checkout).
+6. Checkout shows: Retail Price → Collective Price → Total Savings only. No fees, no discounts language.
+7. Payment methods: Apple/Google Pay (Stripe), Card (Stripe), Open Banking (mocked), Bank Transfer (mocked).
+8. Admin role is restricted to `ADMIN_EMAILS` env allowlist.
 
-## VPP State Machine
-`seed → active → locked → executing → completed`
-(For MVP, threshold trigger auto-jumps active→locked, skipping a visible "powered" stage.)
+## What's implemented (current session — 2026-05-27)
+- Backend: FastAPI + Motor (MongoDB). Routes for auth (Google/Email/SMS), VPPs, checkout, supplier apply/console, garage apply/console, admin, **garage availability (weekly + overrides), slot generation, bookings**.
+- Founder admin seed on startup: `founder@thecollectivesavers.co.uk` / `SaversCollective`.
+- Admin allowlist enforcement (`ADMIN_EMAILS`) — Navbar role-switcher pill removed.
+- Frontend: Landing (waitlist), Login (3 personas × 3 methods), Browse, VPP detail, Checkout (deferred-garage), My Waves (with "Book your fitting" CTA), BookFitter (garage + slot picker), Supplier console, Garage console (availability editor + bookings list), Admin console.
+- Email `.com → .co.uk` corrected in Landing.
+- Backend testing: 9/9 new + 24/24 regression pass.
 
-## Core Features — V1 (Implemented 2026-05-24)
-- [x] Landing page with hero, signature Live Wave Card, How-It-Works, payment optimisation table, manifesto, waitlist, supplier CTA, footer
-- [x] Browse waves with state/category/search filters; live updates via WebSocket
-- [x] Wave detail page with live progress, countdown, recent joiners, join flow, confetti on POWER
-- [x] Checkout with 4 payment methods (Apple Pay/GPay + Card via Stripe; Open Banking + Bank Transfer mocked) — fee-free UX, only Retail / Collective Price / You Save
-- [x] Stripe Checkout session creation + polling + webhook
-- [x] Consumer dashboard "My Waves" with total savings widget
-- [x] **Supplier onboarding (Light info) → Provisional sandbox tier**
-- [x] **Supplier dashboard** with tier banner, My Waves tab, Orders tab, Profile (Light/Standard/Full)
-- [x] **Supplier-managed Wave creation** with live margin preview
-- [x] **Wave publish logic**: provisional first wave auto-live (capped 30/£500), subsequent waves → pending approval; verified suppliers self-publish unlimited
-- [x] **Admin verification flow**: Suppliers tab (verify/reject), Pending Waves tab (approve/reject)
-- [x] Auto-seeded 6 waves on startup (Tyres + Electronics)
-- [x] WebSocket real-time broadcast on join, state change, wave creation
-- [x] Emergent Google Auth: signin redirect, callback handler, /auth/me, logout, role switcher
-- [x] Waitlist email capture (/api/waitlist)
+## Backlog
+- P0 — Wire real Twilio creds (currently DEV-mode OTP in backend logs).
+- P0 — Trigger email on Wave LOCK with "Book your fitter" link (currently surfaced only in /dashboard).
+- P1 — Resend/SendGrid for supplier-approved, wave-locked, booking-confirmed emails.
+- P1 — Apple Sign-In once Apple Developer Program access is in place.
+- P2 — Real Open Banking (TrueLayer / Plaid) + Faster Payments settlement.
+- P2 — Stripe Connect for supplier split payouts.
+- P2 — Refer-a-driver growth loop.
+- P2 — Demand intelligence / analytics surface.
 
-## Backlog (P1)
-- Email/SMS notifications when Party powers
-- Save card / saved payment methods
-- Referral programme
-- Multi-language (UK-first)
-- Map view: regional VPPs (Phase 2)
-- Supplier onboarding / API
-- Demand forecasting analytics (Phase 4)
-
-## Known Constraints
-- `sk_test_emergent` is Emergent's shared Stripe sandbox; checkout session retrieval may be limited
-- "Powered" state visible only briefly (auto-locks for MVP)
-- Mocked Open Banking / Bank Transfer (production would integrate TrueLayer / Plaid + UK Faster Payments)
+## Tech stack
+React 19 + Tailwind + Phosphor icons · FastAPI + Motor + WebSockets · MongoDB · Stripe (test) · Twilio (dev-mode).

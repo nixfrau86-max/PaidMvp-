@@ -22,7 +22,8 @@ export default function Login() {
   // If already logged in, route based on intent
   useEffect(() => {
     if (!user) return;
-    if (intent === "supplier") navigate("/supplier");
+    if (user.role === "admin") navigate("/admin");
+    else if (intent === "supplier") navigate("/supplier");
     else if (intent === "garage") navigate("/garage");
     else navigate("/dashboard");
   }, [user, intent, navigate]);
