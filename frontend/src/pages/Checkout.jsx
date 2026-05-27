@@ -1,52 +1,65 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import Navbar from "../components/Navbar";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import {
-  CreditCard, Bank, ArrowsLeftRight, Lock, ShieldCheck, DeviceMobile, Sparkle, Wrench,
+  CreditCard, Bank, ArrowsLeftRight, Lock, ShieldCheck, DeviceMobile, Sparkle, Wrench, AppleLogo, GoogleLogo,
 } from "@phosphor-icons/react";
 
-const METHODS = [
-  { id: "apple_pay",    label: "Apple Pay / Google Pay", sub: "One-tap wallet checkout",         rate: 0,     icon: DeviceMobile,    recommended: false },
-  { id: "card",         label: "Debit / Credit Card",    sub: "Visa · Mastercard · Amex",          rate: 0,     icon: CreditCard,      recommended: false },
-  { id: "open_banking", label: "Open Banking",           sub: "Direct from your bank · Instant", rate: 0.01,  icon: Bank,            recommended: true  },
-  { id: "bank_transfer",label: "Bank Transfer",          sub: "Faster Payments · 1–3 hours",       rate: 0.005, icon: ArrowsLeftRight, recommended: false },
-];
+// Local UI metadata. Backend owns labels/fees/order/recommended/enabled.
+const METHOD_ICON = {
+  open_banking: Bank,
+  apple_pay: AppleLogo,
+  google_pay: GoogleLogo,
+  card: CreditCard,
+  bank_transfer: ArrowsLeftRight,
+};
 
 export default function Checkout() {
   const { vppId } = useParams();
   const navigate = useNavigate();
   const { user, loading } = useAuth();
-  const [vpp, setVpp] = useState(null);
-  const [method, setMethod] = useState("open_banking");
+  const [quote, setQuote] = useState(null);
+  const [method, setMethod] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (loading) return;
     if (!user) { navigate("/"); return; }
     (async () => {
-      const { data } = await api.get(`/vpps/${vppId}`);
-      setVpp(data);
-      if (data.has_paid) {
-        toast.info("You've already confirmed this wave.");
+      try {
+        const { data } = await api.get(`/checkout/quote/${vppId}`);
+        setQuote(data);
+        const recommended = data.payment_methods.find(m => m.recommended) || data.payment_methods[0];
+        setMethod(recommended.id);
+      } catch (e) {
+        toast.error(e?.response?.data?.detail || "Could not load checkout");
         navigate("/dashboard");
       }
     })();
   }, [vppId, user, loading, navigate]);
 
+  const selected = useMemo(
+    () => quote?.payment_methods.find(m => m.id === method),
+    [quote, method]
+  );
+
   const handlePay = async () => {
+    if (!selected) return;
     setSubmitting(true);
     try {
-      const apiMethod = method === "apple_pay" ? "card" : method;
-      const body = { vpp_id: vppId, payment_method: apiMethod, origin_url: window.location.origin };
+      const body = { vpp_id: vppId, payment_method: method, origin_url: window.location.origin };
       const { data } = await api.post("/checkout/init", body);
-      if (apiMethod === "card" && data.checkout_url) {
+      // Card / Apple Pay / Google Pay → Stripe Checkout (wallet auto-detected).
+      const stripeRails = new Set(["card", "apple_pay", "google_pay"]);
+      if (stripeRails.has(method) && data.checkout_url) {
         window.location.href = data.checkout_url;
       } else {
-        toast(`Authorising via ${method === "open_banking" ? "Open Banking" : "Bank Transfer"}...`);
-        await new Promise(r => setTimeout(r, 1100));
+        const friendly = method === "open_banking" ? "Open Banking" : "Bank Transfer";
+        toast(`Authorising via ${friendly}...`);
+        await new Promise(r => setTimeout(r, 900));
         await api.post(`/checkout/mock-confirm/${data.session_id}`);
         toast.success("Order confirmed!");
         navigate(`/checkout/success?vpp_id=${vppId}&session_id=${data.session_id}`);
@@ -57,23 +70,19 @@ export default function Checkout() {
     }
   };
 
-  if (!vpp) {
+  if (!quote || !selected) {
     return (
-      <div className="min-h-screen bg-white">
+      <div className="min-h-screen bg-[#F4F4F4]">
         <Navbar />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10 font-mono uppercase tracking-widest">Loading...</div>
       </div>
     );
   }
 
+  const { vpp, service_fee } = quote;
   const cat = (vpp.category || "").toLowerCase();
   const isAutomotive = cat === "tyres" || cat === "automotive";
-  const collectivePrice = vpp.customer_price;
-  const retail = vpp.retail_price;
-  const m = METHODS.find(x => x.id === method);
-  const additionalSavings = +(collectivePrice * m.rate).toFixed(2);
-  const finalPrice = +(collectivePrice - additionalSavings).toFixed(2);
-  const totalSavings = +(retail - finalPrice).toFixed(2);
+  const savingsPct = vpp.retail_price > 0 ? Math.round((selected.total_savings / vpp.retail_price) * 100) : 0;
 
   return (
     <div className="min-h-screen bg-[#F4F4F4]">
@@ -109,13 +118,12 @@ export default function Checkout() {
               </div>
             )}
 
-            <div className="border-2 border-ink bg-white shadow-brut p-6">
+            <div className="border-2 border-ink bg-white shadow-brut p-6" data-testid="payment-method-list">
               <div className="text-[10px] font-bold uppercase tracking-widest font-mono mb-4">Choose payment method</div>
               <div className="space-y-3">
-                {METHODS.map((opt) => {
-                  const Icon = opt.icon;
+                {quote.payment_methods.map((opt) => {
+                  const Icon = METHOD_ICON[opt.id] || DeviceMobile;
                   const active = method === opt.id;
-                  const methodPrice = +(collectivePrice - collectivePrice * opt.rate).toFixed(2);
                   return (
                     <button
                       key={opt.id}
@@ -130,21 +138,16 @@ export default function Checkout() {
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-bold uppercase tracking-wider text-sm">{opt.label}</span>
                           {opt.recommended && (
-                            <span className="inline-flex items-center gap-1 bg-[#00C853] text-ink border-2 border-ink font-mono text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5">
-                              <Sparkle weight="fill" size={9} />Recommended
+                            <span className="inline-flex items-center gap-1 bg-[#00C853] text-ink border-2 border-ink font-mono text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5" data-testid="recommended-badge">
+                              <Sparkle weight="fill" size={9} />Recommended — maximise savings
                             </span>
                           )}
                         </div>
                         <div className="font-mono text-xs text-[#3A3A3A] mt-0.5">{opt.sub}</div>
-                        {opt.rate > 0 && (
-                          <div className="font-mono text-[10px] text-[#00C853] font-bold uppercase tracking-widest mt-1">
-                            Unlock additional savings
-                          </div>
-                        )}
                       </div>
                       <div className="text-right shrink-0">
-                        <div className="font-mono text-[9px] uppercase tracking-widest text-[#3A3A3A]">Final Price</div>
-                        <div className="font-display text-2xl">£{methodPrice.toFixed(2)}</div>
+                        <div className="font-mono text-[9px] uppercase tracking-widest text-[#3A3A3A]">{opt.fee > 0 ? "Fee" : "Free"}</div>
+                        <div className="font-display text-xl">{opt.fee > 0 ? `+£${opt.fee.toFixed(2)}` : "£0"}</div>
                       </div>
                     </button>
                   );
@@ -168,18 +171,23 @@ export default function Checkout() {
                 </div>
               </div>
 
-              <div className="space-y-2.5">
-                <Row label="Retail Price" value={`£${retail.toFixed(2)}`} strike />
-                <Row label="Today's Collective Price" value={`£${finalPrice.toFixed(2)}`} bold />
+              <div className="space-y-2" data-testid="order-summary-lines">
+                <Row label="Retail Price" value={`£${vpp.retail_price.toFixed(2)}`} strike />
+                <Row label="Wave Price" value={`£${vpp.wave_price.toFixed(2)}`} testid="row-wave-price" />
+                <Row label="Platform Service Fee" value={`+£${service_fee.toFixed(2)}`} testid="row-service-fee" />
+                <Row label="Payment Method Fee" value={selected.fee > 0 ? `+£${selected.fee.toFixed(2)}` : "£0.00"} testid="row-payment-fee" />
               </div>
 
-              <div className="border-t-2 border-ink my-4" />
+              <div className="border-t-2 border-ink mt-4 pt-4 flex items-baseline justify-between" data-testid="row-final-total">
+                <span className="font-bold uppercase tracking-wider text-sm">Final Total</span>
+                <span className="font-display text-3xl">£{selected.final_total.toFixed(2)}</span>
+              </div>
 
-              <div className="bg-[#00C853] border-2 border-ink p-4 -mx-1 shadow-brut-sm">
+              <div className="mt-4 bg-[#00C853] border-2 border-ink p-4 shadow-brut-sm" data-testid="you-save-block">
                 <div className="text-[10px] font-bold uppercase tracking-widest font-mono mb-1">You Save</div>
-                <div className="font-display text-4xl leading-none">£{totalSavings.toFixed(2)}</div>
+                <div className="font-display text-4xl leading-none">£{selected.total_savings.toFixed(2)}</div>
                 <div className="font-mono text-[10px] uppercase tracking-widest mt-1">
-                  {Math.round((totalSavings / retail) * 100)}% off retail
+                  {savingsPct}% off retail
                 </div>
               </div>
 
@@ -189,7 +197,7 @@ export default function Checkout() {
                 className="mt-6 w-full bg-[#FF5400] text-white border-2 border-ink font-bold uppercase tracking-wider px-6 py-4 text-base shadow-brut hover-brut flex items-center justify-center gap-2 disabled:opacity-60"
                 data-testid="pay-now-btn"
               >
-                <Lock weight="fill" /> {submitting ? "Processing..." : `Confirm Order · £${finalPrice.toFixed(2)}`}
+                <Lock weight="fill" /> {submitting ? "Processing..." : `Confirm · £${selected.final_total.toFixed(2)}`}
               </button>
               <div className="mt-3 text-[10px] font-mono uppercase tracking-widest text-[#3A3A3A] text-center">
                 Bank-grade encryption · Cancel before lock
@@ -202,11 +210,11 @@ export default function Checkout() {
   );
 }
 
-function Row({ label, value, bold, strike }) {
+function Row({ label, value, strike, testid }) {
   return (
-    <div className="flex items-center justify-between py-1">
-      <span className={`text-sm ${bold ? "font-bold uppercase tracking-wider" : "text-[#3A3A3A]"}`}>{label}</span>
-      <span className={`${bold ? "font-display text-2xl" : "font-mono text-sm"} ${strike ? "line-through text-[#3A3A3A]" : ""}`}>{value}</span>
+    <div className="flex items-center justify-between py-1" data-testid={testid}>
+      <span className="text-sm text-[#3A3A3A]">{label}</span>
+      <span className={`font-mono text-sm ${strike ? "line-through text-[#3A3A3A]" : "font-bold text-ink"}`}>{value}</span>
     </div>
   );
 }

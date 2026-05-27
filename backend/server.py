@@ -52,7 +52,7 @@ api_router = APIRouter(prefix="/api")
 # =====================================================================
 VPPState = Literal["seed", "active", "powered", "locked", "executing", "completed"]
 UserRole = Literal["consumer", "supplier", "admin", "garage"]
-PaymentMethod = Literal["card", "apple_pay", "open_banking", "bank_transfer"]
+PaymentMethod = Literal["card", "apple_pay", "google_pay", "open_banking", "bank_transfer"]
 GarageType = Literal["auth_repair_shop", "mobile_fitter", "local_garage", "dealership"]
 
 
@@ -434,11 +434,66 @@ manager = ConnectionManager()
 # =====================================================================
 # UTILITIES
 # =====================================================================
-PAYMENT_DISCOUNTS = {
-    "card": 0.0,             # baseline
-    "apple_pay": 0.0,        # same as card
-    "open_banking": 0.01,    # 1% additional savings unlocked
-    "bank_transfer": 0.005,  # 0.5% additional savings unlocked
+# Default fee engine config — seeded into Mongo on first read.
+# Admin can override via PUT /api/admin/fees.
+DEFAULT_FEE_CONFIG: Dict[str, Any] = {
+    "commission_pct": 0.02,          # supplier-side; HIDDEN from consumer
+    "service_fee_mode": "flat",      # "flat" (£) or "percent" (decimal e.g. 0.01 = 1%)
+    "service_fee_value": 4.0,        # £4 flat by default
+    "payment_methods": [
+        {"id": "open_banking",  "label": "Open Banking",         "sub": "Direct from your bank · Instant",   "fee": 1.00, "recommended": True,  "enabled": True, "order": 1},
+        {"id": "apple_pay",     "label": "Apple Pay",            "sub": "One-tap wallet checkout",            "fee": 3.00, "recommended": False, "enabled": True, "order": 2},
+        {"id": "google_pay",    "label": "Google Pay",           "sub": "One-tap wallet checkout",            "fee": 3.00, "recommended": False, "enabled": True, "order": 3},
+        {"id": "card",          "label": "Debit / Credit Card",  "sub": "Visa · Mastercard · Amex",           "fee": 3.00, "recommended": False, "enabled": True, "order": 4},
+        {"id": "bank_transfer", "label": "Bank Transfer",        "sub": "Faster Payments · 1–3 hours",        "fee": 1.50, "recommended": False, "enabled": True, "order": 5},
+    ],
+}
+
+
+async def get_fee_config() -> Dict[str, Any]:
+    doc = await db.platform_config.find_one({"_id": "fees"})
+    if not doc:
+        await db.platform_config.insert_one({"_id": "fees", **DEFAULT_FEE_CONFIG})
+        return dict(DEFAULT_FEE_CONFIG)
+    doc.pop("_id", None)
+    # Backfill any missing keys (forward compatibility)
+    for k, v in DEFAULT_FEE_CONFIG.items():
+        doc.setdefault(k, v)
+    return doc
+
+
+def compute_service_fee(wave_price: float, config: Dict[str, Any]) -> float:
+    if config.get("service_fee_mode") == "percent":
+        return round(float(wave_price) * float(config.get("service_fee_value", 0.0)), 2)
+    return round(float(config.get("service_fee_value", 0.0)), 2)
+
+
+def build_checkout_breakdown(vpp: dict, method_id: str, config: Dict[str, Any]) -> Dict[str, Any]:
+    """Returns {retail_price, wave_price, service_fee, payment_fee, final_total, total_savings, commission}."""
+    retail = float(vpp["retail_price"])
+    wave = float(vpp["customer_price"])
+    supplier_cost = float(vpp.get("supplier_cost", wave))
+    service_fee = compute_service_fee(wave, config)
+    method = next((m for m in config["payment_methods"] if m["id"] == method_id and m.get("enabled", True)), None)
+    if not method:
+        raise HTTPException(status_code=400, detail="Selected payment method is not available.")
+    payment_fee = round(float(method["fee"]), 2)
+    final_total = round(wave + service_fee + payment_fee, 2)
+    total_savings = round(retail - final_total, 2)
+    commission = round((wave - supplier_cost) + service_fee, 2)  # platform margin: spread + service fee
+    return {
+        "retail_price": retail,
+        "wave_price": wave,
+        "service_fee": service_fee,
+        "payment_fee": payment_fee,
+        "final_total": final_total,
+        "total_savings": max(0.0, total_savings),
+        "commission": commission,
+    }
+
+
+PAYMENT_DISCOUNTS = {  # kept for any legacy reference; not used in new flow
+    "card": 0.0, "apple_pay": 0.0, "google_pay": 0.0, "open_banking": 0.0, "bank_transfer": 0.0,
 }
 
 
@@ -978,6 +1033,49 @@ async def my_parties(user: dict = Depends(get_current_user)):
 # =====================================================================
 # CHECKOUT (Stripe + Mock for Open Banking / Bank Transfer)
 # =====================================================================
+@api_router.get("/checkout/quote/{vpp_id}")
+async def checkout_quote(vpp_id: str, user: dict = Depends(get_current_user)):
+    """Returns live checkout breakdown for the consumer.
+
+    UX rule: never expose 'commission'. Frontend renders:
+      retail_price · wave_price · service_fee · payment_fee · final_total · total_savings
+    """
+    vpp = await db.vpps.find_one({"vpp_id": vpp_id}, {"_id": 0})
+    if not vpp:
+        raise HTTPException(status_code=404, detail="VPP not found")
+    config = await get_fee_config()
+    service_fee = compute_service_fee(float(vpp["customer_price"]), config)
+    methods_out = []
+    for m in sorted([x for x in config["payment_methods"] if x.get("enabled", True)],
+                    key=lambda x: x.get("order", 99)):
+        payment_fee = round(float(m["fee"]), 2)
+        final_total = round(float(vpp["customer_price"]) + service_fee + payment_fee, 2)
+        total_savings = max(0.0, round(float(vpp["retail_price"]) - final_total, 2))
+        methods_out.append({
+            "id": m["id"],
+            "label": m["label"],
+            "sub": m.get("sub", ""),
+            "fee": payment_fee,
+            "recommended": bool(m.get("recommended", False)),
+            "final_total": final_total,
+            "total_savings": total_savings,
+        })
+    return {
+        "vpp": {
+            "vpp_id": vpp["vpp_id"],
+            "title": vpp["title"],
+            "image_url": vpp["image_url"],
+            "supplier_name": vpp["supplier_name"],
+            "category": vpp.get("category", ""),
+            "retail_price": float(vpp["retail_price"]),
+            "wave_price": float(vpp["customer_price"]),
+        },
+        "service_fee": service_fee,
+        "service_fee_mode": config.get("service_fee_mode", "flat"),
+        "payment_methods": methods_out,
+    }
+
+
 @api_router.post("/checkout/init", response_model=CheckoutInitResponse)
 async def checkout_init(payload: CheckoutInitRequest, request: Request,
                         user: dict = Depends(get_current_user)):
@@ -1030,12 +1128,14 @@ async def checkout_init(payload: CheckoutInitRequest, request: Request,
             {"$set": garage_update}
         )
 
-    base_price = float(vpp["customer_price"])
-    discount_pct = PAYMENT_DISCOUNTS.get(payload.payment_method, 0.0)
-    discount_amount = round(base_price * discount_pct, 2)
-    final_price = round(base_price - discount_amount, 2)
+    config = await get_fee_config()
+    breakdown = build_checkout_breakdown(vpp, payload.payment_method, config)
+    final_price = breakdown["final_total"]
 
-    if payload.payment_method == "card":
+    # Wallet methods (Apple Pay / Google Pay) are auto-detected by Stripe Checkout — route through card flow.
+    stripe_methods = {"card", "apple_pay", "google_pay"}
+
+    if payload.payment_method in stripe_methods:
         # Real Stripe Checkout
         api_key = os.environ.get("STRIPE_API_KEY")
         host_url = payload.origin_url.rstrip("/")
@@ -1052,7 +1152,7 @@ async def checkout_init(payload: CheckoutInitRequest, request: Request,
                 "vpp_id": vpp["vpp_id"],
                 "user_id": user["user_id"],
                 "user_email": user["email"],
-                "payment_method": "card",
+                "payment_method": payload.payment_method,
             },
         )
         try:
@@ -1068,22 +1168,23 @@ async def checkout_init(payload: CheckoutInitRequest, request: Request,
             "vpp_id": vpp["vpp_id"],
             "amount": float(final_price),
             "currency": "gbp",
-            "payment_method": "card",
+            "payment_method": payload.payment_method,
             "metadata": {"vpp_id": vpp["vpp_id"], "user_id": user["user_id"]},
             "status": "initiated",
             "payment_status": "unpaid",
             "created_at": datetime.now(timezone.utc).isoformat(),
+            "breakdown": breakdown,
         })
-        # Update participant with session info
+        # Update participant with session info + full breakdown for audit
         await db.vpp_participants.update_one(
             {"vpp_id": vpp["vpp_id"], "user_id": user["user_id"]},
-            {"$set": {"payment_method": "card", "payment_session_id": session.session_id}}
+            {"$set": {"payment_method": payload.payment_method, "payment_session_id": session.session_id, "breakdown": breakdown}}
         )
         return CheckoutInitResponse(
             success=True,
-            payment_method="card",
+            payment_method=payload.payment_method,
             final_price=final_price,
-            discount_applied=discount_amount,
+            discount_applied=0.0,
             checkout_url=session.url,
             session_id=session.session_id,
         )
@@ -1103,16 +1204,17 @@ async def checkout_init(payload: CheckoutInitRequest, request: Request,
         "payment_status": "unpaid",
         "created_at": datetime.now(timezone.utc).isoformat(),
         "mock": True,
+        "breakdown": breakdown,
     })
     await db.vpp_participants.update_one(
         {"vpp_id": vpp["vpp_id"], "user_id": user["user_id"]},
-        {"$set": {"payment_method": payload.payment_method, "payment_session_id": mock_session_id}}
+        {"$set": {"payment_method": payload.payment_method, "payment_session_id": mock_session_id, "breakdown": breakdown}}
     )
     return CheckoutInitResponse(
         success=True,
         payment_method=payload.payment_method,
         final_price=final_price,
-        discount_applied=discount_amount,
+        discount_applied=0.0,
         session_id=mock_session_id,
         mock_confirmation=True,
     )
@@ -1127,7 +1229,7 @@ async def mock_confirm(session_id: str, user: dict = Depends(get_current_user)):
     if tx["user_id"] != user["user_id"]:
         raise HTTPException(status_code=403, detail="Not your transaction")
     if not tx.get("mock"):
-        raise HTTPException(status_code=400, detail="Use Stripe flow for card payments")
+        raise HTTPException(status_code=400, detail="Use Stripe flow for card / wallet payments")
     if tx["payment_status"] == "paid":
         return {"success": True, "already_paid": True}
     await db.payment_transactions.update_one(
@@ -2079,6 +2181,62 @@ async def admin_stats(user: dict = Depends(get_current_user)):
         "pending_suppliers": pending_suppliers,
         "pending_waves": pending_waves,
     }
+
+
+@api_router.get("/admin/fees")
+async def admin_get_fees(user: dict = Depends(get_current_user)):
+    await require_role(user, ["admin"])
+    return await get_fee_config()
+
+
+class PaymentMethodConfig(BaseModel):
+    id: str
+    label: str
+    sub: Optional[str] = ""
+    fee: float
+    recommended: bool = False
+    enabled: bool = True
+    order: int = 99
+
+
+class FeeConfigUpdate(BaseModel):
+    commission_pct: Optional[float] = None
+    service_fee_mode: Optional[Literal["flat", "percent"]] = None
+    service_fee_value: Optional[float] = None
+    payment_methods: Optional[List[PaymentMethodConfig]] = None
+
+
+@api_router.put("/admin/fees")
+async def admin_update_fees(payload: FeeConfigUpdate, user: dict = Depends(get_current_user)):
+    await require_role(user, ["admin"])
+    current = await get_fee_config()
+    updates: Dict[str, Any] = {}
+    if payload.commission_pct is not None:
+        if payload.commission_pct < 0 or payload.commission_pct > 1:
+            raise HTTPException(status_code=400, detail="commission_pct must be between 0 and 1")
+        updates["commission_pct"] = float(payload.commission_pct)
+    if payload.service_fee_mode is not None:
+        updates["service_fee_mode"] = payload.service_fee_mode
+    if payload.service_fee_value is not None:
+        if payload.service_fee_value < 0:
+            raise HTTPException(status_code=400, detail="service_fee_value must be >= 0")
+        mode = updates.get("service_fee_mode", current.get("service_fee_mode", "flat"))
+        if mode == "percent" and payload.service_fee_value > 1:
+            raise HTTPException(status_code=400, detail="percent mode expects a decimal (e.g. 0.01 for 1%)")
+        updates["service_fee_value"] = float(payload.service_fee_value)
+    if payload.payment_methods is not None:
+        # Enforce at least one enabled method
+        enabled_count = sum(1 for m in payload.payment_methods if m.enabled)
+        if enabled_count == 0:
+            raise HTTPException(status_code=400, detail="At least one payment method must be enabled")
+        # Only one recommended
+        rec_count = sum(1 for m in payload.payment_methods if m.recommended and m.enabled)
+        if rec_count > 1:
+            raise HTTPException(status_code=400, detail="Only one payment method can be marked Recommended")
+        updates["payment_methods"] = [m.model_dump() for m in payload.payment_methods]
+    if updates:
+        await db.platform_config.update_one({"_id": "fees"}, {"$set": updates}, upsert=True)
+    return await get_fee_config()
 
 
 # =====================================================================

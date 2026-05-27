@@ -145,11 +145,18 @@ seed → active → powered → locked → executing → completed
 **Context**: Waitlist-led launch. Public product pricing is not exposed pre-signup.
 **Decision**: `/vpps` and detail views only show retail vs. collective price; fee breakdown lives behind auth in checkout.
 
-### ADR-006 · Configurable fee engine (in progress)
-**Status**: Planned — implementation starting next.
+### ADR-006 · Configurable fee engine (shipped)
+**Status**: Shipped (Feb 2026).
 **Context**: Need to support platform commission + payment-method fees + lower-cost rail incentives without coupon-site UX.
-**Decision**: Single-doc `platform_config` collection. Admin-editable. Checkout fetches via `GET /api/checkout/quote/{vpp_id}` and renders live totals as user picks method.
-**Constraint**: Never expose "commission" to consumer. Only "Platform Service Fee" + "Payment Method Fee" + "Total Savings".
+**Decision**: Single-doc `platform_config` collection. Admin-editable via `GET/PUT /api/admin/fees`. Checkout fetches via `GET /api/checkout/quote/{vpp_id}` and renders live totals as user picks method. Service fee supports two modes: `flat` (£) or `percent` (decimal). Admin chooses.
+**Checkout display contract** (never expose commission to consumer):
+1. Retail Price (strikethrough)
+2. Wave Price
+3. Platform Service Fee
+4. Payment Method Fee (live updates per selection)
+5. Final Total
+6. You Save: £X (prominent)
+**Stripe rails**: `card`, `apple_pay`, `google_pay` all route through Stripe Checkout (wallet auto-detected). `open_banking` + `bank_transfer` use mock flow until TrueLayer/Faster Payments are wired.
 
 ### ADR-007 · Emergent-managed Google Auth (not custom OAuth)
 **Status**: Locked.
@@ -178,9 +185,13 @@ seed → active → powered → locked → executing → completed
 - Admin Panel: stats, Waves, pending Waves, suppliers
 - Founder admin seeded via env
 
+- Configurable fee engine + commission/payment rework (ADR-006) ✅ shipped
+- Admin "Fees & Payments" tab ✅ shipped
+- Apple Pay + Google Pay via Stripe wallet detection ✅ shipped
+
 🟡 **In progress / next**
-- Configurable fee engine + commission/payment rework (ADR-006)
-- Admin "Fees & Payments" tab
+- T&Cs upload (Option A static + Option D versioned acceptance log)
+- Live Twilio SMS OTP wiring
 
 🔴 **Mocked / deferred**
 - Open Banking (TrueLayer/Plaid)
