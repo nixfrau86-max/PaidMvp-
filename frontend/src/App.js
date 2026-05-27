@@ -13,6 +13,9 @@ import MyParties from "./pages/MyParties";
 import SupplierDashboard from "./pages/SupplierDashboard";
 import SupplierOnboarding from "./pages/SupplierOnboarding";
 import SupplierWaveNew from "./pages/SupplierWaveNew";
+import GarageOnboarding from "./pages/GarageOnboarding";
+import GarageDashboard from "./pages/GarageDashboard";
+import BookFitter from "./pages/BookFitter";
 import AdminPanel from "./pages/AdminPanel";
 import AuthCallback from "./pages/AuthCallback";
 import Login from "./pages/Login";
@@ -35,6 +38,9 @@ function AppRouter() {
       <Route path="/supplier" element={<SupplierDashboard />} />
       <Route path="/supplier/onboarding" element={<SupplierOnboarding />} />
       <Route path="/supplier/waves/new" element={<SupplierWaveNew />} />
+      <Route path="/garage" element={<GarageDashboard />} />
+      <Route path="/garage/onboarding" element={<GarageOnboarding />} />
+      <Route path="/book/:vppId" element={<BookFitter />} />
       <Route path="/admin" element={<AdminPanel />} />
     </Routes>
   );

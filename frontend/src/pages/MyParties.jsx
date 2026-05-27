@@ -4,7 +4,7 @@ import Navbar from "../components/Navbar";
 import StateBadge from "../components/StateBadge";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { CurrencyGbp, Lightning, ArrowRight, Confetti, Lock } from "@phosphor-icons/react";
+import { ArrowRight, Lock, Wrench, Calendar, CheckCircle } from "@phosphor-icons/react";
 
 export default function MyParties() {
   const navigate = useNavigate();
@@ -25,6 +25,7 @@ export default function MyParties() {
 
   if (loading || dataLoading) return <Shell><div className="font-mono uppercase tracking-widest text-sm">Loading...</div></Shell>;
 
+  const needsBooking = data.waves.filter(p => p.needs_booking);
   const active = data.waves.filter(p => ["active", "powered", "locked", "executing"].includes(p.vpp.state) && !p.paid);
   const paid = data.waves.filter(p => p.paid);
 
@@ -40,6 +41,44 @@ export default function MyParties() {
           <div className="font-display text-3xl">£{data.total_savings.toFixed(2)}</div>
         </div>
       </div>
+
+      {needsBooking.length > 0 && (
+        <section className="mb-8" data-testid="needs-booking-section">
+          <div className="border-2 border-ink bg-[#FFD600] shadow-brut p-5 mb-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 border-2 border-ink bg-white flex items-center justify-center shrink-0">
+                <Wrench weight="duotone" size={20} />
+              </div>
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-widest font-mono mb-1">Action required</div>
+                <h3 className="font-display text-2xl uppercase leading-tight">Book your fitting.</h3>
+                <p className="text-sm mt-1">
+                  Your Wave has locked. Pick a verified garage + time slot — we'll dispatch your order to them directly.
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {needsBooking.map(p => (
+              <Link
+                key={p.vpp.vpp_id}
+                to={`/book/${p.vpp.vpp_id}`}
+                className="border-2 border-ink bg-white shadow-brut hover-brut p-4 flex gap-4"
+                data-testid={`book-cta-${p.vpp.vpp_id}`}
+              >
+                <img src={p.vpp.image_url} alt="" className="w-20 h-20 border-2 border-ink object-cover shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="font-display text-lg uppercase line-clamp-2 leading-tight">{p.vpp.title}</div>
+                  <div className="font-mono text-[10px] uppercase tracking-widest text-[#3A3A3A] mt-1">Order locked · Awaiting fitting slot</div>
+                  <div className="mt-3 inline-flex items-center gap-1 bg-[#FF5400] text-white border-2 border-ink font-mono text-[10px] font-bold uppercase tracking-widest px-2 py-1">
+                    Pick fitter <ArrowRight weight="bold" size={10} />
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       {data.waves.length === 0 ? (
         <div className="border-2 border-ink bg-white shadow-brut p-10 text-center">
@@ -84,6 +123,8 @@ function Shell({ children }) {
 
 function PartyRow({ wave }) {
   const v = wave.vpp;
+  const cat = (v.category || "").toLowerCase();
+  const isAuto = cat === "tyres" || cat === "automotive";
   return (
     <Link to={`/vpp/${v.vpp_id}`} className="border-2 border-ink bg-white shadow-brut hover-brut p-4 flex gap-4">
       <img src={v.image_url} alt={v.title} className="w-24 h-24 border-2 border-ink object-cover shrink-0" />
@@ -95,16 +136,28 @@ function PartyRow({ wave }) {
         <div className="font-mono text-xs uppercase tracking-widest text-[#3A3A3A]">
           {wave.paid ? `Paid via ${wave.payment_method}` : `${v.participants_count}/${v.threshold} joined`}
         </div>
+        {wave.booking && (
+          <div className="mt-1 font-mono text-[10px] uppercase tracking-widest text-[#00C853] flex items-center gap-1">
+            <Calendar weight="bold" size={10}/>
+            Fitting · {new Date(wave.booking.slot_iso).toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+            {wave.booking.garage?.business_name ? ` · ${wave.booking.garage.business_name}` : ""}
+          </div>
+        )}
         <div className="mt-2 flex items-center justify-between">
           <span className="font-display text-2xl">£{v.customer_price}</span>
           {wave.paid && (
-            <span className="bg-[#00C853] text-ink border-2 border-ink font-mono text-[10px] font-bold uppercase tracking-widest px-2 py-1">
-              Saved £{wave.savings.toFixed(2)}
+            <span className="bg-[#00C853] text-ink border-2 border-ink font-mono text-[10px] font-bold uppercase tracking-widest px-2 py-1 inline-flex items-center gap-1">
+              <CheckCircle weight="fill" size={10}/> Saved £{wave.savings.toFixed(2)}
             </span>
           )}
           {!wave.paid && v.state === "locked" && (
             <span className="inline-flex items-center gap-1 bg-[#FF5400] text-white border-2 border-ink font-mono text-[10px] font-bold uppercase tracking-widest px-2 py-1">
               <Lock weight="bold" size={10} /> Checkout
+            </span>
+          )}
+          {wave.paid && isAuto && !wave.booking && (
+            <span className="inline-flex items-center gap-1 bg-[#FFD600] text-ink border-2 border-ink font-mono text-[10px] font-bold uppercase tracking-widest px-2 py-1">
+              <Wrench weight="bold" size={10}/> Book fitting
             </span>
           )}
         </div>

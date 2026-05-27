@@ -9,7 +9,7 @@ import {
   ShieldCheck, Sparkle,
 } from "@phosphor-icons/react";
 
-const FOUNDER_EMAIL = "founder@thecollectivesavers.com";
+const FOUNDER_EMAIL = "founder@thecollectivesavers.co.uk";
 
 export default function Landing() {
   return (

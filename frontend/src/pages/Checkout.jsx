@@ -5,42 +5,14 @@ import Navbar from "../components/Navbar";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import {
-  CreditCard, Bank, ArrowsLeftRight, Lock, ShieldCheck, DeviceMobile, Sparkle,
+  CreditCard, Bank, ArrowsLeftRight, Lock, ShieldCheck, DeviceMobile, Sparkle, Wrench,
 } from "@phosphor-icons/react";
 
 const METHODS = [
-  {
-    id: "apple_pay",
-    label: "Apple Pay / Google Pay",
-    sub: "One-tap wallet checkout",
-    rate: 0,
-    icon: DeviceMobile,
-    recommended: false,
-  },
-  {
-    id: "card",
-    label: "Debit / Credit Card",
-    sub: "Visa · Mastercard · Amex",
-    rate: 0,
-    icon: CreditCard,
-    recommended: false,
-  },
-  {
-    id: "open_banking",
-    label: "Open Banking",
-    sub: "Direct from your bank · Instant settle",
-    rate: 0.01,
-    icon: Bank,
-    recommended: true,
-  },
-  {
-    id: "bank_transfer",
-    label: "Bank Transfer",
-    sub: "Faster Payments · 1–3 hours",
-    rate: 0.005,
-    icon: ArrowsLeftRight,
-    recommended: false,
-  },
+  { id: "apple_pay",    label: "Apple Pay / Google Pay", sub: "One-tap wallet checkout",         rate: 0,     icon: DeviceMobile,    recommended: false },
+  { id: "card",         label: "Debit / Credit Card",    sub: "Visa · Mastercard · Amex",          rate: 0,     icon: CreditCard,      recommended: false },
+  { id: "open_banking", label: "Open Banking",           sub: "Direct from your bank · Instant", rate: 0.01,  icon: Bank,            recommended: true  },
+  { id: "bank_transfer",label: "Bank Transfer",          sub: "Faster Payments · 1–3 hours",       rate: 0.005, icon: ArrowsLeftRight, recommended: false },
 ];
 
 export default function Checkout() {
@@ -48,7 +20,7 @@ export default function Checkout() {
   const navigate = useNavigate();
   const { user, loading } = useAuth();
   const [vpp, setVpp] = useState(null);
-  const [method, setMethod] = useState("open_banking"); // default to recommended
+  const [method, setMethod] = useState("open_banking");
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -67,18 +39,14 @@ export default function Checkout() {
   const handlePay = async () => {
     setSubmitting(true);
     try {
-      // Apple Pay flows through Stripe card rail
       const apiMethod = method === "apple_pay" ? "card" : method;
-      const { data } = await api.post("/checkout/init", {
-        vpp_id: vppId,
-        payment_method: apiMethod,
-        origin_url: window.location.origin,
-      });
+      const body = { vpp_id: vppId, payment_method: apiMethod, origin_url: window.location.origin };
+      const { data } = await api.post("/checkout/init", body);
       if (apiMethod === "card" && data.checkout_url) {
         window.location.href = data.checkout_url;
       } else {
-        toast("Authorising via " + (method === "open_banking" ? "Open Banking..." : "Bank Transfer..."));
-        await new Promise(r => setTimeout(r, 1200));
+        toast(`Authorising via ${method === "open_banking" ? "Open Banking" : "Bank Transfer"}...`);
+        await new Promise(r => setTimeout(r, 1100));
         await api.post(`/checkout/mock-confirm/${data.session_id}`);
         toast.success("Order confirmed!");
         navigate(`/checkout/success?vpp_id=${vppId}&session_id=${data.session_id}`);
@@ -98,6 +66,8 @@ export default function Checkout() {
     );
   }
 
+  const cat = (vpp.category || "").toLowerCase();
+  const isAutomotive = cat === "tyres" || cat === "automotive";
   const collectivePrice = vpp.customer_price;
   const retail = vpp.retail_price;
   const m = METHODS.find(x => x.id === method);
@@ -120,8 +90,25 @@ export default function Checkout() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-          {/* Payment methods */}
           <div className="lg:col-span-3 space-y-5">
+            {isAutomotive && (
+              <div className="border-2 border-ink bg-white shadow-brut p-5" data-testid="fitter-notice">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 border-2 border-ink bg-[#FFD600] flex items-center justify-center shrink-0">
+                    <Wrench weight="duotone" size={20} />
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-bold uppercase tracking-widest font-mono text-[#FF5400] mb-1">Fitting included</div>
+                    <h3 className="font-display text-lg uppercase leading-tight">Pick your fitter once the Wave locks.</h3>
+                    <p className="text-xs text-[#3A3A3A] mt-1 font-mono">
+                      For safety + insurance reasons, tyres ship to a verified garage — never to a private address.
+                      As soon as this Wave locks, we'll email you a link to choose a local fitter and a slot that suits you.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="border-2 border-ink bg-white shadow-brut p-6">
               <div className="text-[10px] font-bold uppercase tracking-widest font-mono mb-4">Choose payment method</div>
               <div className="space-y-3">
@@ -170,7 +157,6 @@ export default function Checkout() {
             </div>
           </div>
 
-          {/* Order summary — no fees, no discounts, only savings */}
           <div className="lg:col-span-2">
             <div className="border-2 border-ink bg-white shadow-brut p-6 sticky top-24">
               <div className="text-[10px] font-bold uppercase tracking-widest font-mono mb-4">Order summary</div>

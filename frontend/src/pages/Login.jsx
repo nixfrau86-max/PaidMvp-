@@ -6,7 +6,7 @@ import { api } from "../lib/api";
 import { useAuth, loginRedirect } from "../lib/auth";
 import {
   Storefront, User, GoogleLogo, Envelope, DeviceMobile, ArrowRight, ArrowLeft,
-  ShieldCheck, Lock,
+  ShieldCheck, Lock, Wrench,
 } from "@phosphor-icons/react";
 
 export default function Login() {
@@ -23,11 +23,13 @@ export default function Login() {
   useEffect(() => {
     if (!user) return;
     if (intent === "supplier") navigate("/supplier");
+    else if (intent === "garage") navigate("/garage");
     else navigate("/dashboard");
   }, [user, intent, navigate]);
 
   const goAfterLogin = () => {
     if (intent === "supplier") navigate("/supplier/onboarding");
+    else if (intent === "garage") navigate("/garage/onboarding");
     else navigate("/dashboard");
   };
 
@@ -50,14 +52,16 @@ export default function Login() {
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
               <div className="lg:col-span-2">
                 <div className="text-[10px] font-bold uppercase tracking-[0.3em] font-mono text-[#FF5400] mb-3">
-                  {intent === "supplier" ? "Supplier Login" : "Consumer Login"}
+                  {intent === "supplier" ? "Supplier Login" : intent === "garage" ? "Garage Login" : "Member Login"}
                 </div>
                 <h1 className="font-display text-4xl sm:text-5xl uppercase tracking-tighter leading-[0.9] mb-4">
-                  {intent === "supplier" ? "List into demand." : "Power the price."}
+                  {intent === "supplier" ? "List into demand." : intent === "garage" ? "Local fitting,\nnetwork-booked." : "Power the price."}
                 </h1>
                 <p className="text-[#3A3A3A] mb-6">
                   {intent === "supplier"
                     ? "Sign in, then complete a 60-second application to launch your first Wave."
+                    : intent === "garage"
+                    ? "Sign in to register your bay. Connect your calendar once."
                     : "Sign in to join Waves, track savings, and confirm orders."}
                 </p>
                 <div className="space-y-2">
@@ -124,18 +128,18 @@ function ChooseIntent({ onPick }) {
           We tailor the experience to consumers joining Waves and suppliers running batches.
         </p>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 max-w-3xl mx-auto">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5 max-w-5xl mx-auto">
         <button
           onClick={() => onPick("consumer")}
-          className="border-2 border-ink bg-white shadow-brut-lg hover-brut p-8 text-left group"
+          className="border-2 border-ink bg-white shadow-brut-lg hover-brut p-7 text-left group"
           data-testid="intent-consumer"
         >
           <div className="w-12 h-12 bg-[#FFD600] border-2 border-ink flex items-center justify-center mb-5">
             <User weight="duotone" size={24} />
           </div>
-          <div className="font-display text-3xl uppercase mb-2">I'm a Consumer</div>
+          <div className="font-display text-2xl uppercase mb-2">I'm a Member</div>
           <p className="text-sm text-[#3A3A3A] mb-4">
-            Browse and join Waves to unlock collective pricing. Track your savings.
+            Browse and join Waves to unlock collective pricing.
           </p>
           <span className="inline-flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-[#FF5400]">
             Continue <ArrowRight weight="bold" size={14} />
@@ -144,15 +148,32 @@ function ChooseIntent({ onPick }) {
 
         <button
           onClick={() => onPick("supplier")}
-          className="border-2 border-ink bg-ink text-white shadow-brut-lg hover-brut p-8 text-left group"
+          className="border-2 border-ink bg-ink text-white shadow-brut-lg hover-brut p-7 text-left group"
           data-testid="intent-supplier"
         >
           <div className="w-12 h-12 bg-[#FF5400] border-2 border-white flex items-center justify-center mb-5">
             <Storefront weight="duotone" size={24} />
           </div>
-          <div className="font-display text-3xl uppercase mb-2">I'm a Supplier</div>
+          <div className="font-display text-2xl uppercase mb-2">I'm a Supplier</div>
           <p className="text-sm text-white/85 mb-4">
-            Sell into pre-confirmed batch demand. Apply in 60 seconds, your first Wave goes live instantly.
+            Sell into pre-confirmed batch demand. Your first Wave goes live instantly.
+          </p>
+          <span className="inline-flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-[#FFD600]">
+            Continue <ArrowRight weight="bold" size={14} />
+          </span>
+        </button>
+
+        <button
+          onClick={() => onPick("garage")}
+          className="border-2 border-ink bg-[#FF5400] text-white shadow-brut-lg hover-brut p-7 text-left group"
+          data-testid="intent-garage"
+        >
+          <div className="w-12 h-12 bg-white border-2 border-ink flex items-center justify-center mb-5">
+            <Wrench weight="duotone" size={24} />
+          </div>
+          <div className="font-display text-2xl uppercase mb-2">I'm a Garage</div>
+          <p className="text-sm text-white/95 mb-4">
+            Register your bay. Receive fitting bookings from Wave members.
           </p>
           <span className="inline-flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-[#FFD600]">
             Continue <ArrowRight weight="bold" size={14} />

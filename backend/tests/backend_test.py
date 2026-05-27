@@ -236,8 +236,9 @@ class TestCheckout:
         assert r.status_code == 200, r.text
         d = r.json()
         assert d["mock_confirmation"] is True
-        assert d["discount_applied"] == 3.0  # 3% of 100
-        assert d["final_price"] == 97.0
+        # open_banking unlocks 1% on the customer_price (was 3%); see PAYMENT_DISCOUNTS
+        assert d["discount_applied"] == 1.0  # 1% of 100
+        assert d["final_price"] == 99.0
         sid = d["session_id"]
         # Confirm
         cr = requests.post(f"{API}/checkout/mock-confirm/{sid}", headers=H(tok))

@@ -51,8 +51,9 @@ api_router = APIRouter(prefix="/api")
 # MODELS
 # =====================================================================
 VPPState = Literal["seed", "active", "powered", "locked", "executing", "completed"]
-UserRole = Literal["consumer", "supplier", "admin"]
+UserRole = Literal["consumer", "supplier", "admin", "garage"]
 PaymentMethod = Literal["card", "apple_pay", "open_banking", "bank_transfer"]
+GarageType = Literal["auth_repair_shop", "mobile_fitter", "local_garage", "dealership"]
 
 
 class User(BaseModel):
@@ -144,6 +145,108 @@ class SupplierWaveRequest(BaseModel):
     deadline_hours: int = 72
 
 
+# =====================================================================
+# GARAGE MODELS
+# =====================================================================
+GARAGE_TYPE_LABELS = {
+    "auth_repair_shop": "Authorised Automotive Repair Shop",
+    "mobile_fitter": "Mobile Fitter",
+    "local_garage": "Local Garage",
+    "dealership": "Preferred Car Dealership",
+}
+
+
+class Garage(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    garage_id: str = Field(default_factory=lambda: f"gar_{uuid.uuid4().hex[:10]}")
+    user_id: str
+    business_name: str
+    contact_email: str
+    contact_phone: Optional[str] = None
+    garage_type: GarageType
+    services: List[str] = Field(default_factory=list)  # ["tyre_fitting", "wheel_alignment", "balancing", "tpms", "other"]
+    address_line1: str
+    address_line2: Optional[str] = None
+    city: str
+    postcode: str
+    calendar_url: Optional[str] = None  # iCal/ICS feed URL — placeholder for Calendar integration
+    calendar_provider: Optional[str] = None  # "google" | "ical" | "manual"
+    is_active: bool = True
+    is_verified: bool = False
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    verified_at: Optional[datetime] = None
+
+
+class GarageApplyRequest(BaseModel):
+    business_name: str
+    contact_email: str
+    contact_phone: Optional[str] = None
+    garage_type: GarageType
+    services: List[str] = Field(default_factory=list)
+    address_line1: str
+    address_line2: Optional[str] = None
+    city: str
+    postcode: str
+    calendar_url: Optional[str] = None
+
+
+class GarageUpdateRequest(BaseModel):
+    business_name: Optional[str] = None
+    contact_email: Optional[str] = None
+    contact_phone: Optional[str] = None
+    garage_type: Optional[GarageType] = None
+    services: Optional[List[str]] = None
+    address_line1: Optional[str] = None
+    address_line2: Optional[str] = None
+    city: Optional[str] = None
+    postcode: Optional[str] = None
+    calendar_url: Optional[str] = None
+    calendar_provider: Optional[str] = None
+
+
+# ----- Garage Availability (recurring weekly + per-day overrides) -----
+WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+
+
+class TimeRange(BaseModel):
+    start: str  # "09:00"
+    end: str    # "17:00"
+
+
+class DayOverride(BaseModel):
+    closed: bool = False
+    ranges: List[TimeRange] = Field(default_factory=list)
+
+
+class GarageAvailability(BaseModel):
+    """Stored as { garage_id, weekly: {mon: [{start,end},...]}, overrides: {"YYYY-MM-DD": {closed, ranges}}, slot_minutes }"""
+    weekly: Dict[str, List[TimeRange]] = Field(default_factory=dict)
+    overrides: Dict[str, DayOverride] = Field(default_factory=dict)
+    slot_minutes: int = 30
+
+
+class BookingCreateRequest(BaseModel):
+    vpp_id: str
+    garage_id: str
+    slot_iso: str  # ISO datetime "2026-03-14T10:30:00+00:00"
+    notes: Optional[str] = None
+
+
+class Booking(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    booking_id: str = Field(default_factory=lambda: f"bk_{uuid.uuid4().hex[:10]}")
+    vpp_id: str
+    user_id: str
+    user_name: str
+    user_email: str
+    garage_id: str
+    slot_iso: str
+    slot_minutes: int = 30
+    status: str = "confirmed"  # confirmed | cancelled | completed
+    notes: Optional[str] = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
 class VPP(BaseModel):
     model_config = ConfigDict(extra="ignore")
     vpp_id: str = Field(default_factory=lambda: f"vpp_{uuid.uuid4().hex[:10]}")
@@ -181,6 +284,14 @@ class VPPParticipant(BaseModel):
     payment_method: Optional[PaymentMethod] = None
     payment_session_id: Optional[str] = None
     fulfilment_status: str = "pending"  # pending | dispatched | delivered
+    # Garage selection (Tyres/Automotive only)
+    garage_id: Optional[str] = None             # selected from platform garage directory
+    delivery_address_type: Optional[GarageType] = None  # used when shipping to a non-listed registered place
+    delivery_address_line1: Optional[str] = None
+    delivery_address_line2: Optional[str] = None
+    delivery_city: Optional[str] = None
+    delivery_postcode: Optional[str] = None
+    delivery_business_name: Optional[str] = None
 
 
 class CreateVPPRequest(BaseModel):
@@ -207,6 +318,15 @@ class CheckoutInitRequest(BaseModel):
     vpp_id: str
     payment_method: PaymentMethod
     origin_url: str
+    # Tyres/Automotive: garage selection — exactly one of these two must be provided
+    garage_id: Optional[str] = None
+    # OR ship-to address (must be a registered place, NO private addresses)
+    delivery_address_type: Optional[GarageType] = None
+    delivery_business_name: Optional[str] = None
+    delivery_address_line1: Optional[str] = None
+    delivery_address_line2: Optional[str] = None
+    delivery_city: Optional[str] = None
+    delivery_postcode: Optional[str] = None
 
 
 class CheckoutInitResponse(BaseModel):
@@ -406,6 +526,13 @@ async def auth_session(request: Request, response: Response):
     # Store session
     session_token = data["session_token"]
     expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+
+    # Auto-promote to admin if email is in allowlist
+    allowlist = [e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()]
+    if email.lower() in allowlist and user.get("role") != "admin":
+        await db.users.update_one({"user_id": user_id}, {"$set": {"role": "admin"}})
+        user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+
     await db.user_sessions.insert_one({
         "user_id": user_id,
         "session_token": session_token,
@@ -445,9 +572,14 @@ async def auth_logout(
 
 @api_router.post("/auth/role")
 async def update_role(payload: UpdateRoleRequest, user: dict = Depends(get_current_user)):
-    """Demo-only: any authenticated user can switch role (consumer/supplier/admin).
-    In production, role assignment would be controlled."""
-    await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"role": payload.role}})
+    """Allow consumers to switch to supplier/garage via the apply flows.
+    Admin role is restricted: only emails listed in ADMIN_EMAILS env var may hold it."""
+    target = payload.role
+    if target == "admin":
+        allowlist = [e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()]
+        if user.get("email", "").lower() not in allowlist:
+            raise HTTPException(status_code=403, detail="Admin role is restricted")
+    await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"role": target}})
     updated = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
     return updated
 
@@ -472,6 +604,12 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 async def _create_session_for_user(user_id: str, response: Response) -> str:
     """Create a session_token entry (same shape as Google flow) and set cookie."""
+    # Auto-promote to admin if email is in allowlist
+    allowlist = [e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()]
+    if allowlist:
+        u = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+        if u and u.get("email", "").lower() in allowlist and u.get("role") != "admin":
+            await db.users.update_one({"user_id": user_id}, {"$set": {"role": "admin"}})
     token = secrets.token_urlsafe(48)
     expires_at = datetime.now(timezone.utc) + timedelta(days=7)
     await db.user_sessions.insert_one({
@@ -707,7 +845,11 @@ async def list_vpps(category: Optional[str] = None, state: Optional[str] = None)
     out = []
     for d in docs:
         d = await _transition_vpp_if_needed(d)
-        out.append(serialize_vpp(d))
+        item = serialize_vpp(d)
+        # Privacy: do not reveal supplier_name to public list — only the product
+        item["supplier_name"] = "Verified Supplier"
+        item["supplier_id"] = None
+        out.append(item)
     return out
 
 
@@ -733,6 +875,13 @@ async def get_vpp(vpp_id: str, user: Optional[dict] = Depends(get_current_user_o
         if p:
             out["has_joined"] = True
             out["has_paid"] = bool(p.get("paid"))
+    # Privacy: hide supplier identity until the user has paid for this Wave.
+    # Admins always see it; suppliers viewing their own waves always see it.
+    is_admin = user and user.get("role") == "admin"
+    is_own_supplier = user and user.get("role") == "supplier" and user.get("supplier_id") == doc.get("supplier_id")
+    if not out["has_paid"] and not is_admin and not is_own_supplier:
+        out["supplier_name"] = "Verified Supplier"
+        out["supplier_id"] = None
     # Recent participants (anonymised first-name only)
     parts = await db.vpp_participants.find(
         {"vpp_id": vpp_id}, {"_id": 0, "user_name": 1, "joined_at": 1}
@@ -788,6 +937,7 @@ async def join_vpp(vpp_id: str, user: dict = Depends(get_current_user)):
 
 
 @api_router.get("/me/parties")
+@api_router.get("/me/waves")
 async def my_parties(user: dict = Depends(get_current_user)):
     parts = await db.vpp_participants.find(
         {"user_id": user["user_id"]}, {"_id": 0}
@@ -802,6 +952,16 @@ async def my_parties(user: dict = Depends(get_current_user)):
         v = serialize_vpp(vpp)
         savings = max(0.0, vpp["retail_price"] - vpp["customer_price"]) if p.get("paid") else 0
         total_savings += savings
+        # If paid + automotive + no booking yet → flag
+        cat_auto = (vpp.get("category") or "").lower() in ("tyres", "automotive")
+        booking_id = p.get("booking_id")
+        booking = None
+        if booking_id:
+            booking = await db.bookings.find_one({"booking_id": booking_id, "status": "confirmed"}, {"_id": 0})
+            if booking:
+                g = await db.garages.find_one({"garage_id": booking["garage_id"]}, {"_id": 0})
+                booking["garage"] = _serialize_garage(g, public=True) if g else None
+        needs_booking = bool(p.get("paid") and cat_auto and not booking)
         out.append({
             "vpp": v,
             "joined_at": p["joined_at"] if isinstance(p["joined_at"], str) else p["joined_at"].isoformat(),
@@ -809,8 +969,10 @@ async def my_parties(user: dict = Depends(get_current_user)):
             "payment_method": p.get("payment_method"),
             "savings": round(savings, 2),
             "fulfilment_status": p.get("fulfilment_status", "pending"),
+            "needs_booking": needs_booking,
+            "booking": booking,
         })
-    return {"parties": out, "total_savings": round(total_savings, 2)}
+    return {"waves": out, "parties": out, "total_savings": round(total_savings, 2)}
 
 
 # =====================================================================
@@ -833,6 +995,40 @@ async def checkout_init(payload: CheckoutInitRequest, request: Request,
         raise HTTPException(status_code=400, detail="You haven't joined this party")
     if participant.get("paid"):
         raise HTTPException(status_code=400, detail="Already paid for this party")
+
+    # Validate garage / delivery address for automotive categories
+    # NOTE (V1 flow): At checkout we do NOT require a garage. Members pre-authorise
+    # payment first; once the Wave LOCKS we email them a link to choose a fitting
+    # garage + slot. Booking is captured via /api/me/bookings. We only persist a
+    # garage/delivery here if the member chose to lock one in early (optional).
+    automotive_cats = {"tyres", "automotive"}
+    is_automotive = vpp.get("category", "").lower() in automotive_cats
+    garage_update: Dict[str, Any] = {}
+    if is_automotive and payload.garage_id:
+        garage = await db.garages.find_one({"garage_id": payload.garage_id, "is_active": True}, {"_id": 0})
+        if not garage:
+            raise HTTPException(status_code=400, detail="Selected garage not found")
+        garage_update["garage_id"] = payload.garage_id
+    elif is_automotive and payload.delivery_address_type:
+        if payload.delivery_address_type not in ("auth_repair_shop", "mobile_fitter", "local_garage", "dealership"):
+            raise HTTPException(status_code=400, detail="Delivery must be to a registered place. Private addresses are not permitted.")
+        required = [payload.delivery_business_name, payload.delivery_address_line1, payload.delivery_city, payload.delivery_postcode]
+        if not all(required):
+            raise HTTPException(status_code=400, detail="Provide full delivery address (business name, line 1, city, postcode).")
+        garage_update.update({
+            "delivery_address_type": payload.delivery_address_type,
+            "delivery_business_name": payload.delivery_business_name,
+            "delivery_address_line1": payload.delivery_address_line1,
+            "delivery_address_line2": payload.delivery_address_line2,
+            "delivery_city": payload.delivery_city,
+            "delivery_postcode": payload.delivery_postcode,
+        })
+
+    if garage_update:
+        await db.vpp_participants.update_one(
+            {"vpp_id": payload.vpp_id, "user_id": user["user_id"]},
+            {"$set": garage_update}
+        )
 
     base_price = float(vpp["customer_price"])
     discount_pct = PAYMENT_DISCOUNTS.get(payload.payment_method, 0.0)
@@ -1047,6 +1243,318 @@ async def _mark_participant_paid(vpp_id: str, user_id: str, payment_method: str)
                                 {"type": "state_change", "vpp": serialize_vpp(vpp)})
         await manager.broadcast("vpps:all",
                                 {"type": "state_change", "vpp": serialize_vpp(vpp)})
+
+
+# =====================================================================
+# GARAGE ROUTES — Onboarding & Directory
+# =====================================================================
+def _serialize_garage(g: dict, public: bool = False) -> dict:
+    d = dict(g)
+    d.pop("_id", None)
+    for k in ("created_at", "verified_at"):
+        v = d.get(k)
+        if isinstance(v, datetime):
+            d[k] = v.isoformat()
+    d["garage_type_label"] = GARAGE_TYPE_LABELS.get(d.get("garage_type"), d.get("garage_type"))
+    if public:
+        # Strip private contact fields from the public directory
+        d.pop("contact_email", None)
+        d.pop("contact_phone", None)
+        d.pop("calendar_url", None)
+    return d
+
+
+@api_router.post("/garages/apply")
+async def garage_apply(payload: GarageApplyRequest, user: dict = Depends(get_current_user)):
+    existing = await db.garages.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if existing:
+        return _serialize_garage(existing)
+    garage = Garage(
+        user_id=user["user_id"],
+        business_name=payload.business_name,
+        contact_email=payload.contact_email,
+        contact_phone=payload.contact_phone,
+        garage_type=payload.garage_type,
+        services=payload.services or [],
+        address_line1=payload.address_line1,
+        address_line2=payload.address_line2,
+        city=payload.city,
+        postcode=payload.postcode,
+        calendar_url=payload.calendar_url,
+        calendar_provider="ical" if payload.calendar_url else "manual",
+    ).model_dump()
+    garage["created_at"] = garage["created_at"].isoformat()
+    await db.garages.insert_one(garage)
+    await db.users.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {"role": "garage"}, "$addToSet": {"auth_methods": user.get("auth_methods", ["email"])[0] if user.get("auth_methods") else "email"}}
+    )
+    # Refetch and return clean copy
+    g = await db.garages.find_one({"garage_id": garage["garage_id"]}, {"_id": 0})
+    return _serialize_garage(g)
+
+
+@api_router.get("/garages/me")
+async def garage_me(user: dict = Depends(get_current_user)):
+    g = await db.garages.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if not g:
+        raise HTTPException(status_code=404, detail="No garage profile")
+    return _serialize_garage(g)
+
+
+@api_router.patch("/garages/me")
+async def garage_update(payload: GarageUpdateRequest, user: dict = Depends(get_current_user)):
+    g = await db.garages.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if not g:
+        raise HTTPException(status_code=404, detail="No garage profile")
+    update: Dict[str, Any] = {}
+    for f in ("business_name", "contact_email", "contact_phone", "garage_type",
+              "services", "address_line1", "address_line2", "city", "postcode",
+              "calendar_url", "calendar_provider"):
+        v = getattr(payload, f, None)
+        if v is not None:
+            update[f] = v
+    if update:
+        await db.garages.update_one({"garage_id": g["garage_id"]}, {"$set": update})
+    g = await db.garages.find_one({"garage_id": g["garage_id"]}, {"_id": 0})
+    return _serialize_garage(g)
+
+
+@api_router.get("/garages")
+async def list_garages(postcode: Optional[str] = None, garage_type: Optional[str] = None):
+    """Public directory — for users to select a garage at checkout."""
+    q: Dict[str, Any] = {"is_active": True}
+    if garage_type:
+        q["garage_type"] = garage_type
+    if postcode:
+        # Loose postcode prefix match (first 3-4 chars)
+        pc = postcode.strip().upper().replace(" ", "")[:3]
+        q["postcode"] = {"$regex": f"^{re.escape(pc)}", "$options": "i"}
+    docs = await db.garages.find(q, {"_id": 0}).sort("created_at", -1).to_list(100)
+    return [_serialize_garage(d, public=True) for d in docs]
+
+
+# Admin endpoint to verify a garage
+@api_router.post("/admin/garages/{garage_id}/verify")
+async def admin_verify_garage(garage_id: str, user: dict = Depends(get_current_user)):
+    await require_role(user, ["admin"])
+    await db.garages.update_one(
+        {"garage_id": garage_id},
+        {"$set": {"is_verified": True, "verified_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    return {"success": True}
+
+
+@api_router.get("/admin/garages")
+async def admin_list_garages(user: dict = Depends(get_current_user)):
+    await require_role(user, ["admin"])
+    docs = await db.garages.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return [_serialize_garage(d) for d in docs]
+
+
+# ----- Garage Availability & Bookings -----
+DEFAULT_AVAILABILITY = {
+    "weekly": {d: ([{"start": "09:00", "end": "17:00"}] if d not in ("sat", "sun") else []) for d in WEEKDAYS},
+    "overrides": {},
+    "slot_minutes": 30,
+}
+
+
+@api_router.get("/garages/me/availability")
+async def garage_my_availability(user: dict = Depends(get_current_user)):
+    g = await db.garages.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if not g:
+        raise HTTPException(status_code=404, detail="No garage profile")
+    av = await db.garage_availability.find_one({"garage_id": g["garage_id"]}, {"_id": 0})
+    if not av:
+        return {"garage_id": g["garage_id"], **DEFAULT_AVAILABILITY}
+    av.pop("_id", None)
+    return av
+
+
+@api_router.put("/garages/me/availability")
+async def garage_set_availability(payload: GarageAvailability, user: dict = Depends(get_current_user)):
+    g = await db.garages.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if not g:
+        raise HTTPException(status_code=404, detail="No garage profile")
+    # Validate weekday keys
+    weekly: Dict[str, Any] = {}
+    for d in WEEKDAYS:
+        ranges = payload.weekly.get(d, [])
+        weekly[d] = [{"start": r.start, "end": r.end} for r in ranges]
+    overrides: Dict[str, Any] = {}
+    for date_key, ov in (payload.overrides or {}).items():
+        if not re.match(r"^\d{4}-\d{2}-\d{2}$", date_key):
+            continue
+        overrides[date_key] = {
+            "closed": bool(ov.closed),
+            "ranges": [{"start": r.start, "end": r.end} for r in (ov.ranges or [])],
+        }
+    doc = {
+        "garage_id": g["garage_id"],
+        "weekly": weekly,
+        "overrides": overrides,
+        "slot_minutes": int(payload.slot_minutes or 30),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.garage_availability.update_one(
+        {"garage_id": g["garage_id"]}, {"$set": doc}, upsert=True
+    )
+    doc.pop("_id", None)
+    return doc
+
+
+def _generate_slots_for_date(date_str: str, av: dict, booked: set) -> List[dict]:
+    """Generate available slot start times for a given YYYY-MM-DD."""
+    try:
+        dt = datetime.strptime(date_str, "%Y-%m-%d")
+    except Exception:
+        return []
+    wd = WEEKDAYS[dt.weekday()]
+    overrides = (av or {}).get("overrides", {}) or {}
+    weekly = (av or {}).get("weekly", {}) or {}
+    slot_min = int((av or {}).get("slot_minutes", 30))
+
+    ov = overrides.get(date_str)
+    if ov:
+        if ov.get("closed"):
+            return []
+        ranges = ov.get("ranges", []) or weekly.get(wd, [])
+    else:
+        ranges = weekly.get(wd, [])
+
+    slots: List[dict] = []
+    for r in ranges:
+        try:
+            sh, sm = [int(x) for x in r["start"].split(":")]
+            eh, em = [int(x) for x in r["end"].split(":")]
+        except Exception:
+            continue
+        cursor = dt.replace(hour=sh, minute=sm, second=0, microsecond=0, tzinfo=timezone.utc)
+        end_at = dt.replace(hour=eh, minute=em, second=0, microsecond=0, tzinfo=timezone.utc)
+        while cursor + timedelta(minutes=slot_min) <= end_at:
+            iso = cursor.isoformat()
+            if iso not in booked:
+                slots.append({"slot_iso": iso, "label": cursor.strftime("%H:%M")})
+            cursor = cursor + timedelta(minutes=slot_min)
+    return slots
+
+
+@api_router.get("/garages/{garage_id}/slots")
+async def list_garage_slots(garage_id: str, days: int = 14):
+    """Return upcoming open slots grouped by date for the next N days."""
+    g = await db.garages.find_one({"garage_id": garage_id, "is_active": True}, {"_id": 0})
+    if not g:
+        raise HTTPException(status_code=404, detail="Garage not found")
+    av = await db.garage_availability.find_one({"garage_id": garage_id}, {"_id": 0}) or DEFAULT_AVAILABILITY
+    # Booked slots in next `days`
+    booked_docs = await db.bookings.find(
+        {"garage_id": garage_id, "status": "confirmed"}, {"_id": 0, "slot_iso": 1}
+    ).to_list(2000)
+    booked = {b["slot_iso"] for b in booked_docs}
+
+    today = datetime.now(timezone.utc).date()
+    out = []
+    for i in range(max(1, min(days, 30))):
+        d = today + timedelta(days=i)
+        date_str = d.isoformat()
+        slots = _generate_slots_for_date(date_str, av, booked)
+        # Filter out past slots for today
+        if i == 0:
+            now_iso = datetime.now(timezone.utc).isoformat()
+            slots = [s for s in slots if s["slot_iso"] > now_iso]
+        out.append({"date": date_str, "weekday": WEEKDAYS[d.weekday()], "slots": slots})
+    return {"garage": _serialize_garage(g, public=True), "days": out}
+
+
+@api_router.post("/me/bookings")
+async def create_booking(payload: BookingCreateRequest, user: dict = Depends(get_current_user)):
+    """Member books a fitting slot at a selected garage for a Wave they've paid for."""
+    vpp = await db.vpps.find_one({"vpp_id": payload.vpp_id}, {"_id": 0})
+    if not vpp:
+        raise HTTPException(status_code=404, detail="Wave not found")
+    if vpp.get("category", "").lower() not in ("tyres", "automotive"):
+        raise HTTPException(status_code=400, detail="Bookings are only for automotive Waves")
+    participant = await db.vpp_participants.find_one(
+        {"vpp_id": payload.vpp_id, "user_id": user["user_id"]}, {"_id": 0}
+    )
+    if not participant or not participant.get("paid"):
+        raise HTTPException(status_code=403, detail="You must have paid for this Wave to book a fitting")
+    garage = await db.garages.find_one({"garage_id": payload.garage_id, "is_active": True}, {"_id": 0})
+    if not garage:
+        raise HTTPException(status_code=404, detail="Garage not found")
+    # Check slot is not already booked
+    clash = await db.bookings.find_one(
+        {"garage_id": payload.garage_id, "slot_iso": payload.slot_iso, "status": "confirmed"}, {"_id": 0}
+    )
+    if clash:
+        raise HTTPException(status_code=409, detail="That slot was just taken — please pick another.")
+    # Replace existing booking for this wave by this user
+    existing = await db.bookings.find_one(
+        {"vpp_id": payload.vpp_id, "user_id": user["user_id"]}, {"_id": 0}
+    )
+    if existing:
+        await db.bookings.update_one(
+            {"booking_id": existing["booking_id"]},
+            {"$set": {"status": "cancelled"}}
+        )
+    av = await db.garage_availability.find_one({"garage_id": payload.garage_id}, {"_id": 0})
+    slot_min = int((av or {}).get("slot_minutes", 30))
+    booking = Booking(
+        vpp_id=payload.vpp_id,
+        user_id=user["user_id"],
+        user_name=user["name"],
+        user_email=user["email"],
+        garage_id=payload.garage_id,
+        slot_iso=payload.slot_iso,
+        slot_minutes=slot_min,
+        notes=payload.notes,
+    ).model_dump()
+    booking["created_at"] = booking["created_at"].isoformat()
+    await db.bookings.insert_one(booking)
+    # Link the booking to the participant
+    await db.vpp_participants.update_one(
+        {"vpp_id": payload.vpp_id, "user_id": user["user_id"]},
+        {"$set": {"garage_id": payload.garage_id, "booking_id": booking["booking_id"]}}
+    )
+    booking.pop("_id", None)
+    return booking
+
+
+@api_router.get("/me/bookings")
+async def my_bookings(user: dict = Depends(get_current_user)):
+    docs = await db.bookings.find(
+        {"user_id": user["user_id"], "status": "confirmed"}, {"_id": 0}
+    ).sort("slot_iso", 1).to_list(100)
+    out = []
+    for b in docs:
+        g = await db.garages.find_one({"garage_id": b["garage_id"]}, {"_id": 0})
+        v = await db.vpps.find_one({"vpp_id": b["vpp_id"]}, {"_id": 0})
+        out.append({
+            **b,
+            "garage": _serialize_garage(g, public=True) if g else None,
+            "vpp_title": v.get("title") if v else None,
+        })
+    return out
+
+
+@api_router.get("/garages/me/bookings")
+async def garage_my_bookings(user: dict = Depends(get_current_user)):
+    g = await db.garages.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if not g:
+        raise HTTPException(status_code=404, detail="No garage profile")
+    docs = await db.bookings.find(
+        {"garage_id": g["garage_id"]}, {"_id": 0}
+    ).sort("slot_iso", 1).to_list(500)
+    out = []
+    for b in docs:
+        v = await db.vpps.find_one({"vpp_id": b["vpp_id"]}, {"_id": 0})
+        out.append({
+            **b,
+            "vpp_title": v.get("title") if v else None,
+            "vpp_category": v.get("category") if v else None,
+        })
+    return out
 
 
 # =====================================================================
@@ -1641,6 +2149,7 @@ async def startup():
         await db.users.create_index("phone", unique=False, sparse=True)
         await db.login_attempts.create_index("identifier")
         await db.user_sessions.create_index("session_token", unique=True)
+        await db.bookings.create_index([("garage_id", 1), ("slot_iso", 1)])
     except Exception as e:
         logger.warning(f"Index creation warning: {e}")
     # Auto-seed if empty
@@ -1649,6 +2158,34 @@ async def startup():
         logger.info("Seeding initial VPPs...")
         await seed(force=False)
         logger.info("Seed complete")
+    # Seed/refresh founder admin
+    try:
+        founder_email = os.environ.get("FOUNDER_EMAIL", "").strip().lower()
+        founder_pw = os.environ.get("FOUNDER_PASSWORD", "")
+        if founder_email and founder_pw:
+            existing_admin = await db.users.find_one({"email": founder_email}, {"_id": 0})
+            pw_hash = hash_password(founder_pw)
+            if not existing_admin:
+                user_id = f"user_{uuid.uuid4().hex[:12]}"
+                await db.users.insert_one({
+                    "user_id": user_id,
+                    "email": founder_email,
+                    "name": "Founder",
+                    "role": "admin",
+                    "password_hash": pw_hash,
+                    "auth_methods": ["email"],
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                })
+                logger.info(f"Seeded founder admin: {founder_email}")
+            else:
+                # Always refresh password + ensure admin role
+                await db.users.update_one(
+                    {"email": founder_email},
+                    {"$set": {"password_hash": pw_hash, "role": "admin"}, "$addToSet": {"auth_methods": "email"}}
+                )
+                logger.info(f"Refreshed founder admin: {founder_email}")
+    except Exception as e:
+        logger.warning(f"Founder admin seed failed: {e}")
 
 
 @app.on_event("shutdown")
