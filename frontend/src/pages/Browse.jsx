@@ -1,26 +1,41 @@
 import React, { useEffect, useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import VPPCard from "../components/VPPCard";
 import { api, wsUrl } from "../lib/api";
+import { useAuth } from "../lib/auth";
 import { Funnel, MagnifyingGlass } from "@phosphor-icons/react";
 
 const STATES = ["all", "active", "locked", "executing", "completed"];
 
 export default function Browse() {
+  const navigate = useNavigate();
+  const { user, loading: authLoading } = useAuth();
   const [vpps, setVpps] = useState([]);
   const [loading, setLoading] = useState(true);
   const [stateFilter, setStateFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [query, setQuery] = useState("");
 
+  // Suppliers and Garages must not browse member waves (conflict of interest)
   useEffect(() => {
+    if (authLoading) return;
+    if (user?.role === "supplier") { navigate("/supplier", { replace: true }); return; }
+    if (user?.role === "garage") { navigate("/garage", { replace: true }); return; }
+  }, [user, authLoading, navigate]);
+
+  useEffect(() => {
+    if (authLoading) return;
+    if (user?.role === "supplier" || user?.role === "garage") return;
     (async () => {
       setLoading(true);
-      const { data } = await api.get("/vpps");
-      setVpps(data);
+      try {
+        const { data } = await api.get("/vpps");
+        setVpps(data);
+      } catch {}
       setLoading(false);
     })();
-  }, []);
+  }, [authLoading, user]);
 
   // Live updates via WebSocket
   useEffect(() => {

@@ -24,16 +24,27 @@ export default function VPPDetail() {
   const prevState = useRef(null);
 
   const load = async () => {
-    const { data } = await api.get(`/vpps/${id}`);
-    setVpp(data);
-    setParticipants(data.recent_participants || []);
-    setLoading(false);
-    if (prevState.current && prevState.current !== data.state && (data.state === "powered" || data.state === "locked")) {
-      setShowConfetti(true);
-      toast.success("⚡ WAVE POWERED! Price locked.");
-      setTimeout(() => setShowConfetti(false), 4500);
+    try {
+      const { data } = await api.get(`/vpps/${id}`);
+      setVpp(data);
+      setParticipants(data.recent_participants || []);
+      setLoading(false);
+      if (prevState.current && prevState.current !== data.state && (data.state === "powered" || data.state === "locked")) {
+        setShowConfetti(true);
+        toast.success("⚡ WAVE POWERED! Price locked.");
+        setTimeout(() => setShowConfetti(false), 4500);
+      }
+      prevState.current = data.state;
+    } catch (e) {
+      if (e?.response?.status === 403) {
+        toast.error("Member-only wave — redirecting to your console.");
+        if (user?.role === "supplier") navigate("/supplier", { replace: true });
+        else if (user?.role === "garage") navigate("/garage", { replace: true });
+        else navigate("/", { replace: true });
+      } else {
+        setLoading(false);
+      }
     }
-    prevState.current = data.state;
   };
 
   useEffect(() => { load(); }, [id]);

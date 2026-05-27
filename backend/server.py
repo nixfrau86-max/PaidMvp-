@@ -626,15 +626,29 @@ async def _create_session_for_user(user_id: str, response: Response) -> str:
     return token
 
 
-async def _check_brute_force(identifier: str):
-    """Block after 5 failed attempts in last 15 minutes."""
+async def _check_brute_force(identifier: str, email: str = ""):
+    """Block after 10 failed attempts in last 15 minutes. Allowlisted admin emails bypass."""
+    allowlist = [e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()]
+    if email and email.lower() in allowlist:
+        return
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=15)
     count = await db.login_attempts.count_documents({
         "identifier": identifier,
         "created_at": {"$gte": cutoff.isoformat()},
     })
-    if count >= 5:
+    if count >= 10:
         raise HTTPException(status_code=429, detail="Too many failed attempts. Try again in 15 minutes.")
+
+
+def _client_ip(request: Request) -> str:
+    """Resolve the real client IP behind Cloudflare / Kubernetes ingress."""
+    cf = request.headers.get("cf-connecting-ip")
+    if cf:
+        return cf.strip()
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
 
 
 async def _record_failed_attempt(identifier: str):
@@ -701,9 +715,9 @@ async def auth_register(payload: RegisterRequest, response: Response):
 @api_router.post("/auth/login")
 async def auth_login(payload: LoginRequest, request: Request, response: Response):
     email = payload.email.strip().lower()
-    ip = request.client.host if request.client else "unknown"
+    ip = _client_ip(request)
     identifier = f"{ip}:{email}"
-    await _check_brute_force(identifier)
+    await _check_brute_force(identifier, email)
 
     user = await db.users.find_one({"email": email}, {"_id": 0})
     if not user or not user.get("password_hash"):
@@ -739,7 +753,7 @@ async def auth_sms_request(payload: SmsRequestOtp, request: Request):
     if not E164_RE.match(phone):
         raise HTTPException(status_code=400, detail="Phone must be in E.164 format e.g. +447900123456")
 
-    ip = request.client.host if request.client else "unknown"
+    ip = _client_ip(request)
     identifier = f"sms:{ip}:{phone}"
     await _check_brute_force(identifier)
 
@@ -772,7 +786,7 @@ async def auth_sms_verify(payload: SmsVerifyOtp, request: Request, response: Res
     if not re.fullmatch(r"\d{4,8}", payload.code):
         raise HTTPException(status_code=400, detail="Invalid code format")
 
-    ip = request.client.host if request.client else "unknown"
+    ip = _client_ip(request)
     identifier = f"sms:{ip}:{phone}"
     await _check_brute_force(identifier)
 
@@ -830,8 +844,21 @@ async def auth_sms_verify(payload: SmsVerifyOtp, request: Request, response: Res
 # =====================================================================
 # VPP ROUTES (Consumer)
 # =====================================================================
+def _is_consumer_or_admin(user: Optional[dict]) -> bool:
+    """Suppliers and Garages must NOT browse/join consumer Waves to prevent conflicts of interest."""
+    if not user:
+        return True  # anonymous visitors can browse the public catalogue
+    return user.get("role") in (None, "consumer", "admin")
+
+
 @api_router.get("/vpps")
-async def list_vpps(category: Optional[str] = None, state: Optional[str] = None):
+async def list_vpps(
+    category: Optional[str] = None,
+    state: Optional[str] = None,
+    user: Optional[dict] = Depends(get_current_user_optional),
+):
+    if not _is_consumer_or_admin(user):
+        raise HTTPException(status_code=403, detail="Suppliers and Garages cannot browse member Waves")
     q = {"publish_status": "live"}
     if category:
         q["category"] = category
@@ -864,6 +891,14 @@ async def get_vpp(vpp_id: str, user: Optional[dict] = Depends(get_current_user_o
     doc = await db.vpps.find_one({"vpp_id": vpp_id}, {"_id": 0})
     if not doc:
         raise HTTPException(status_code=404, detail="VPP not found")
+    # Suppliers can view their OWN wave, but never browse competitor waves
+    is_own_supplier = (
+        user
+        and user.get("role") == "supplier"
+        and user.get("supplier_id") == doc.get("supplier_id")
+    )
+    if not _is_consumer_or_admin(user) and not is_own_supplier:
+        raise HTTPException(status_code=403, detail="Not authorised to view this Wave")
     doc = await _transition_vpp_if_needed(doc)
     out = serialize_vpp(doc)
     out["has_joined"] = False
@@ -897,6 +932,8 @@ async def get_vpp(vpp_id: str, user: Optional[dict] = Depends(get_current_user_o
 
 @api_router.post("/vpps/{vpp_id}/join", response_model=JoinVPPResponse)
 async def join_vpp(vpp_id: str, user: dict = Depends(get_current_user)):
+    if user.get("role") not in ("consumer", "admin"):
+        raise HTTPException(status_code=403, detail="Only members can join Waves")
     doc = await db.vpps.find_one({"vpp_id": vpp_id}, {"_id": 0})
     if not doc:
         raise HTTPException(status_code=404, detail="VPP not found")
@@ -981,6 +1018,8 @@ async def my_parties(user: dict = Depends(get_current_user)):
 @api_router.post("/checkout/init", response_model=CheckoutInitResponse)
 async def checkout_init(payload: CheckoutInitRequest, request: Request,
                         user: dict = Depends(get_current_user)):
+    if user.get("role") not in ("consumer", "admin"):
+        raise HTTPException(status_code=403, detail="Only members can check out")
     vpp = await db.vpps.find_one({"vpp_id": payload.vpp_id}, {"_id": 0})
     if not vpp:
         raise HTTPException(status_code=404, detail="VPP not found")
