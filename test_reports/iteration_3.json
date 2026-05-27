@@ -1,0 +1,41 @@
+{
+  "summary": "End-to-end test of Garage Calendar Sync (iCal feed). Backend: 9/9 new calendar tests pass + 9/9 prior regression (booking flow) re-passes. Frontend: Garage Console now renders 4 tabs (Availability, Bookings, Calendar Sync, Profile); Calendar Sync tab renders the absolute feed URL (origin + feed_path), all 4 action buttons (Copy, Google add, Apple webcal, Download .ics), Regenerate button, and all 3 HowTo cards. Regenerate flow verified end-to-end: old URL → 404, new URL → 200 text/calendar with BEGIN:VCALENDAR.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Garage Dashboard (any tab)", "issues": ["React hydration console warning: '<%s> cannot be a child of <%s>' on initial render — appears unrelated to Calendar Sync (likely a <p> wrapping a <span>/block in another component, not introduced this iteration). Doesn't block functionality but is worth a sweep."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_garage_calendar_sync.py",
+    "/app/backend/tests/test_garage_booking_flow.py",
+    "/app/test_reports/pytest/iteration3_calendar.xml",
+    "/app/test_reports/pytest/iteration3_regression.xml"
+  ],
+  "action_items": [
+    "(Optional, polish) Investigate the React hydration warning on /garage — likely a misplaced inline element inside a <p> tag in a sibling component."
+  ],
+  "critical_code_review_comments": [
+    "Calendar Sync implementation is correct: token rotation on regenerate is atomic ($set on garages doc), and ICS endpoint enforces token equality before any data is returned — wrong/missing token correctly 404s without leaking garage existence.",
+    "_build_ics_for_garage iterates ALL bookings (confirmed + cancelled) — matches the documented intent so subscribers receive cancellation updates. Verified via re-book test: prior booking shows STATUS:CANCELLED and new one STATUS:CONFIRMED.",
+    "_serialize_garage(public=True) correctly strips calendar_feed_token AND calendar_url from /api/garages public listing (verified).",
+    "Front end builds the absolute URL via window.location.origin + feed_path — this dodges the internal ingress hostname issue cleanly. Good architectural choice.",
+    "Minor: feed_path is constructed as a string literal with '?token=' — if a token ever contains a URL-special char it could break, but secrets.token_urlsafe is URL-safe so this is fine in practice.",
+    "Minor: Apple webcal link uses simple regex replace; works because httpsUrl always starts with 'https://'."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_garage_calendar_sync.py (new)"
+  ],
+  "success_rate": {"backend": "100% (9/9 new calendar, 9/9 regression)", "frontend": "100% (Calendar Sync tab + regenerate flow + 404 verification all green)"},
+  "test_credentials": "Founder admin: founder@thecollectivesavers.co.uk / SaversCollective. Garage user seeded ad-hoc via mongosh + POST /api/garages/apply, then is_active/is_verified flipped via mongosh.",
+  "seed_data_creation": "Each test creates its own TEST_-prefixed garage and (for booking tests) a TEST_TyreWaveCal_* VPP via the founder admin, plus an ephemeral consumer. Unique uuid suffixes mean no cleanup required.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Reuse /app/backend/tests/test_garage_calendar_sync.py for any future calendar-related regression. The hydration warning on /garage is the only soft finding worth investigating. Frontend cookie auth in playwright works fine when you (a) seed user+session in mongo then (b) add cookie via page.context.add_cookies with domain=party-power-1.preview.emergentagent.com and secure=true. For HTTP-from-script use `requests`, not urllib — urllib's default UA gets 403'd by the ingress.",
+  "rca of the issue": "N/A — no functional bugs found in scope. Feature works end-to-end."
+}

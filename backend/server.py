@@ -1261,6 +1261,7 @@ def _serialize_garage(g: dict, public: bool = False) -> dict:
         d.pop("contact_email", None)
         d.pop("contact_phone", None)
         d.pop("calendar_url", None)
+        d.pop("calendar_feed_token", None)
     return d
 
 
@@ -1555,6 +1556,147 @@ async def garage_my_bookings(user: dict = Depends(get_current_user)):
             "vpp_category": v.get("category") if v else None,
         })
     return out
+
+
+# ----- Calendar Sync (iCal subscription feed) -----
+def _ics_escape(text: str) -> str:
+    if not text:
+        return ""
+    return (
+        str(text)
+        .replace("\\", "\\\\")
+        .replace(",", "\\,")
+        .replace(";", "\\;")
+        .replace("\n", "\\n")
+    )
+
+
+def _ics_dt(iso: str) -> str:
+    """Convert ISO datetime to ICS UTC format YYYYMMDDTHHMMSSZ."""
+    try:
+        if iso.endswith("Z"):
+            iso = iso[:-1] + "+00:00"
+        dt = datetime.fromisoformat(iso)
+        dt = dt.astimezone(timezone.utc)
+        return dt.strftime("%Y%m%dT%H%M%SZ")
+    except Exception:
+        return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def _build_ics_for_garage(g: dict, bookings: List[dict]) -> str:
+    """Render an RFC-5545 iCalendar feed for a garage's confirmed bookings."""
+    now = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    lines = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//The Collective Savers//Garage Bookings//EN",
+        "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH",
+        f"X-WR-CALNAME:{_ics_escape(g.get('business_name', 'Collective Savers'))} — Fittings",
+        "X-WR-TIMEZONE:Europe/London",
+        "REFRESH-INTERVAL;VALUE=DURATION:PT15M",
+        "X-PUBLISHED-TTL:PT15M",
+    ]
+    addr = ", ".join([x for x in [
+        g.get("address_line1"), g.get("address_line2"), g.get("city"), g.get("postcode")
+    ] if x])
+    for b in bookings:
+        slot_min = int(b.get("slot_minutes", 30))
+        try:
+            start_dt = datetime.fromisoformat(b["slot_iso"].replace("Z", "+00:00")).astimezone(timezone.utc)
+        except Exception:
+            continue
+        end_dt = start_dt + timedelta(minutes=slot_min)
+        ev_status = "CONFIRMED" if b.get("status") == "confirmed" else "CANCELLED"
+        summary = f"Fitting — {b.get('user_name', 'Member')}"
+        if b.get("vpp_title"):
+            summary += f" ({b['vpp_title']})"
+        desc_parts = [
+            f"Member: {b.get('user_name', '')}",
+            f"Contact: {b.get('user_email', '')}",
+            f"Wave: {b.get('vpp_title', '')}",
+            f"Category: {b.get('vpp_category', '')}",
+            f"Booking ID: {b.get('booking_id', '')}",
+        ]
+        if b.get("notes"):
+            desc_parts.append(f"Notes: {b['notes']}")
+        lines += [
+            "BEGIN:VEVENT",
+            f"UID:{b.get('booking_id', uuid.uuid4().hex)}@collectivesavers",
+            f"DTSTAMP:{now}",
+            f"DTSTART:{_ics_dt(start_dt.isoformat())}",
+            f"DTEND:{_ics_dt(end_dt.isoformat())}",
+            f"SUMMARY:{_ics_escape(summary)}",
+            f"DESCRIPTION:{_ics_escape(chr(10).join(desc_parts))}",
+            f"LOCATION:{_ics_escape(addr)}",
+            f"STATUS:{ev_status}",
+            "TRANSP:OPAQUE",
+            "END:VEVENT",
+        ]
+    lines.append("END:VCALENDAR")
+    return "\r\n".join(lines) + "\r\n"
+
+
+async def _ensure_calendar_token(garage: dict) -> str:
+    token = garage.get("calendar_feed_token")
+    if not token:
+        token = secrets.token_urlsafe(24)
+        await db.garages.update_one(
+            {"garage_id": garage["garage_id"]},
+            {"$set": {"calendar_feed_token": token}}
+        )
+    return token
+
+
+@api_router.get("/garages/me/calendar")
+async def garage_calendar_info(user: dict = Depends(get_current_user)):
+    g = await db.garages.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if not g:
+        raise HTTPException(status_code=404, detail="No garage profile")
+    token = await _ensure_calendar_token(g)
+    feed_path = f"/api/calendar/garage/{g['garage_id']}.ics?token={token}"
+    return {
+        "garage_id": g["garage_id"],
+        "feed_path": feed_path,
+        "token": token,
+    }
+
+
+@api_router.post("/garages/me/calendar/regenerate")
+async def garage_calendar_regenerate(user: dict = Depends(get_current_user)):
+    g = await db.garages.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if not g:
+        raise HTTPException(status_code=404, detail="No garage profile")
+    new_token = secrets.token_urlsafe(24)
+    await db.garages.update_one(
+        {"garage_id": g["garage_id"]}, {"$set": {"calendar_feed_token": new_token}}
+    )
+    return {"token": new_token}
+
+
+@api_router.get("/calendar/garage/{garage_id}.ics")
+async def garage_ics_feed(garage_id: str, token: str = ""):
+    """Public iCal feed — secured by per-garage token (not session auth)."""
+    g = await db.garages.find_one({"garage_id": garage_id}, {"_id": 0})
+    if not g or not g.get("calendar_feed_token") or g["calendar_feed_token"] != token:
+        raise HTTPException(status_code=404, detail="Calendar not found")
+    docs = await db.bookings.find(
+        {"garage_id": garage_id}, {"_id": 0}
+    ).sort("slot_iso", 1).to_list(2000)
+    for b in docs:
+        v = await db.vpps.find_one({"vpp_id": b.get("vpp_id")}, {"_id": 0, "title": 1, "category": 1})
+        if v:
+            b["vpp_title"] = v.get("title")
+            b["vpp_category"] = v.get("category")
+    ics = _build_ics_for_garage(g, docs)
+    return Response(
+        content=ics,
+        media_type="text/calendar; charset=utf-8",
+        headers={
+            "Content-Disposition": f'inline; filename="{garage_id}.ics"',
+            "Cache-Control": "private, max-age=300",
+        },
+    )
 
 
 # =====================================================================

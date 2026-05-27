@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import Navbar from "../components/Navbar";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { Wrench, Calendar, CheckCircle, Pencil, Plus, X, Clock } from "@phosphor-icons/react";
+import { Wrench, Calendar, CheckCircle, Pencil, Plus, X, Clock, Copy, ArrowsClockwise, GoogleLogo, AppleLogo, MicrosoftOutlookLogo } from "@phosphor-icons/react";
 
 const DAYS = [
   { id: "mon", label: "Mon" },
@@ -80,10 +80,11 @@ export default function GarageDashboard() {
         </div>
 
         {/* Tabs */}
-        <div className="grid grid-cols-3 mb-5 border-2 border-ink bg-white">
+        <div className="grid grid-cols-4 mb-5 border-2 border-ink bg-white">
           {[
             { id: "availability", label: "Availability" },
             { id: "bookings", label: `Bookings (${upcoming.length})` },
+            { id: "calendar", label: "Calendar Sync" },
             { id: "profile", label: "Profile" },
           ].map((t) => (
             <button
@@ -100,6 +101,10 @@ export default function GarageDashboard() {
 
         {tab === "bookings" && (
           <BookingsList bookings={bookings} />
+        )}
+
+        {tab === "calendar" && (
+          <CalendarSync />
         )}
 
         {tab === "profile" && (
@@ -359,6 +364,141 @@ function Stat({ label, v, icon: Icon, c }) {
     </div>
   );
 }
+
+function CalendarSync() {
+  const [info, setInfo] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const reload = async () => {
+    const { data } = await api.get("/garages/me/calendar");
+    setInfo(data);
+  };
+  useEffect(() => { reload(); }, []);
+
+  if (!info) return <div className="border-2 border-ink bg-white shadow-brut p-6 font-mono text-xs uppercase tracking-widest">Loading…</div>;
+
+  const origin = window.location.origin;
+  const httpsUrl = `${origin}${info.feed_path}`;
+  const webcalUrl = httpsUrl.replace(/^https?:\/\//, "webcal://");
+  const googleAddUrl = `https://calendar.google.com/calendar/r?cid=${encodeURIComponent(httpsUrl)}`;
+
+  const copy = async (val) => {
+    try {
+      await navigator.clipboard.writeText(val);
+      setCopied(true);
+      toast.success("Copied to clipboard");
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      toast.error("Could not copy — select the URL manually");
+    }
+  };
+
+  const regenerate = async () => {
+    if (!window.confirm("Regenerate the calendar link? Subscribers will need the new URL.")) return;
+    setBusy(true);
+    try {
+      await api.post("/garages/me/calendar/regenerate");
+      await reload();
+      toast.success("New calendar link generated");
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Could not regenerate");
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="space-y-5" data-testid="calendar-sync-panel">
+      <div className="border-2 border-ink bg-white shadow-brut p-6">
+        <div className="flex items-start gap-3 mb-4">
+          <div className="w-12 h-12 border-2 border-ink bg-[#FFD600] flex items-center justify-center shrink-0">
+            <Calendar weight="duotone" size={26} />
+          </div>
+          <div className="flex-1">
+            <h2 className="font-display text-2xl uppercase leading-tight">Subscribe your calendar.</h2>
+            <p className="text-sm text-[#3A3A3A] mt-1">
+              Add this private URL once and every booking lands in your calendar automatically — Google, Apple, Outlook, you name it. Auto-refreshes every 15 minutes.
+            </p>
+          </div>
+        </div>
+
+        <div className="border-2 border-ink bg-[#F4F4F4] p-3 font-mono text-xs break-all" data-testid="ics-feed-url">
+          {httpsUrl}
+        </div>
+        <div className="flex flex-wrap gap-2 mt-3">
+          <button onClick={() => copy(httpsUrl)} className="border-2 border-ink px-3 py-2 text-[10px] font-bold uppercase tracking-widest font-mono bg-white hover:bg-[#F4F4F4] inline-flex items-center gap-1" data-testid="copy-feed-url">
+            <Copy weight="bold" size={12}/> {copied ? "Copied!" : "Copy link"}
+          </button>
+          <a href={googleAddUrl} target="_blank" rel="noopener noreferrer" className="border-2 border-ink px-3 py-2 text-[10px] font-bold uppercase tracking-widest font-mono bg-white hover:bg-[#F4F4F4] inline-flex items-center gap-1" data-testid="google-add-link">
+            <GoogleLogo weight="bold" size={12}/> Add to Google Calendar
+          </a>
+          <a href={webcalUrl} className="border-2 border-ink px-3 py-2 text-[10px] font-bold uppercase tracking-widest font-mono bg-white hover:bg-[#F4F4F4] inline-flex items-center gap-1" data-testid="apple-add-link">
+            <AppleLogo weight="bold" size={12}/> Open in Apple Calendar
+          </a>
+          <a href={httpsUrl} target="_blank" rel="noopener noreferrer" className="border-2 border-ink px-3 py-2 text-[10px] font-bold uppercase tracking-widest font-mono bg-white hover:bg-[#F4F4F4] inline-flex items-center gap-1" data-testid="download-ics">
+            <ArrowsClockwise weight="bold" size={12}/> Download .ics
+          </a>
+        </div>
+
+        <div className="mt-4 pt-4 border-t-2 border-ink flex items-center justify-between flex-wrap gap-3">
+          <div className="font-mono text-[10px] uppercase tracking-widest text-[#3A3A3A]">
+            Treat this URL like a password — anyone with it can see your bookings.
+          </div>
+          <button onClick={regenerate} disabled={busy} className="border-2 border-ink px-3 py-2 text-[10px] font-bold uppercase tracking-widest font-mono bg-white hover:bg-[#F4F4F4] inline-flex items-center gap-1 disabled:opacity-60" data-testid="regenerate-token-btn">
+            <ArrowsClockwise weight="bold" size={12}/> {busy ? "Working…" : "Regenerate link"}
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <HowTo
+          icon={GoogleLogo}
+          title="Google Calendar"
+          steps={[
+            "Click ‘Add to Google Calendar’ above, or",
+            "Open calendar.google.com → Other calendars → + → From URL",
+            "Paste the link and click Add calendar",
+          ]}
+          testId="howto-google"
+        />
+        <HowTo
+          icon={AppleLogo}
+          title="Apple Calendar (Mac)"
+          steps={[
+            "Click ‘Open in Apple Calendar’ on a Mac, or",
+            "Calendar → File → New Calendar Subscription",
+            "Paste the link → Subscribe → set auto-refresh",
+          ]}
+          testId="howto-apple"
+        />
+        <HowTo
+          icon={MicrosoftOutlookLogo}
+          title="Outlook"
+          steps={[
+            "outlook.live.com → Calendar → Add calendar",
+            "Choose ‘Subscribe from web’",
+            "Paste the link → Import",
+          ]}
+          testId="howto-outlook"
+        />
+      </div>
+    </div>
+  );
+}
+
+function HowTo({ icon: Icon, title, steps, testId }) {
+  return (
+    <div className="border-2 border-ink bg-white shadow-brut-sm p-4" data-testid={testId}>
+      <div className="flex items-center gap-2 mb-3">
+        <Icon weight="bold" size={18}/>
+        <div className="font-mono text-xs font-bold uppercase tracking-widest">{title}</div>
+      </div>
+      <ol className="space-y-1.5 list-decimal pl-4 text-xs text-[#3A3A3A]">
+        {steps.map((s, i) => <li key={i}>{s}</li>)}
+      </ol>
+    </div>
+  );
+}
+
 function Row({ label, v, full }) {
   return (
     <div className={full ? "sm:col-span-2" : ""}>
