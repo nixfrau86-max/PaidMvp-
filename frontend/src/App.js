@@ -15,6 +15,7 @@ import SupplierOnboarding from "./pages/SupplierOnboarding";
 import SupplierWaveNew from "./pages/SupplierWaveNew";
 import AdminPanel from "./pages/AdminPanel";
 import AuthCallback from "./pages/AuthCallback";
+import Login from "./pages/Login";
 
 function AppRouter() {
   const location = useLocation();
@@ -25,6 +26,7 @@ function AppRouter() {
   return (
     <Routes>
       <Route path="/" element={<Landing />} />
+      <Route path="/login" element={<Login />} />
       <Route path="/browse" element={<Browse />} />
       <Route path="/vpp/:id" element={<VPPDetail />} />
       <Route path="/checkout/:vppId" element={<Checkout />} />

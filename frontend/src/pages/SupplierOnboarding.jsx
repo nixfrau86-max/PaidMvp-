@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { Link, useNavigate, Navigate } from "react-router-dom";
 import { toast } from "sonner";
 import Navbar from "../components/Navbar";
 import { api } from "../lib/api";
-import { useAuth, loginRedirect } from "../lib/auth";
+import { useAuth } from "../lib/auth";
 import {
   Storefront, CheckCircle, ArrowRight, Lightning, ShieldCheck, Package, ChartLineUp,
 } from "@phosphor-icons/react";
@@ -70,14 +70,14 @@ export default function SupplierOnboarding() {
           <h1 className="font-display text-5xl uppercase tracking-tighter leading-[0.9] mb-4">
             Sell into collective demand.
           </h1>
-          <p className="text-[#3A3A3A] mb-6">Sign in with Google to start your supplier application.</p>
-          <button
-            onClick={loginRedirect}
-            className="bg-[#FF5400] text-white border-2 border-ink font-bold uppercase tracking-wider px-6 py-3 text-sm shadow-brut hover-brut"
+          <p className="text-[#3A3A3A] mb-6">Sign in first to start your supplier application.</p>
+          <Link
+            to="/login?as=supplier"
+            className="bg-[#FF5400] text-white border-2 border-ink font-bold uppercase tracking-wider px-6 py-3 text-sm shadow-brut hover-brut inline-flex items-center gap-2"
             data-testid="supplier-login-cta"
           >
-            Sign in to Apply
-          </button>
+            Sign in to Apply <ArrowRight weight="bold" />
+          </Link>
         </div>
       </div>
     );

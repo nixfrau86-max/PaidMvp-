@@ -1,6 +1,6 @@
 import React from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useAuth, loginRedirect } from "../lib/auth";
+import { useAuth } from "../lib/auth";
 import { SignOut, User, Storefront, GearSix } from "@phosphor-icons/react";
 
 const LOGO_URL = "https://customer-assets.emergentagent.com/job_party-power-1/artifacts/yz1zsziz_Collectivesaverslogo.png.png";
@@ -86,13 +86,13 @@ export default function Navbar() {
               </div>
             </>
           ) : (
-            <button
-              onClick={loginRedirect}
+            <Link
+              to="/login"
               className="bg-[#FF5400] text-white border-2 border-ink font-bold uppercase tracking-wider px-4 py-2 text-xs shadow-brut-sm hover-brut"
               data-testid="login-btn"
             >
-              Sign in with Google
-            </button>
+              Sign In
+            </Link>
           )}
         </div>
       </div>

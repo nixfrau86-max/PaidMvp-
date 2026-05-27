@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import Marquee from "react-fast-marquee";
 import { api } from "../lib/api";
-import { useAuth, loginRedirect } from "../lib/auth";
+import { useAuth } from "../lib/auth";
 import VPPCard from "../components/VPPCard";
 import Navbar from "../components/Navbar";
 import {
@@ -65,13 +65,13 @@ export default function Landing() {
                 Browse Live Waves <ArrowRight weight="bold" />
               </Link>
               {!user && (
-                <button
-                  onClick={loginRedirect}
+                <Link
+                  to="/login"
                   className="inline-flex items-center gap-2 bg-white text-ink border-2 border-ink font-bold uppercase tracking-wider px-6 py-3 text-sm shadow-brut hover-brut"
                   data-testid="hero-login-cta"
                 >
                   Sign in to Join
-                </button>
+                </Link>
               )}
             </div>
 

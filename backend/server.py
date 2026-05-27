@@ -4,10 +4,13 @@ The Collective Savers - Backend Server
 Real-time collective buying platform powered by VPPs (Value Party Power Systems).
 """
 import os
+import re
 import uuid
 import json
+import secrets
 import asyncio
 import logging
+import bcrypt
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Dict, Any, Literal
@@ -59,6 +62,9 @@ class User(BaseModel):
     name: str
     picture: Optional[str] = None
     role: UserRole = "consumer"
+    phone: Optional[str] = None
+    password_hash: Optional[str] = None
+    auth_methods: List[str] = Field(default_factory=lambda: [])  # google | email | sms
     supplier_id: Optional[str] = None  # if user is a supplier, links to Supplier doc
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -444,6 +450,243 @@ async def update_role(payload: UpdateRoleRequest, user: dict = Depends(get_curre
     await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"role": payload.role}})
     updated = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
     return updated
+
+
+# =====================================================================
+# AUTH — Email / Password + SMS OTP (multi-provider, shared session_token)
+# =====================================================================
+EMAIL_RE = re.compile(r"^[\w\.\-\+]+@[\w\.\-]+\.[a-zA-Z]{2,}$")
+E164_RE = re.compile(r"^\+[1-9]\d{6,14}$")
+
+
+def hash_password(plain: str) -> str:
+    return bcrypt.hashpw(plain.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+
+def verify_password(plain: str, hashed: str) -> bool:
+    try:
+        return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
+    except Exception:
+        return False
+
+
+async def _create_session_for_user(user_id: str, response: Response) -> str:
+    """Create a session_token entry (same shape as Google flow) and set cookie."""
+    token = secrets.token_urlsafe(48)
+    expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+    await db.user_sessions.insert_one({
+        "user_id": user_id,
+        "session_token": token,
+        "expires_at": expires_at.isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    response.set_cookie(
+        key="session_token", value=token,
+        max_age=7 * 24 * 60 * 60,
+        httponly=True, secure=True, samesite="none", path="/",
+    )
+    return token
+
+
+async def _check_brute_force(identifier: str):
+    """Block after 5 failed attempts in last 15 minutes."""
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=15)
+    count = await db.login_attempts.count_documents({
+        "identifier": identifier,
+        "created_at": {"$gte": cutoff.isoformat()},
+    })
+    if count >= 5:
+        raise HTTPException(status_code=429, detail="Too many failed attempts. Try again in 15 minutes.")
+
+
+async def _record_failed_attempt(identifier: str):
+    await db.login_attempts.insert_one({
+        "identifier": identifier,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+
+
+async def _clear_attempts(identifier: str):
+    await db.login_attempts.delete_many({"identifier": identifier})
+
+
+class RegisterRequest(BaseModel):
+    email: str
+    password: str
+    name: str
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class SmsRequestOtp(BaseModel):
+    phone: str  # E.164 e.g. +447900123456
+
+
+class SmsVerifyOtp(BaseModel):
+    phone: str
+    code: str
+    name: Optional[str] = None  # provided on first signup
+
+
+@api_router.post("/auth/register")
+async def auth_register(payload: RegisterRequest, response: Response):
+    email = payload.email.strip().lower()
+    if not EMAIL_RE.match(email):
+        raise HTTPException(status_code=400, detail="Invalid email")
+    if len(payload.password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    if len(payload.name.strip()) < 2:
+        raise HTTPException(status_code=400, detail="Name is required")
+    existing = await db.users.find_one({"email": email}, {"_id": 0})
+    if existing:
+        raise HTTPException(status_code=409, detail="An account with this email already exists")
+    user_id = f"user_{uuid.uuid4().hex[:12]}"
+    user = User(
+        user_id=user_id,
+        email=email,
+        name=payload.name.strip(),
+        role="consumer",
+        password_hash=hash_password(payload.password),
+        auth_methods=["email"],
+    ).model_dump()
+    user["created_at"] = user["created_at"].isoformat()
+    await db.users.insert_one(user)
+    await _create_session_for_user(user_id, response)
+    user.pop("password_hash", None)
+    user.pop("_id", None)
+    return {"user": user}
+
+
+@api_router.post("/auth/login")
+async def auth_login(payload: LoginRequest, request: Request, response: Response):
+    email = payload.email.strip().lower()
+    ip = request.client.host if request.client else "unknown"
+    identifier = f"{ip}:{email}"
+    await _check_brute_force(identifier)
+
+    user = await db.users.find_one({"email": email}, {"_id": 0})
+    if not user or not user.get("password_hash"):
+        await _record_failed_attempt(identifier)
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    if not verify_password(payload.password, user["password_hash"]):
+        await _record_failed_attempt(identifier)
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    await _clear_attempts(identifier)
+    await _create_session_for_user(user["user_id"], response)
+    user.pop("password_hash", None)
+    user.pop("_id", None)
+    return {"user": user}
+
+
+# -------- SMS OTP via Twilio Verify ----------
+def _twilio_client():
+    sid = os.environ.get("TWILIO_ACCOUNT_SID")
+    token = os.environ.get("TWILIO_AUTH_TOKEN")
+    if not sid or not token:
+        return None
+    try:
+        from twilio.rest import Client
+        return Client(sid, token)
+    except ImportError:
+        return None
+
+
+@api_router.post("/auth/sms/request-otp")
+async def auth_sms_request(payload: SmsRequestOtp, request: Request):
+    phone = payload.phone.strip().replace(" ", "")
+    if not E164_RE.match(phone):
+        raise HTTPException(status_code=400, detail="Phone must be in E.164 format e.g. +447900123456")
+
+    ip = request.client.host if request.client else "unknown"
+    identifier = f"sms:{ip}:{phone}"
+    await _check_brute_force(identifier)
+
+    client = _twilio_client()
+    verify_sid = os.environ.get("TWILIO_VERIFY_SERVICE")
+    if not client or not verify_sid:
+        # DEV FALLBACK: generate a 6-digit code and store it locally so flow can be tested without Twilio
+        code = f"{secrets.randbelow(900000) + 100000}"
+        await db.sms_otp_dev.update_one(
+            {"phone": phone},
+            {"$set": {"phone": phone, "code": code, "created_at": datetime.now(timezone.utc).isoformat()}},
+            upsert=True,
+        )
+        logger.warning(f"[DEV-OTP] phone={phone} code={code}  (Twilio not configured)")
+        return {"status": "pending", "dev_mode": True, "hint": "Twilio not configured — check backend logs for code"}
+
+    try:
+        verification = client.verify.v2.services(verify_sid).verifications.create(to=phone, channel="sms")
+        return {"status": verification.status, "dev_mode": False}
+    except Exception as e:
+        logger.exception("Twilio send error")
+        raise HTTPException(status_code=502, detail=f"Could not send SMS: {e}")
+
+
+@api_router.post("/auth/sms/verify-otp")
+async def auth_sms_verify(payload: SmsVerifyOtp, request: Request, response: Response):
+    phone = payload.phone.strip().replace(" ", "")
+    if not E164_RE.match(phone):
+        raise HTTPException(status_code=400, detail="Invalid phone")
+    if not re.fullmatch(r"\d{4,8}", payload.code):
+        raise HTTPException(status_code=400, detail="Invalid code format")
+
+    ip = request.client.host if request.client else "unknown"
+    identifier = f"sms:{ip}:{phone}"
+    await _check_brute_force(identifier)
+
+    client = _twilio_client()
+    verify_sid = os.environ.get("TWILIO_VERIFY_SERVICE")
+    approved = False
+    if not client or not verify_sid:
+        # DEV FALLBACK
+        rec = await db.sms_otp_dev.find_one({"phone": phone}, {"_id": 0})
+        if rec and rec.get("code") == payload.code:
+            approved = True
+            await db.sms_otp_dev.delete_one({"phone": phone})
+    else:
+        try:
+            check = client.verify.v2.services(verify_sid).verification_checks.create(to=phone, code=payload.code)
+            approved = check.status == "approved"
+        except Exception as e:
+            logger.exception("Twilio verify error")
+            raise HTTPException(status_code=502, detail=f"Could not verify SMS: {e}")
+
+    if not approved:
+        await _record_failed_attempt(identifier)
+        raise HTTPException(status_code=401, detail="Invalid or expired code")
+
+    await _clear_attempts(identifier)
+
+    # Find or create user by phone
+    user = await db.users.find_one({"phone": phone}, {"_id": 0})
+    if not user:
+        # Need a name for new user; use provided or default
+        name = (payload.name or "").strip() or f"Member {phone[-4:]}"
+        user_id = f"user_{uuid.uuid4().hex[:12]}"
+        # synthetic email if none — phone-based unique
+        synthetic_email = f"phone_{phone.lstrip('+')}@phone.thecollectivesavers.local"
+        user = User(
+            user_id=user_id, email=synthetic_email, name=name,
+            role="consumer", phone=phone, auth_methods=["sms"],
+        ).model_dump()
+        user["created_at"] = user["created_at"].isoformat()
+        await db.users.insert_one(user)
+    else:
+        # Ensure "sms" is in auth_methods
+        if "sms" not in (user.get("auth_methods") or []):
+            await db.users.update_one(
+                {"user_id": user["user_id"]},
+                {"$addToSet": {"auth_methods": "sms"}}
+            )
+
+    await _create_session_for_user(user["user_id"], response)
+    user.pop("password_hash", None)
+    user.pop("_id", None)
+    return {"user": user}
 
 
 # =====================================================================
@@ -1385,6 +1628,14 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup():
+    # Indexes
+    try:
+        await db.users.create_index("email", unique=True)
+        await db.users.create_index("phone", unique=False, sparse=True)
+        await db.login_attempts.create_index("identifier")
+        await db.user_sessions.create_index("session_token", unique=True)
+    except Exception as e:
+        logger.warning(f"Index creation warning: {e}")
     # Auto-seed if empty
     existing = await db.vpps.count_documents({})
     if existing == 0:
