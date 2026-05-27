@@ -62,6 +62,9 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* ============ VIDEO SHOWCASE ============ */}
+      <VideoShowcase />
+
       {/* ============ HOW IT WORKS — Lightweight, no prices ============ */}
       <section className="max-w-6xl mx-auto px-4 sm:px-6 py-20 sm:py-28">
         <div className="mb-12 max-w-2xl">
@@ -214,6 +217,90 @@ export default function Landing() {
           </div>
         </div>
       </footer>
+    </div>
+  );
+}
+
+function VideoShowcase() {
+  // ⬇️ EDIT THESE TWO URLs to point to your real videos.
+  // Option A — YouTube/Vimeo embed: paste the embed URL (e.g. "https://www.youtube.com/embed/XXXX?rel=0")
+  // Option B — Self-hosted MP4: drop the file in /app/frontend/public/videos/ and use "/videos/your-file.mp4"
+  const VIDEOS = {
+    consumer: {
+      title: "How Waves work for members",
+      poster: "https://images.unsplash.com/photo-1551434678-e076c223a692?w=1200&q=80",
+      src: "", // leave empty to show coming-soon overlay
+      embedUrl: "", // e.g. "https://www.youtube.com/embed/XXXXXXX"
+    },
+    supplier: {
+      title: "How suppliers list into demand",
+      poster: "https://images.unsplash.com/photo-1556761175-5973dc0f32e7?w=1200&q=80",
+      src: "",
+      embedUrl: "",
+    },
+  };
+
+  return (
+    <section className="border-b-2 border-ink bg-[#F4F4F4]">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-20 sm:py-24">
+        <div className="mb-10 max-w-2xl">
+          <div className="text-[10px] font-bold uppercase tracking-[0.3em] font-mono text-[#FF5400] mb-3">See it in motion</div>
+          <h2 className="font-display text-4xl sm:text-5xl uppercase leading-[0.95] tracking-tighter">
+            One platform.<br />Two perspectives.
+          </h2>
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <VideoCard label="For Members" tagline="Joining a Wave & locking your savings." def={VIDEOS.consumer} accent="#FFD600" />
+          <VideoCard label="For Suppliers" tagline="Listing a Wave & batch fulfilment." def={VIDEOS.supplier} accent="#FF5400" />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function VideoCard({ label, tagline, def, accent }) {
+  const hasEmbed = !!def.embedUrl;
+  const hasMp4 = !!def.src;
+  return (
+    <div className="border-2 border-ink bg-white shadow-brut-lg overflow-hidden">
+      <div className="px-5 py-3 border-b-2 border-ink flex items-center justify-between" style={{ background: accent }}>
+        <div>
+          <div className="font-mono text-[10px] font-bold uppercase tracking-widest">{label}</div>
+          <div className="font-display text-lg uppercase tracking-tight">{tagline}</div>
+        </div>
+      </div>
+      <div className="relative aspect-video bg-ink">
+        {hasEmbed ? (
+          <iframe
+            src={def.embedUrl}
+            title={def.title}
+            className="w-full h-full"
+            frameBorder="0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+          />
+        ) : hasMp4 ? (
+          <video
+            src={def.src}
+            poster={def.poster}
+            controls
+            preload="metadata"
+            playsInline
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          // Coming-soon overlay until you add a real video
+          <div className="absolute inset-0">
+            <img src={def.poster} alt="" className="w-full h-full object-cover opacity-50" />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="border-2 border-white bg-ink/80 backdrop-blur px-5 py-3 shadow-brut">
+                <div className="font-mono text-[10px] uppercase tracking-widest text-[#FFD600]">Coming soon</div>
+                <div className="font-display text-xl uppercase text-white">Video walkthrough</div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

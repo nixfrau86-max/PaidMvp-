@@ -29,7 +29,9 @@ export default function Navbar() {
         </Link>
 
         <div className="hidden md:flex items-center gap-1 text-xs font-bold uppercase tracking-[0.15em]">
-          <Link to="/browse" className="px-3 py-2 hover:bg-[#F4F4F4]" data-testid="nav-browse">Browse Waves</Link>
+          {user && (
+            <Link to="/browse" className="px-3 py-2 hover:bg-[#F4F4F4]" data-testid="nav-browse">Browse Waves</Link>
+          )}
           {user && (
             <Link to="/dashboard" className="px-3 py-2 hover:bg-[#F4F4F4]" data-testid="nav-dashboard">My Waves</Link>
           )}
