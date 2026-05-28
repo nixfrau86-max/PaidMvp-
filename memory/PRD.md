@@ -19,8 +19,18 @@ Build a real-time demand aggregation platform that turns fragmented consumer int
 7. Payment methods (admin-configurable fees + recommended flag + on/off): Open Banking (+£1, recommended), Apple Pay (+£3), Google Pay (+£3), Card (+£3), Bank Transfer (+£1.50). Wallet rails route through Stripe; OB/Bank Transfer mocked until TrueLayer/Faster Payments are wired.
 8. Admin role is restricted to `ADMIN_EMAILS` env allowlist.
 
-## What's implemented (latest — 2026-05-28)
-### Supplier category multi-select + tyre gating (NEW)
+## What's implemented (latest — 2026-05-28b)
+### Admin Users tab + T&Cs audit + Firebase Analytics (NEW, P0)
+- **Admin Users tab** (`/admin` → Users): list with search (email/name/user_id), role + status filters, paginated table. Inline role select (consumer/supplier/garage/admin, admin grants gated by `ADMIN_EMAILS` env allowlist). Actions: suspend (with reason), unsuspend, soft-delete (frees email + invalidates sessions), hard-delete (irreversible, double-confirm via email retype), and Details modal showing activity stats (VPP + Tyre participations + payment_transactions). Cannot modify self / admin.
+- **Admin Audit log** — every admin action (`user_update`, `user_soft_delete`, `user_hard_delete`) recorded in `admin_audit_log` with actor + target + changes + timestamp. `GET /api/admin/audit-log` returns the latest 500.
+- **Suspension is enforced at the gate**: `get_current_user()` rejects suspended (403) + deleted (403) accounts; `/api/auth/login` returns 403 before issuing a session for suspended users. All active sessions are purged on suspend/delete via `db.user_sessions.delete_many`.
+- **T&Cs static pages**: `/terms` and `/privacy` (versioned v1.0, effective 2026-05-28). Linked from Landing footer + AdminPanel `T&Cs Audit` tab + footer of all key pages.
+- **T&Cs acceptance audit**: tick-boxes on **Tyre Wave Join** (gates Join button until checked) and **Supplier Onboarding** (gates apply). Each acceptance recorded in `terms_acceptances` with `{user_id, doc_id, version, is_current, context, ip, user_agent, accepted_at}`. Admin can filter audit by doc / user.
+- **New backend endpoints**: `GET /api/terms/docs`, `POST /api/terms/accept`, `GET /api/terms/me`, `GET /api/admin/terms/audit`, `GET/PATCH/DELETE /api/admin/users[/:id]`, `GET /api/admin/audit-log`.
+- **Firebase Analytics**: Firebase Web SDK initialised from `REACT_APP_FIREBASE_*` env vars (project `the-collective-savers-paid-mvp`, measurementId `G-CES43X2L3W`). `track('page_view')` on every route change, `track('tyre_wave_join')` on Wave join, `identify(user)` on login/logout. Silent no-op if not enabled.
+- **Iteration_6 testing**: 20/20 backend pytest pass. Initial frontend bug (UsersTab + TermsAuditTab mounts missing) FIXED + redeployed. `db.sessions` → `db.user_sessions` collection bug also fixed.
+
+### Supplier category multi-select + tyre gating (2026-05-28a)
 - Supplier model now stores `categories: List[str]` (multi-select) alongside back-compat `category`. `_serialize_supplier` returns `is_tyre_supplier: bool` for frontend gating.
 - Supplier onboarding form replaced the single-category dropdown with **tick-box cards** (Tyres / Automotive / Electronics / Home & Garden / Consumer Goods / Services / Other). "Tyres" tile carries an "Auto Engine" badge.
 - `/supplier/onboarding` now also serves EXISTING suppliers — pre-fills form + PATCHes `/suppliers/me` so anyone can add Tyres later without re-applying.

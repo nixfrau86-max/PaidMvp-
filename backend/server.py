@@ -3177,7 +3177,7 @@ async def admin_update_user(
             updates["suspended_reason"] = payload.suspended_reason or "Suspended by admin"
             updates["suspended_at"] = datetime.now(timezone.utc).isoformat()
             # Invalidate active sessions
-            await db.sessions.delete_many({"user_id": user_id})
+            await db.user_sessions.delete_many({"user_id": user_id})
         elif payload.status == "active":
             updates["suspended_reason"] = None
             updates["suspended_at"] = None
@@ -3217,7 +3217,7 @@ async def admin_delete_user(
     if target.get("role") == "admin":
         raise HTTPException(status_code=400, detail="Cannot delete an admin account")
 
-    await db.sessions.delete_many({"user_id": user_id})
+    await db.user_sessions.delete_many({"user_id": user_id})
 
     if hard:
         await db.users.delete_one({"user_id": user_id})

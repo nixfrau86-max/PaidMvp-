@@ -256,6 +256,8 @@ export default function AdminPanel() {
         </div>
       )}
       {tab === "fees" && <FeesTab />}
+      {tab === "users" && <UsersTab />}
+      {tab === "terms" && <TermsAuditTab />}
     </Shell>
   );
 }
