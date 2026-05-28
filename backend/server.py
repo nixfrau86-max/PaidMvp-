@@ -2240,6 +2240,788 @@ async def admin_update_fees(payload: FeeConfigUpdate, user: dict = Depends(get_c
 
 
 # =====================================================================
+# TYRE PRODUCT GROUP WAVES — Auto Wave Engine (MVP infrastructure)
+# =====================================================================
+# Suppliers DO NOT manually create Waves. They upload tyre inventory as
+# Product Groups (e.g. "Michelin · CrossClimate 2"). The platform auto-
+# creates ONE live Wave per Product Group; users join the Wave and
+# select a tyre size at participation time.
+# ---------------------------------------------------------------------
+TyreAvailability = Literal["in_stock", "limited", "supplier_confirming", "out_of_stock"]
+TyreWaveState = Literal["active", "locked", "completed", "paused"]
+
+
+class TyreSize(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    size_id: str = Field(default_factory=lambda: f"sz_{uuid.uuid4().hex[:10]}")
+    product_group_id: str
+    tyre_size: str                 # canonical e.g. "225/65/R18"
+    inventory: int = 0
+    supplier_price: float
+    retail_price: float
+    availability: TyreAvailability = "in_stock"
+    eta_days: int = 2
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class ProductGroup(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    product_group_id: str = Field(default_factory=lambda: f"pg_{uuid.uuid4().hex[:10]}")
+    supplier_id: str
+    brand: str
+    model: str
+    category: str                  # e.g. "Premium All-Season"
+    description: Optional[str] = ""
+    hero_image_url: Optional[str] = (
+        "https://images.unsplash.com/photo-1601411101851-ea0e07766235?w=1200&q=80&auto=format"
+    )
+    target_count: int = 100        # Wave threshold set by supplier at creation
+    status: str = "live"           # live | paused
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class TyreWave(BaseModel):
+    """Auto-managed wave bound to a single ProductGroup."""
+    model_config = ConfigDict(extra="ignore")
+    wave_id: str = Field(default_factory=lambda: f"twv_{uuid.uuid4().hex[:10]}")
+    product_group_id: str
+    target_count: int
+    participants_count: int = 0
+    state: TyreWaveState = "active"
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    locked_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+
+
+class TyreParticipation(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    participation_id: str = Field(default_factory=lambda: f"tp_{uuid.uuid4().hex[:10]}")
+    wave_id: str
+    product_group_id: str
+    user_id: str
+    user_email: str
+    user_name: str
+    selected_size: str
+    size_id: Optional[str] = None
+    payment_status: str = "preauth_pending"  # preauth_pending | preauth_held | captured | refunded
+    joined_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+# ----------- Request schemas -----------
+class TyreSizeInput(BaseModel):
+    tyre_size: str
+    inventory: int = 0
+    supplier_price: float
+    retail_price: float
+    availability: TyreAvailability = "in_stock"
+    eta_days: int = 2
+
+
+class ProductGroupCreateRequest(BaseModel):
+    brand: str
+    model: str
+    category: str
+    description: Optional[str] = ""
+    hero_image_url: Optional[str] = None
+    target_count: int = 100
+    sizes: List[TyreSizeInput] = Field(default_factory=list)
+
+
+class ProductGroupUpdateRequest(BaseModel):
+    brand: Optional[str] = None
+    model: Optional[str] = None
+    category: Optional[str] = None
+    description: Optional[str] = None
+    hero_image_url: Optional[str] = None
+    target_count: Optional[int] = None
+    status: Optional[str] = None
+
+
+class SizesBulkUpsertRequest(BaseModel):
+    sizes: List[TyreSizeInput]
+    mode: Literal["upsert", "overwrite"] = "upsert"
+
+
+class ApiInventorySyncRequest(BaseModel):
+    """Used by suppliers to sync inventory via API feed."""
+    brand: str
+    model: str
+    category: str
+    sizes: List[TyreSizeInput]
+    target_count: Optional[int] = None
+    hero_image_url: Optional[str] = None
+    description: Optional[str] = ""
+
+
+class TyreJoinRequest(BaseModel):
+    selected_size: str
+
+
+# ----------- Helpers -----------
+def _serialize_pg(pg: dict) -> dict:
+    d = dict(pg)
+    d.pop("_id", None)
+    if isinstance(d.get("created_at"), datetime):
+        d["created_at"] = d["created_at"].isoformat()
+    return d
+
+
+def _serialize_tyre_size(s: dict) -> dict:
+    d = dict(s)
+    d.pop("_id", None)
+    if isinstance(d.get("updated_at"), datetime):
+        d["updated_at"] = d["updated_at"].isoformat()
+    return d
+
+
+def _serialize_wave(w: dict) -> dict:
+    d = dict(w)
+    d.pop("_id", None)
+    for k in ("created_at", "locked_at", "completed_at"):
+        v = d.get(k)
+        if isinstance(v, datetime):
+            d[k] = v.isoformat()
+    target = max(1, int(d.get("target_count", 1)))
+    d["progress_pct"] = round(min(100.0, d.get("participants_count", 0) / target * 100), 1)
+    return d
+
+
+_TYRE_SIZE_RE = re.compile(r"^\d{3}/\d{2}/?R\d{2}$", re.IGNORECASE)
+
+
+def _normalize_size(s: str) -> str:
+    s = (s or "").strip().upper().replace(" ", "")
+    # accept "225/65R18" or "225/65/R18"
+    s = re.sub(r"^(\d{3})/(\d{2})R(\d{2})$", r"\1/\2/R\3", s)
+    return s
+
+
+def _validate_size(s: str) -> str:
+    norm = _normalize_size(s)
+    if not _TYRE_SIZE_RE.match(norm):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid tyre size '{s}'. Expected format e.g. 225/65/R18",
+        )
+    return norm
+
+
+async def _aggregate_wave_stats(pg: dict) -> dict:
+    """Compute live wave-level stats from sizes (price band, availability summary)."""
+    sizes = await db.tyre_sizes.find(
+        {"product_group_id": pg["product_group_id"]}, {"_id": 0}
+    ).sort("tyre_size", 1).to_list(200)
+    retails = [float(s["retail_price"]) for s in sizes if s.get("retail_price")]
+    suppliers = [float(s["supplier_price"]) for s in sizes if s.get("supplier_price")]
+    total_inv = sum(int(s.get("inventory", 0)) for s in sizes)
+    out = {
+        "size_count": len(sizes),
+        "total_inventory": total_inv,
+        "retail_min": min(retails) if retails else 0,
+        "retail_max": max(retails) if retails else 0,
+        "supplier_min": min(suppliers) if suppliers else 0,
+        "supplier_max": max(suppliers) if suppliers else 0,
+    }
+    # Estimated savings band (15-25% off retail) — never reveals final price
+    if out["retail_min"] and out["supplier_min"]:
+        lo_pct = max(0, round((out["retail_min"] - out["retail_min"] * 0.85) / out["retail_min"] * 100))
+        hi_pct = max(0, round((out["retail_min"] - out["supplier_min"]) / out["retail_min"] * 100))
+        if hi_pct < lo_pct:
+            hi_pct = lo_pct + 5
+        out["savings_band_pct"] = [lo_pct, hi_pct]
+    else:
+        out["savings_band_pct"] = [15, 25]
+    return out
+
+
+async def _ensure_wave_for_pg(pg: dict) -> dict:
+    """Idempotent: returns the live wave for a product group, creating one if absent."""
+    existing = await db.tyre_waves.find_one(
+        {"product_group_id": pg["product_group_id"], "state": {"$in": ["active", "locked"]}},
+        {"_id": 0},
+    )
+    if existing:
+        # Sync target_count if supplier changed it
+        if existing.get("target_count") != pg.get("target_count"):
+            await db.tyre_waves.update_one(
+                {"wave_id": existing["wave_id"]},
+                {"$set": {"target_count": pg["target_count"]}},
+            )
+            existing["target_count"] = pg["target_count"]
+        return existing
+    wave = TyreWave(
+        product_group_id=pg["product_group_id"],
+        target_count=int(pg.get("target_count", 100)),
+    ).model_dump()
+    wave["created_at"] = wave["created_at"].isoformat()
+    await db.tyre_waves.insert_one(wave)
+    return wave
+
+
+async def _maybe_lock_wave(wave: dict) -> dict:
+    if wave["state"] == "active" and wave["participants_count"] >= wave["target_count"]:
+        now = datetime.now(timezone.utc).isoformat()
+        await db.tyre_waves.update_one(
+            {"wave_id": wave["wave_id"]},
+            {"$set": {"state": "locked", "locked_at": now}},
+        )
+        wave["state"] = "locked"
+        wave["locked_at"] = now
+        await manager.broadcast(
+            f"tyrewave:{wave['wave_id']}",
+            {"type": "state_change", "wave": _serialize_wave(wave)},
+        )
+        await manager.broadcast(
+            "tyrewaves:all",
+            {"type": "state_change", "wave": _serialize_wave(wave)},
+        )
+    return wave
+
+
+async def _require_supplier(user: dict) -> dict:
+    if user.get("role") not in ("supplier", "admin"):
+        raise HTTPException(status_code=403, detail="Supplier or admin role required")
+    if user.get("role") == "supplier":
+        s = await db.suppliers.find_one({"user_id": user["user_id"]}, {"_id": 0})
+        if not s:
+            raise HTTPException(status_code=403, detail="Apply as a supplier first")
+        if s.get("status") == "rejected":
+            raise HTTPException(status_code=403, detail="Your supplier account was rejected")
+        return s
+    # admin acting → return synthetic supplier-less context
+    return {"supplier_id": "admin", "business_name": "Platform Admin", "status": "verified"}
+
+
+# ============== SUPPLIER ENDPOINTS — Product Groups ==============
+@api_router.post("/supplier/product-groups")
+async def create_product_group(
+    payload: ProductGroupCreateRequest, user: dict = Depends(get_current_user)
+):
+    supplier = await _require_supplier(user)
+    pg = ProductGroup(
+        supplier_id=supplier["supplier_id"],
+        brand=payload.brand.strip(),
+        model=payload.model.strip(),
+        category=payload.category.strip(),
+        description=payload.description or "",
+        hero_image_url=payload.hero_image_url
+            or "https://images.unsplash.com/photo-1601411101851-ea0e07766235?w=1200&q=80&auto=format",
+        target_count=max(1, int(payload.target_count)),
+    ).model_dump()
+    pg["created_at"] = pg["created_at"].isoformat()
+    await db.product_groups.insert_one(pg)
+    # Insert sizes
+    for s in payload.sizes:
+        norm = _validate_size(s.tyre_size)
+        sz = TyreSize(
+            product_group_id=pg["product_group_id"],
+            tyre_size=norm,
+            inventory=max(0, int(s.inventory)),
+            supplier_price=float(s.supplier_price),
+            retail_price=float(s.retail_price),
+            availability=s.availability,
+            eta_days=int(s.eta_days),
+        ).model_dump()
+        sz["updated_at"] = sz["updated_at"].isoformat()
+        await db.tyre_sizes.insert_one(sz)
+    # Auto-create wave
+    await _ensure_wave_for_pg(pg)
+    return _serialize_pg(pg)
+
+
+@api_router.get("/supplier/product-groups")
+async def list_my_product_groups(user: dict = Depends(get_current_user)):
+    supplier = await _require_supplier(user)
+    q = {} if user.get("role") == "admin" else {"supplier_id": supplier["supplier_id"]}
+    docs = await db.product_groups.find(q, {"_id": 0}).sort("created_at", -1).to_list(500)
+    out = []
+    for pg in docs:
+        stats = await _aggregate_wave_stats(pg)
+        wave = await _ensure_wave_for_pg(pg)
+        out.append({
+            **_serialize_pg(pg),
+            "stats": stats,
+            "wave": _serialize_wave(wave),
+        })
+    return out
+
+
+@api_router.get("/supplier/product-groups/{pg_id}")
+async def supplier_get_product_group(pg_id: str, user: dict = Depends(get_current_user)):
+    supplier = await _require_supplier(user)
+    pg = await db.product_groups.find_one({"product_group_id": pg_id}, {"_id": 0})
+    if not pg:
+        raise HTTPException(status_code=404, detail="Product group not found")
+    if user.get("role") == "supplier" and pg["supplier_id"] != supplier["supplier_id"]:
+        raise HTTPException(status_code=403, detail="Not your product group")
+    sizes = await db.tyre_sizes.find(
+        {"product_group_id": pg_id}, {"_id": 0}
+    ).sort("tyre_size", 1).to_list(200)
+    wave = await _ensure_wave_for_pg(pg)
+    return {
+        **_serialize_pg(pg),
+        "sizes": [_serialize_tyre_size(s) for s in sizes],
+        "wave": _serialize_wave(wave),
+        "stats": await _aggregate_wave_stats(pg),
+    }
+
+
+@api_router.patch("/supplier/product-groups/{pg_id}")
+async def update_product_group(
+    pg_id: str, payload: ProductGroupUpdateRequest, user: dict = Depends(get_current_user)
+):
+    supplier = await _require_supplier(user)
+    pg = await db.product_groups.find_one({"product_group_id": pg_id}, {"_id": 0})
+    if not pg:
+        raise HTTPException(status_code=404, detail="Product group not found")
+    if user.get("role") == "supplier" and pg["supplier_id"] != supplier["supplier_id"]:
+        raise HTTPException(status_code=403, detail="Not your product group")
+    updates = {k: v for k, v in payload.model_dump(exclude_unset=True).items() if v is not None}
+    if updates:
+        await db.product_groups.update_one({"product_group_id": pg_id}, {"$set": updates})
+    pg = await db.product_groups.find_one({"product_group_id": pg_id}, {"_id": 0})
+    await _ensure_wave_for_pg(pg)
+    return _serialize_pg(pg)
+
+
+@api_router.put("/supplier/product-groups/{pg_id}/sizes")
+async def bulk_upsert_sizes(
+    pg_id: str, payload: SizesBulkUpsertRequest, user: dict = Depends(get_current_user)
+):
+    supplier = await _require_supplier(user)
+    pg = await db.product_groups.find_one({"product_group_id": pg_id}, {"_id": 0})
+    if not pg:
+        raise HTTPException(status_code=404, detail="Product group not found")
+    if user.get("role") == "supplier" and pg["supplier_id"] != supplier["supplier_id"]:
+        raise HTTPException(status_code=403, detail="Not your product group")
+
+    if payload.mode == "overwrite":
+        await db.tyre_sizes.delete_many({"product_group_id": pg_id})
+
+    errors: List[Dict[str, Any]] = []
+    inserted = 0
+    updated = 0
+    for s in payload.sizes:
+        try:
+            norm = _validate_size(s.tyre_size)
+            if s.supplier_price <= 0 or s.retail_price <= 0:
+                raise HTTPException(status_code=400, detail="Prices must be > 0")
+            doc = {
+                "product_group_id": pg_id,
+                "tyre_size": norm,
+                "inventory": max(0, int(s.inventory)),
+                "supplier_price": float(s.supplier_price),
+                "retail_price": float(s.retail_price),
+                "availability": s.availability,
+                "eta_days": int(s.eta_days),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+            existing = await db.tyre_sizes.find_one(
+                {"product_group_id": pg_id, "tyre_size": norm}, {"_id": 0}
+            )
+            if existing:
+                await db.tyre_sizes.update_one(
+                    {"product_group_id": pg_id, "tyre_size": norm}, {"$set": doc}
+                )
+                updated += 1
+            else:
+                doc["size_id"] = f"sz_{uuid.uuid4().hex[:10]}"
+                await db.tyre_sizes.insert_one(doc)
+                inserted += 1
+        except HTTPException as he:
+            errors.append({"row": s.model_dump(), "error": he.detail})
+        except Exception as e:
+            errors.append({"row": s.model_dump(), "error": str(e)})
+    return {"inserted": inserted, "updated": updated, "errors": errors}
+
+
+@api_router.delete("/supplier/product-groups/{pg_id}/sizes/{size_id}")
+async def delete_size(pg_id: str, size_id: str, user: dict = Depends(get_current_user)):
+    supplier = await _require_supplier(user)
+    pg = await db.product_groups.find_one({"product_group_id": pg_id}, {"_id": 0})
+    if not pg:
+        raise HTTPException(status_code=404, detail="Product group not found")
+    if user.get("role") == "supplier" and pg["supplier_id"] != supplier["supplier_id"]:
+        raise HTTPException(status_code=403, detail="Not your product group")
+    await db.tyre_sizes.delete_one({"product_group_id": pg_id, "size_id": size_id})
+    return {"success": True}
+
+
+@api_router.post("/supplier/product-groups/{pg_id}/csv-import")
+async def csv_import_sizes(
+    pg_id: str, payload: dict, user: dict = Depends(get_current_user)
+):
+    """Accepts {csv: "<full csv text>", mode: "upsert"|"overwrite"}. Returns row-level errors."""
+    supplier = await _require_supplier(user)
+    pg = await db.product_groups.find_one({"product_group_id": pg_id}, {"_id": 0})
+    if not pg:
+        raise HTTPException(status_code=404, detail="Product group not found")
+    if user.get("role") == "supplier" and pg["supplier_id"] != supplier["supplier_id"]:
+        raise HTTPException(status_code=403, detail="Not your product group")
+    text = (payload or {}).get("csv", "")
+    mode = (payload or {}).get("mode", "upsert")
+    if not text.strip():
+        raise HTTPException(status_code=400, detail="CSV is empty")
+
+    import csv
+    import io
+    reader = csv.DictReader(io.StringIO(text))
+    required = ["tyre_size", "inventory", "supplier_price", "retail_price"]
+    sizes: List[TyreSizeInput] = []
+    errors: List[Dict[str, Any]] = []
+    for i, row in enumerate(reader, start=2):  # row 1 = header
+        # tolerant column names
+        ck = {k.strip().lower(): (v.strip() if isinstance(v, str) else v) for k, v in row.items() if k}
+        missing = [c for c in required if c not in ck or ck[c] == ""]
+        if missing:
+            errors.append({"row": i, "error": f"Missing: {', '.join(missing)}", "data": ck})
+            continue
+        try:
+            avail_raw = (ck.get("availability") or "in stock").lower().replace(" ", "_")
+            avail_map = {
+                "in_stock": "in_stock", "limited": "limited",
+                "limited_availability": "limited",
+                "supplier_confirming": "supplier_confirming",
+                "out_of_stock": "out_of_stock",
+            }
+            sizes.append(TyreSizeInput(
+                tyre_size=ck["tyre_size"],
+                inventory=int(float(ck["inventory"])),
+                supplier_price=float(ck["supplier_price"]),
+                retail_price=float(ck["retail_price"]),
+                availability=avail_map.get(avail_raw, "in_stock"),
+                eta_days=int(float(ck.get("eta_days") or 2)),
+            ))
+        except Exception as e:
+            errors.append({"row": i, "error": f"Bad data: {e}", "data": ck})
+    if not sizes and errors:
+        return {"inserted": 0, "updated": 0, "errors": errors}
+    result = await bulk_upsert_sizes(
+        pg_id, SizesBulkUpsertRequest(sizes=sizes, mode=mode), user
+    )
+    result["errors"] = errors + result.get("errors", [])
+    return result
+
+
+@api_router.post("/supplier/product-groups/api-sync")
+async def supplier_api_sync(
+    payload: ApiInventorySyncRequest, user: dict = Depends(get_current_user)
+):
+    """Idempotent API feed: upserts a product group by (brand, model) and its sizes."""
+    supplier = await _require_supplier(user)
+    pg = await db.product_groups.find_one(
+        {"supplier_id": supplier["supplier_id"], "brand": payload.brand, "model": payload.model},
+        {"_id": 0},
+    )
+    if not pg:
+        pg = ProductGroup(
+            supplier_id=supplier["supplier_id"],
+            brand=payload.brand, model=payload.model,
+            category=payload.category, description=payload.description or "",
+            hero_image_url=payload.hero_image_url
+                or "https://images.unsplash.com/photo-1601411101851-ea0e07766235?w=1200&q=80&auto=format",
+            target_count=int(payload.target_count or 100),
+        ).model_dump()
+        pg["created_at"] = pg["created_at"].isoformat()
+        await db.product_groups.insert_one(pg)
+    elif payload.target_count or payload.hero_image_url:
+        upd = {}
+        if payload.target_count:
+            upd["target_count"] = int(payload.target_count)
+        if payload.hero_image_url:
+            upd["hero_image_url"] = payload.hero_image_url
+        if upd:
+            await db.product_groups.update_one(
+                {"product_group_id": pg["product_group_id"]}, {"$set": upd}
+            )
+            pg.update(upd)
+    await bulk_upsert_sizes(
+        pg["product_group_id"],
+        SizesBulkUpsertRequest(sizes=payload.sizes, mode="upsert"),
+        user,
+    )
+    await _ensure_wave_for_pg(pg)
+    return _serialize_pg(pg)
+
+
+# ============== PUBLIC / CONSUMER — Tyre Waves ==============
+@api_router.get("/tyre/waves")
+async def list_tyre_waves(size: Optional[str] = None, q: Optional[str] = None):
+    """Public list of live tyre product waves. Optionally filter by tyre size or query."""
+    groups = await db.product_groups.find({"status": "live"}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    out = []
+    norm = _normalize_size(size) if size else None
+    for pg in groups:
+        wave = await _ensure_wave_for_pg(pg)
+        stats = await _aggregate_wave_stats(pg)
+        if stats["size_count"] == 0:
+            continue
+        if norm:
+            has = await db.tyre_sizes.find_one(
+                {"product_group_id": pg["product_group_id"], "tyre_size": norm},
+                {"_id": 0},
+            )
+            if not has:
+                continue
+        if q:
+            blob = f"{pg['brand']} {pg['model']} {pg.get('category', '')}".lower()
+            if q.lower() not in blob:
+                continue
+        out.append({
+            **_serialize_pg(pg),
+            "wave": _serialize_wave(wave),
+            "stats": stats,
+        })
+    return out
+
+
+@api_router.get("/tyre/sizes")
+async def list_all_tyre_sizes():
+    """Distinct list of tyre sizes available across live product groups (for size pickers)."""
+    sizes = await db.tyre_sizes.distinct("tyre_size")
+    return sorted(sizes)
+
+
+@api_router.get("/tyre/waves/{pg_id}")
+async def get_tyre_wave(pg_id: str, user: Optional[dict] = Depends(get_current_user_optional)):
+    pg = await db.product_groups.find_one({"product_group_id": pg_id}, {"_id": 0})
+    if not pg:
+        raise HTTPException(status_code=404, detail="Wave not found")
+    sizes = await db.tyre_sizes.find(
+        {"product_group_id": pg_id}, {"_id": 0}
+    ).sort("tyre_size", 1).to_list(200)
+    wave = await _ensure_wave_for_pg(pg)
+    wave = await _maybe_lock_wave(wave)
+    stats = await _aggregate_wave_stats(pg)
+    # Privacy: hide supplier_price from consumers; only show retail per size + availability
+    public_sizes = [{
+        "size_id": s["size_id"],
+        "tyre_size": s["tyre_size"],
+        "retail_price": float(s["retail_price"]),
+        "availability": s["availability"],
+        "eta_days": int(s["eta_days"]),
+        "inventory_band": (
+            "out_of_stock" if int(s.get("inventory", 0)) == 0 else
+            "limited" if int(s.get("inventory", 0)) < 5 else "available"
+        ),
+    } for s in sizes]
+    has_joined = False
+    selected_size = None
+    if user:
+        p = await db.tyre_participations.find_one(
+            {"product_group_id": pg_id, "user_id": user["user_id"]}, {"_id": 0}
+        )
+        if p:
+            has_joined = True
+            selected_size = p.get("selected_size")
+    return {
+        **_serialize_pg(pg),
+        "sizes": public_sizes,
+        "wave": _serialize_wave(wave),
+        "stats": stats,
+        "has_joined": has_joined,
+        "selected_size": selected_size,
+        # Privacy: supplier identity hidden until wave locks
+        "supplier_name": "Verified Supplier",
+    }
+
+
+@api_router.post("/tyre/waves/{pg_id}/join")
+async def join_tyre_wave(
+    pg_id: str, payload: TyreJoinRequest, user: dict = Depends(get_current_user)
+):
+    pg = await db.product_groups.find_one({"product_group_id": pg_id}, {"_id": 0})
+    if not pg:
+        raise HTTPException(status_code=404, detail="Wave not found")
+    if pg.get("status") != "live":
+        raise HTTPException(status_code=400, detail="This wave is not accepting members")
+    norm = _validate_size(payload.selected_size)
+    size_doc = await db.tyre_sizes.find_one(
+        {"product_group_id": pg_id, "tyre_size": norm}, {"_id": 0}
+    )
+    if not size_doc:
+        raise HTTPException(status_code=400, detail="Selected size not in this wave")
+    if size_doc.get("availability") == "out_of_stock" or int(size_doc.get("inventory", 0)) <= 0:
+        raise HTTPException(status_code=400, detail="Selected size is out of stock")
+    wave = await _ensure_wave_for_pg(pg)
+    if wave["state"] not in ("active", "locked"):
+        raise HTTPException(status_code=400, detail=f"Wave is {wave['state']}")
+    # Idempotent join: update existing selected_size if already joined
+    existing = await db.tyre_participations.find_one(
+        {"product_group_id": pg_id, "user_id": user["user_id"]}, {"_id": 0}
+    )
+    if existing:
+        await db.tyre_participations.update_one(
+            {"participation_id": existing["participation_id"]},
+            {"$set": {"selected_size": norm, "size_id": size_doc["size_id"]}},
+        )
+        return {
+            "already_joined": True,
+            "wave": _serialize_wave(wave),
+            "selected_size": norm,
+        }
+    part = TyreParticipation(
+        wave_id=wave["wave_id"],
+        product_group_id=pg_id,
+        user_id=user["user_id"],
+        user_email=user["email"],
+        user_name=user["name"],
+        selected_size=norm,
+        size_id=size_doc["size_id"],
+    ).model_dump()
+    part["joined_at"] = part["joined_at"].isoformat()
+    await db.tyre_participations.insert_one(part)
+    await db.tyre_waves.update_one(
+        {"wave_id": wave["wave_id"]}, {"$inc": {"participants_count": 1}}
+    )
+    wave = await db.tyre_waves.find_one({"wave_id": wave["wave_id"]}, {"_id": 0})
+    wave = await _maybe_lock_wave(wave)
+    # Broadcast live counter
+    await manager.broadcast(
+        f"tyrewave:{wave['wave_id']}",
+        {
+            "type": "user_joined",
+            "wave": _serialize_wave(wave),
+            "first_name": (user.get("name") or "Someone").split(" ")[0],
+        },
+    )
+    await manager.broadcast(
+        "tyrewaves:all", {"type": "user_joined", "wave": _serialize_wave(wave)}
+    )
+    return {"success": True, "wave": _serialize_wave(wave), "selected_size": norm}
+
+
+@api_router.get("/me/tyre-waves")
+async def my_tyre_waves(user: dict = Depends(get_current_user)):
+    parts = await db.tyre_participations.find(
+        {"user_id": user["user_id"]}, {"_id": 0}
+    ).sort("joined_at", -1).to_list(200)
+    out = []
+    for p in parts:
+        pg = await db.product_groups.find_one(
+            {"product_group_id": p["product_group_id"]}, {"_id": 0}
+        )
+        if not pg:
+            continue
+        wave = await _ensure_wave_for_pg(pg)
+        out.append({
+            "product_group": _serialize_pg(pg),
+            "wave": _serialize_wave(wave),
+            "selected_size": p["selected_size"],
+            "payment_status": p["payment_status"],
+            "joined_at": p["joined_at"] if isinstance(p["joined_at"], str) else p["joined_at"].isoformat(),
+        })
+    return out
+
+
+# ============== ADMIN ==============
+@api_router.get("/admin/product-groups")
+async def admin_list_product_groups(user: dict = Depends(get_current_user)):
+    await require_role(user, ["admin"])
+    groups = await db.product_groups.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    out = []
+    for pg in groups:
+        wave = await _ensure_wave_for_pg(pg)
+        stats = await _aggregate_wave_stats(pg)
+        out.append({**_serialize_pg(pg), "wave": _serialize_wave(wave), "stats": stats})
+    return out
+
+
+# ----------- Seed sample tyre product groups (for demo) -----------
+TYRE_PG_SEED = [
+    {
+        "brand": "Michelin", "model": "CrossClimate 2", "category": "Premium All-Season",
+        "description": "All-weather flagship. Outstanding wet braking + 3PMSF winter certification.",
+        "hero_image_url": "https://images.unsplash.com/photo-1487754180451-c456f719a1fc?w=1600&q=80&auto=format",
+        "target_count": 100,
+        "preload_joins": 82,
+        "sizes": [
+            {"tyre_size": "225/65/R18", "inventory": 40, "supplier_price": 88, "retail_price": 138, "availability": "in_stock", "eta_days": 2},
+            {"tyre_size": "225/60/R18", "inventory": 24, "supplier_price": 86, "retail_price": 132, "availability": "in_stock", "eta_days": 2},
+            {"tyre_size": "235/45/R19", "inventory": 4, "supplier_price": 110, "retail_price": 168, "availability": "limited", "eta_days": 4},
+            {"tyre_size": "205/55/R16", "inventory": 60, "supplier_price": 64, "retail_price": 102, "availability": "in_stock", "eta_days": 2},
+        ],
+    },
+    {
+        "brand": "Continental", "model": "PremiumContact 7", "category": "Premium Summer",
+        "description": "Engineered for the sweet spot of grip, comfort and longevity.",
+        "hero_image_url": "https://images.unsplash.com/photo-1518289646695-2eb4d05a8959?w=1600&q=80&auto=format",
+        "target_count": 80,
+        "preload_joins": 41,
+        "sizes": [
+            {"tyre_size": "205/55/R16", "inventory": 50, "supplier_price": 70, "retail_price": 108, "availability": "in_stock", "eta_days": 2},
+            {"tyre_size": "225/45/R17", "inventory": 22, "supplier_price": 82, "retail_price": 128, "availability": "in_stock", "eta_days": 3},
+            {"tyre_size": "245/40/R18", "inventory": 8, "supplier_price": 99, "retail_price": 152, "availability": "limited", "eta_days": 5},
+        ],
+    },
+    {
+        "brand": "Pirelli", "model": "P Zero PZ4", "category": "Ultra-High Performance",
+        "description": "Track-bred grip. The OE choice of supercar marques.",
+        "hero_image_url": "https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?w=1600&q=80&auto=format",
+        "target_count": 60,
+        "preload_joins": 12,
+        "sizes": [
+            {"tyre_size": "245/35/R19", "inventory": 14, "supplier_price": 145, "retail_price": 215, "availability": "in_stock", "eta_days": 4},
+            {"tyre_size": "265/30/R20", "inventory": 0, "supplier_price": 165, "retail_price": 245, "availability": "out_of_stock", "eta_days": 7},
+            {"tyre_size": "275/35/R20", "inventory": 3, "supplier_price": 175, "retail_price": 259, "availability": "limited", "eta_days": 6},
+        ],
+    },
+]
+
+
+async def _seed_tyre_product_groups():
+    if await db.product_groups.count_documents({}) > 0:
+        return 0
+    # Find or create the system supplier for seeded groups
+    sup = await db.suppliers.find_one({"business_name": "TyreDirect UK"}, {"_id": 0})
+    if not sup:
+        sup_id = f"sup_{uuid.uuid4().hex[:10]}"
+        await db.suppliers.insert_one({
+            "supplier_id": sup_id,
+            "user_id": "seed",
+            "business_name": "TyreDirect UK",
+            "contact_email": "supply@tyredirect.example",
+            "category": "Tyres",
+            "description": "Trusted UK tyre distributor",
+            "status": "verified",
+            "info_level": "standard",
+            "waves_published": 0,
+            "provisional_cap": 1,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+        sup = await db.suppliers.find_one({"supplier_id": sup_id}, {"_id": 0})
+    count = 0
+    for s in TYRE_PG_SEED:
+        pg = ProductGroup(
+            supplier_id=sup["supplier_id"],
+            brand=s["brand"], model=s["model"], category=s["category"],
+            description=s["description"], hero_image_url=s["hero_image_url"],
+            target_count=s["target_count"],
+        ).model_dump()
+        pg["created_at"] = pg["created_at"].isoformat()
+        await db.product_groups.insert_one(pg)
+        for sz in s["sizes"]:
+            doc = TyreSize(
+                product_group_id=pg["product_group_id"],
+                tyre_size=_normalize_size(sz["tyre_size"]),
+                inventory=sz["inventory"], supplier_price=sz["supplier_price"],
+                retail_price=sz["retail_price"], availability=sz["availability"],
+                eta_days=sz["eta_days"],
+            ).model_dump()
+            doc["updated_at"] = doc["updated_at"].isoformat()
+            await db.tyre_sizes.insert_one(doc)
+        wave = await _ensure_wave_for_pg(pg)
+        # Preload synthetic participant counter so UX feels alive
+        preload = int(s.get("preload_joins", 0))
+        if preload:
+            await db.tyre_waves.update_one(
+                {"wave_id": wave["wave_id"]}, {"$set": {"participants_count": preload}}
+            )
+        count += 1
+    return count
+
+
+# =====================================================================
 # WEBSOCKET ROUTES
 # =====================================================================
 @app.websocket("/api/ws/vpp/{vpp_id}")
@@ -2256,6 +3038,28 @@ async def ws_vpp(websocket: WebSocket, vpp_id: str):
 @app.websocket("/api/ws/feed")
 async def ws_feed(websocket: WebSocket):
     room = "vpps:all"
+    await manager.connect(websocket, room)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket, room)
+
+
+@app.websocket("/api/ws/tyrewave/{wave_id}")
+async def ws_tyre_wave(websocket: WebSocket, wave_id: str):
+    room = f"tyrewave:{wave_id}"
+    await manager.connect(websocket, room)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket, room)
+
+
+@app.websocket("/api/ws/tyrewaves")
+async def ws_tyre_waves_feed(websocket: WebSocket):
+    room = "tyrewaves:all"
     await manager.connect(websocket, room)
     try:
         while True:
@@ -2458,6 +3262,13 @@ async def startup():
         logger.info("Seeding initial VPPs...")
         await seed(force=False)
         logger.info("Seed complete")
+    # Auto-seed Tyre Product Groups if empty
+    try:
+        c = await _seed_tyre_product_groups()
+        if c:
+            logger.info(f"Seeded {c} tyre product groups")
+    except Exception as e:
+        logger.warning(f"Tyre PG seed warning: {e}")
     # Seed/refresh founder admin
     try:
         founder_email = os.environ.get("FOUNDER_EMAIL", "").strip().lower()

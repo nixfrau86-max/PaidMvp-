@@ -76,13 +76,22 @@ export default function SupplierDashboard() {
             </h1>
             <div className="font-mono text-xs uppercase tracking-widest text-[#3A3A3A] mt-1">{supplier.category} · {supplier.contact_email}</div>
           </div>
-          <Link
-            to="/supplier/waves/new"
-            className="bg-[#FF5400] text-white border-2 border-ink font-bold uppercase tracking-wider px-5 py-3 text-xs shadow-brut hover-brut inline-flex items-center gap-2"
-            data-testid="create-wave-btn"
-          >
-            <Plus weight="bold" /> Create Wave
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              to="/supplier/product-groups"
+              className="bg-ink text-white border-2 border-ink font-bold uppercase tracking-wider px-5 py-3 text-xs shadow-brut hover-brut inline-flex items-center gap-2"
+              data-testid="manage-pgs-btn"
+            >
+              <Package weight="bold" /> Tyre Product Groups
+            </Link>
+            <Link
+              to="/supplier/waves/new"
+              className="bg-[#FF5400] text-white border-2 border-ink font-bold uppercase tracking-wider px-5 py-3 text-xs shadow-brut hover-brut inline-flex items-center gap-2"
+              data-testid="create-wave-btn"
+            >
+              <Plus weight="bold" /> Create Wave
+            </Link>
+          </div>
         </div>
 
         {/* Status banner */}

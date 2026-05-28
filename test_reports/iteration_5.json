@@ -1,0 +1,46 @@
+{
+  "summary": "Tested Tyre Product Group Waves© auto-engine MVP. Backend pytest suite (23 tests) PASSES 100% — including listing/detail/privacy, size & query filtering, auth-guarded join with idempotent rejoin, auto-lock at target, out-of-stock rejection, supplier RBAC (consumer/supplier/admin), CSV import with row-level errors, sizes upsert/overwrite, api-sync idempotency, target_count→wave sync, and /me/tyre-waves. Frontend /tyres landing, search, size-filter and /tyre-wave/:id detail with size tiles + JOIN WAVE button render correctly with all required data-testid hooks. Navbar 'Tyre Waves' link present. Supplier route is protected (redirects unauth to home). Regression: 23/24 pre-existing backend tests still pass (1 pre-existing unrelated fee-engine failure: test_checkout_open_banking_mock_flow — discount config 0.0 vs 1.0, NOT a tyre-waves regression).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/tyre/waves?size=...", "issue": "Filter does NOT check size availability; a product group with that size set to out_of_stock will still surface in size search results. Consider filtering by inventory>0 / availability!=out_of_stock to match the consumer promise of 'compatible product Waves' the user can actually join."},
+      {"endpoint": "/api/tyre/waves/{pg_id}/join", "issue": "When the participant rejoins with an invalid size or an out_of_stock size, the endpoint returns 400 BEFORE the idempotent branch is reached, so the previously selected_size is preserved. This is correct behavior but worth documenting."},
+      {"endpoint": "/api/supplier/product-groups (admin)", "issue": "When user.role==admin, _require_supplier returns a synthetic supplier_id='admin'; creating PGs as admin assigns supplier_id='admin' which has no real Supplier record. Listing /api/supplier/product-groups for admin returns all (intended), but admin-created PGs will not be filterable by a real supplier. Suggest creating an explicit 'platform' supplier or refusing admin-side creates."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "TyreWaveDetail JoinWave button", "issue": "Anonymous user with a size selected can click the JOIN WAVE button but there is no visible feedback (no redirect to sign-in, no toast). API returns 401; user is left wondering what happened. Recommendation: redirect to /login or show a clear toast on 401.", "selector": "[data-testid='join-wave-btn']", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/tyres landing", "issues": ["Hero stats (LIVE WAVES / MEMBERS JOINED / FITMENTS TRACKED) and savings band copy look premium and on-brand. Cards, progress bars and SAVE % chips render cleanly with no contrast or overflow problems on 1920×4000 desktop."]},
+      {"screen": "/tyre-wave/:id", "issues": ["Size tile correctly disables OUT OF STOCK with reduced opacity; selected tile shows distinct border — good. 'Unlocks at completion' + 'Pre-authorise now · charged only when wave fills' communicates the privacy/savings band model elegantly."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_tyre_waves.py",
+    "/app/test_reports/pytest/iteration5_tyre_waves.xml"
+  ],
+  "action_items": [
+    "Optional: on /api/tyre/waves?size=, filter out product groups where that size is out_of_stock so users only see joinable waves.",
+    "On /tyre-wave/:id, when JOIN WAVE is clicked by an anonymous user, redirect to /login (or show a toast) instead of silently failing with 401.",
+    "Re-confirm /supplier/product-groups route guards (currently redirects unauth to '/'). Consider adding a 'Sign in to manage product groups' prompt instead of silent redirect.",
+    "Pre-existing (NOT this feature): /api/checkout/open-banking — discount returns 0.0 instead of expected 1.0; revisit fee engine config."
+  ],
+  "critical_code_review_comments": [
+    "/app/backend/server.py exceeds 3300 lines — strongly recommend splitting into modules (routers/tyre_waves.py, routers/supplier.py, routers/admin.py, services/wave_engine.py, models/tyre.py). Maintainability risk grows with each feature.",
+    "_serialize_pg / _serialize_wave / _serialize_tyre_size are nearly identical — extract a generic datetime-isoformat helper.",
+    "csv_import_sizes calls bulk_upsert_sizes directly as a function rather than via the route — works because it's an async def, but couples logic. Extract a pure async _bulk_upsert_sizes_impl(pg_id, sizes, mode, user) and have both route handlers call it.",
+    "Backend uses Bearer session_token from MongoDB collection user_sessions (cookie-less). Acceptable for the MVP but document this auth model.",
+    "Stripe pre-auth/Resend INTENTIONALLY MOCKED per problem statement — payment_status stays 'preauth_pending'. Not a bug; flagging that the join flow short-circuits the payment hold."
+  ],
+  "updated_files": ["/app/backend/tests/test_tyre_waves.py"],
+  "success_rate": {"backend": "100% (23/23 tyre-waves); 95.8% (23/24 full regression — 1 pre-existing fee-engine failure)", "frontend": "100% on critical paths tested (landing, size filter, detail, size tiles, join button presence, supplier route guard)"},
+  "test_credentials": "Tests seed users directly into MongoDB via mongosh with role consumer/supplier/admin and an active user_sessions document, then call API with Bearer <session_token>. This bypasses the need for OAuth in tests. Cleanup removes all TEST_* PGs/suppliers afterwards.",
+  "seed_data_creation": "Backend _seed_tyre_product_groups() correctly creates 3 product groups on startup (Michelin CrossClimate 2 target=100, Continental PremiumContact 7 target=80, Pirelli P Zero PZ4 target=60) with realistic sizes and inventory. Verified on /tyres landing after cleanup. NOTE: Michelin CrossClimate 2 participants_count grew from 82→84 during testing (expected, two consumer joins). If a clean baseline is required, reset participants_count in tyre_waves collection.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Tyre Wave auto-engine is fully functional end-to-end. Use /app/backend/tests/test_tyre_waves.py for regression. Helper _seed_user/_seed_supplier_user in that file creates DB-backed test sessions — reuse for any new tyre-waves tests. Cleanup test PGs with the cleanup snippet using regex /^TEST_/ on product_groups + suppliers + cascading tyre_sizes/tyre_waves/tyre_participations. Stripe pre-auth + Resend emails are deferred to next phase; do not assert on payment_status beyond 'preauth_pending'.",
+  "rca of the issue": "N/A — no blocking bugs found. Minor UX gap: anonymous JOIN WAVE click on /tyre-wave/:id needs a redirect-to-login or toast (currently silent 401)."
+}
