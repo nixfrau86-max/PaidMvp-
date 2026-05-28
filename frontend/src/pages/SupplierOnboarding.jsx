@@ -8,7 +8,15 @@ import {
   Storefront, CheckCircle, ArrowRight, Lightning, ShieldCheck, Package, ChartLineUp,
 } from "@phosphor-icons/react";
 
-const CATEGORIES = ["Tyres", "Electronics", "Home", "Automotive", "Consumer Goods", "Services", "Other"];
+const CATEGORY_OPTIONS = [
+  { id: "Tyres",          label: "Tyres",            sub: "Unlocks Auto Wave Engine + Product Groups" },
+  { id: "Automotive",     label: "Automotive Parts", sub: "Brake pads, oils, filters, accessories" },
+  { id: "Electronics",    label: "Electronics",      sub: "Consumer electronics, peripherals, audio" },
+  { id: "Home",           label: "Home & Garden",    sub: "Appliances, furniture, garden goods" },
+  { id: "Consumer Goods", label: "Consumer Goods",   sub: "FMCG, personal care, household" },
+  { id: "Services",       label: "Services",         sub: "Installation, warranty, maintenance" },
+  { id: "Other",          label: "Other",            sub: "Anything else — tell us in description" },
+];
 
 export default function SupplierOnboarding() {
   const navigate = useNavigate();
@@ -18,10 +26,18 @@ export default function SupplierOnboarding() {
   const [form, setForm] = useState({
     business_name: "",
     contact_email: "",
-    category: "Tyres",
+    categories: [],           // multi-select tick-box (drives feature gating)
     description: "",
     logo_url: "",
   });
+
+  const toggleCategory = (id) =>
+    setForm((f) => ({
+      ...f,
+      categories: f.categories.includes(id)
+        ? f.categories.filter((c) => c !== id)
+        : [...f.categories, id],
+    }));
 
   useEffect(() => {
     if (loading) return;
@@ -30,8 +46,16 @@ export default function SupplierOnboarding() {
       try {
         const { data } = await api.get("/suppliers/me");
         setSupplier(data);
-        // Already a supplier → redirect to dashboard
-        navigate("/supplier");
+        // Existing supplier — pre-fill so they can edit categories (and other fields)
+        setForm({
+          business_name: data.business_name || "",
+          contact_email: data.contact_email || user.email || "",
+          categories: data.categories && data.categories.length
+            ? data.categories
+            : (data.category ? [data.category] : []),
+          description: data.description || "",
+          logo_url: data.logo_url || "",
+        });
       } catch {
         // Pre-fill email
         setForm((f) => ({ ...f, contact_email: user.email || "" }));
@@ -41,16 +65,37 @@ export default function SupplierOnboarding() {
 
   const submit = async (e) => {
     e.preventDefault();
+    if (form.categories.length === 0) {
+      toast.error("Please tick at least one product category");
+      return;
+    }
     setSubmitting(true);
     try {
-      const { data } = await api.post("/suppliers/apply", form);
+      const payload = {
+        business_name: form.business_name,
+        contact_email: form.contact_email,
+        description: form.description,
+        logo_url: form.logo_url,
+        category: form.categories[0],   // back-compat primary
+        categories: form.categories,
+      };
+      let data;
+      if (supplier) {
+        // Existing supplier — PATCH /suppliers/me to update categories etc.
+        ({ data } = await api.patch("/suppliers/me", payload));
+        toast.success("Profile updated");
+      } else {
+        ({ data } = await api.post("/suppliers/apply", payload));
+        toast.success("You're in! Your sandbox is live.");
+      }
       setSupplier(data);
       // Refresh user role
       try {
         const me = await api.get("/auth/me");
         setUser(me.data);
-      } catch {}
-      toast.success("You're in! Your sandbox is live.");
+      } catch (err) {
+        console.warn("Refresh /auth/me failed", err);
+      }
       navigate("/supplier");
     } catch (err) {
       toast.error(err?.response?.data?.detail || "Application failed");
@@ -129,15 +174,40 @@ export default function SupplierOnboarding() {
                 data-testid="apply-contact-email"
               />
             </Field>
-            <Field label="Category *">
-              <select
-                value={form.category}
-                onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
-                className="w-full border-2 border-ink p-3 font-mono text-sm bg-white"
-                data-testid="apply-category"
-              >
-                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
+            <Field label="What do you sell? * (tick all that apply)">
+              <div className="grid sm:grid-cols-2 gap-2" data-testid="apply-categories">
+                {CATEGORY_OPTIONS.map((c) => {
+                  const checked = form.categories.includes(c.id);
+                  return (
+                    <label
+                      key={c.id}
+                      className={`flex items-start gap-3 border-2 border-ink p-3 cursor-pointer transition-all ${checked ? "bg-ink text-white shadow-brut-sm" : "bg-white hover-brut shadow-brut-sm"}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleCategory(c.id)}
+                        className="mt-0.5 w-4 h-4 accent-[#FF5400]"
+                        data-testid={`apply-cat-${c.id.toLowerCase().replace(/[^a-z]/g, "")}`}
+                      />
+                      <div className="flex-1">
+                        <div className="font-bold uppercase text-xs tracking-widest font-mono flex items-center gap-2">
+                          {c.label}
+                          {c.id === "Tyres" && (
+                            <span className={`px-1.5 py-0.5 text-[9px] tracking-wider ${checked ? "bg-[#FF5400] text-white" : "bg-[#FF5400] text-white"}`}>
+                              Auto Engine
+                            </span>
+                          )}
+                        </div>
+                        <div className={`text-[10px] font-mono mt-0.5 ${checked ? "text-white/70" : "text-[#3A3A3A]"}`}>{c.sub}</div>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+              <div className="mt-2 text-[10px] font-mono uppercase tracking-widest text-[#3A3A3A]">
+                Non-tyre suppliers won't see the Tyre Product Groups section.
+              </div>
             </Field>
             <Field label="Short description *">
               <textarea
@@ -163,7 +233,7 @@ export default function SupplierOnboarding() {
             className="mt-6 w-full bg-[#FF5400] text-white border-2 border-ink font-bold uppercase tracking-wider px-6 py-4 text-base shadow-brut hover-brut disabled:opacity-60 inline-flex items-center justify-center gap-2"
             data-testid="apply-submit"
           >
-            <Storefront weight="fill" /> {submitting ? "Submitting..." : "Open My Sandbox"}
+            <Storefront weight="fill" /> {submitting ? "Saving..." : (supplier ? "Save Profile" : "Open My Sandbox")}
           </button>
           <div className="mt-3 text-[10px] font-mono uppercase tracking-widest text-[#3A3A3A] text-center">
             By applying you accept the supplier terms · No fees to list

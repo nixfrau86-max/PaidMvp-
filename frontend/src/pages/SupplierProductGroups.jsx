@@ -23,14 +23,26 @@ export default function SupplierProductGroups() {
   const [groups, setGroups] = useState([]);
   const [creating, setCreating] = useState(false);
   const [dataLoading, setDataLoading] = useState(true);
+  const [blocked, setBlocked] = useState(null);   // {message} when 403 (not a tyre supplier)
 
   const reload = useCallback(async () => {
     try {
       const { data } = await api.get("/supplier/product-groups");
       setGroups(data);
+      setBlocked(null);
     } catch (e) {
-      toast.error(e?.response?.data?.detail || "Could not load product groups");
-      if (e?.response?.status === 403) navigate("/supplier/onboarding");
+      if (e?.response?.status === 403) {
+        const msg = e?.response?.data?.detail || "Tyre Product Groups are reserved for suppliers tagged 'Tyres'.";
+        // If the error mentions Tyres tagging — show the gated screen instead of redirecting
+        if (/tyres/i.test(msg) || /tagged/i.test(msg)) {
+          setBlocked({ message: msg });
+        } else {
+          toast.error(msg);
+          navigate("/supplier/onboarding");
+        }
+      } else {
+        toast.error(e?.response?.data?.detail || "Could not load product groups");
+      }
     }
     setDataLoading(false);
   }, [navigate]);
@@ -49,6 +61,49 @@ export default function SupplierProductGroups() {
     return (
       <div className="min-h-screen bg-[#FAFAFA]"><Navbar />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10 font-mono uppercase tracking-widest text-sm">Loading…</div>
+      </div>
+    );
+  }
+
+  if (blocked) {
+    return (
+      <div className="min-h-screen bg-[#FAFAFA]">
+        <Navbar />
+        <div className="max-w-2xl mx-auto px-4 sm:px-6 py-16">
+          <div className="border-2 border-ink bg-white shadow-brut p-8" data-testid="pg-blocked-card">
+            <div className="text-[10px] font-bold uppercase tracking-[0.3em] font-mono text-[#FF5400] mb-2">Restricted Section</div>
+            <h1 className="font-display text-3xl sm:text-4xl uppercase tracking-tighter leading-[0.95] mb-4">
+              Tyre Product Groups<br/>
+              <span className="text-[#FF5400]">are tyre-only.</span>
+            </h1>
+            <p className="text-[15px] text-[#1A1A1A] mb-6 leading-relaxed">
+              {blocked.message}
+            </p>
+            <div className="border-2 border-ink bg-[#FAFAFA] p-4 mb-6">
+              <div className="font-mono text-[10px] font-bold uppercase tracking-widest text-[#3A3A3A] mb-1">Why?</div>
+              <div className="text-sm">
+                The auto Wave engine ships dedicated infrastructure for tyres — DOT-coded sizes, ETA-aware availability, garage routing.
+                Electronics, home and consumer-goods suppliers use the regular <Link to="/supplier/waves/new" className="underline">Create Wave</Link> flow instead.
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Link
+                to="/supplier"
+                className="border-2 border-ink bg-white px-5 py-3 text-xs font-bold uppercase tracking-widest font-mono shadow-brut-sm hover-brut"
+                data-testid="back-to-supplier"
+              >
+                ← Back to Console
+              </Link>
+              <Link
+                to="/supplier/onboarding"
+                className="bg-[#FF5400] text-white border-2 border-ink font-bold uppercase tracking-widest px-5 py-3 text-xs shadow-brut hover-brut"
+                data-testid="update-categories-btn"
+              >
+                Add Tyres to my categories
+              </Link>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }

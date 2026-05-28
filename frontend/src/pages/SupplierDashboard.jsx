@@ -75,15 +75,29 @@ export default function SupplierDashboard() {
               {supplier.business_name}
             </h1>
             <div className="font-mono text-xs uppercase tracking-widest text-[#3A3A3A] mt-1">{supplier.category} · {supplier.contact_email}</div>
+            {supplier.categories && supplier.categories.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-1.5" data-testid="supplier-categories">
+                {supplier.categories.map((c) => (
+                  <span
+                    key={c}
+                    className={`border-2 border-ink px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest font-mono ${c === "Tyres" ? "bg-[#FF5400] text-white" : "bg-white"}`}
+                  >
+                    {c}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
           <div className="flex flex-wrap gap-2">
-            <Link
-              to="/supplier/product-groups"
-              className="bg-ink text-white border-2 border-ink font-bold uppercase tracking-wider px-5 py-3 text-xs shadow-brut hover-brut inline-flex items-center gap-2"
-              data-testid="manage-pgs-btn"
-            >
-              <Package weight="bold" /> Tyre Product Groups
-            </Link>
+            {supplier.is_tyre_supplier && (
+              <Link
+                to="/supplier/product-groups"
+                className="bg-ink text-white border-2 border-ink font-bold uppercase tracking-wider px-5 py-3 text-xs shadow-brut hover-brut inline-flex items-center gap-2"
+                data-testid="manage-pgs-btn"
+              >
+                <Package weight="bold" /> Tyre Product Groups
+              </Link>
+            )}
             <Link
               to="/supplier/waves/new"
               className="bg-[#FF5400] text-white border-2 border-ink font-bold uppercase tracking-wider px-5 py-3 text-xs shadow-brut hover-brut inline-flex items-center gap-2"

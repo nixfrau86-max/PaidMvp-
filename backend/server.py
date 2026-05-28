@@ -80,7 +80,8 @@ class Supplier(BaseModel):
     # Light info
     business_name: str
     contact_email: str
-    category: str
+    category: str                    # primary category (back-compat)
+    categories: List[str] = Field(default_factory=list)  # multi-select; gates feature access
     description: str
     logo_url: Optional[str] = None
     # Standard info (optional at signup)
@@ -109,7 +110,8 @@ class Supplier(BaseModel):
 class SupplierApplyRequest(BaseModel):
     business_name: str
     contact_email: str
-    category: str
+    category: str                    # primary (back-compat)
+    categories: Optional[List[str]] = None  # NEW: multi-select tick boxes
     description: str
     logo_url: Optional[str] = None
 
@@ -118,6 +120,7 @@ class SupplierUpdateRequest(BaseModel):
     business_name: Optional[str] = None
     contact_email: Optional[str] = None
     category: Optional[str] = None
+    categories: Optional[List[str]] = None
     description: Optional[str] = None
     logo_url: Optional[str] = None
     contact_phone: Optional[str] = None
@@ -1814,6 +1817,10 @@ def _serialize_supplier(s: dict) -> dict:
         v = d.get(k)
         if isinstance(v, datetime):
             d[k] = v.isoformat()
+    # Back-compat: ensure 'categories' is always present
+    if not d.get("categories"):
+        d["categories"] = [d["category"]] if d.get("category") else []
+    d["is_tyre_supplier"] = "Tyres" in (d.get("categories") or [])
     return d
 
 
@@ -1829,11 +1836,18 @@ async def supplier_apply(payload: SupplierApplyRequest, user: dict = Depends(get
     existing = await db.suppliers.find_one({"user_id": user["user_id"]}, {"_id": 0})
     if existing:
         return _serialize_supplier(existing)
+    # Normalise categories: ensure primary is included
+    cats = list(payload.categories) if payload.categories else []
+    if payload.category and payload.category not in cats:
+        cats.insert(0, payload.category)
+    if not cats:
+        cats = [payload.category]
     supplier = Supplier(
         user_id=user["user_id"],
         business_name=payload.business_name,
         contact_email=payload.contact_email,
-        category=payload.category,
+        category=cats[0],
+        categories=cats,
         description=payload.description,
         logo_url=payload.logo_url,
         status="provisional",
@@ -1863,13 +1877,17 @@ async def supplier_update_me(payload: SupplierUpdateRequest, user: dict = Depend
     if not s:
         raise HTTPException(status_code=404, detail="No supplier profile")
     update: Dict[str, Any] = {}
-    for field in ("business_name", "contact_email", "category", "description", "logo_url",
+    for field in ("business_name", "contact_email", "category", "categories", "description", "logo_url",
                   "contact_phone", "vat_number", "company_reg",
                   "address_line1", "address_line2", "city", "postcode",
                   "bank_account_name", "bank_sort_code"):
         v = getattr(payload, field, None)
         if v is not None:
             update[field] = v
+    # If categories provided but primary category not in it, keep primary in sync with first item
+    if "categories" in update and update["categories"]:
+        if not update.get("category") or update["category"] not in update["categories"]:
+            update["category"] = update["categories"][0]
     if payload.bank_account_number:
         update["bank_account_number_last4"] = payload.bank_account_number[-4:]
     if update:
@@ -2490,9 +2508,29 @@ async def _require_supplier(user: dict) -> dict:
             raise HTTPException(status_code=403, detail="Apply as a supplier first")
         if s.get("status") == "rejected":
             raise HTTPException(status_code=403, detail="Your supplier account was rejected")
+        # Back-compat: backfill categories from primary category if missing
+        if not s.get("categories"):
+            s["categories"] = [s.get("category")] if s.get("category") else []
         return s
     # admin acting → return synthetic supplier-less context
-    return {"supplier_id": "admin", "business_name": "Platform Admin", "status": "verified"}
+    return {"supplier_id": "admin", "business_name": "Platform Admin", "status": "verified",
+            "categories": ["Tyres"]}
+
+
+async def _require_tyre_supplier(user: dict) -> dict:
+    """Like _require_supplier but additionally enforces that the supplier sells Tyres.
+    Non-tyre suppliers (Electronics, Home, etc.) are blocked from the auto Wave engine."""
+    supplier = await _require_supplier(user)
+    cats = supplier.get("categories") or ([supplier.get("category")] if supplier.get("category") else [])
+    if "Tyres" not in cats:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Tyre Product Groups are reserved for suppliers tagged 'Tyres'. "
+                "Update your supplier profile (Settings → Categories) and tick the Tyres box."
+            ),
+        )
+    return supplier
 
 
 # ============== SUPPLIER ENDPOINTS — Product Groups ==============
@@ -2534,7 +2572,7 @@ async def create_product_group(
 
 @api_router.get("/supplier/product-groups")
 async def list_my_product_groups(user: dict = Depends(get_current_user)):
-    supplier = await _require_supplier(user)
+    supplier = await _require_tyre_supplier(user)
     q = {} if user.get("role") == "admin" else {"supplier_id": supplier["supplier_id"]}
     docs = await db.product_groups.find(q, {"_id": 0}).sort("created_at", -1).to_list(500)
     out = []
@@ -2551,7 +2589,7 @@ async def list_my_product_groups(user: dict = Depends(get_current_user)):
 
 @api_router.get("/supplier/product-groups/{pg_id}")
 async def supplier_get_product_group(pg_id: str, user: dict = Depends(get_current_user)):
-    supplier = await _require_supplier(user)
+    supplier = await _require_tyre_supplier(user)
     pg = await db.product_groups.find_one({"product_group_id": pg_id}, {"_id": 0})
     if not pg:
         raise HTTPException(status_code=404, detail="Product group not found")
@@ -2573,7 +2611,7 @@ async def supplier_get_product_group(pg_id: str, user: dict = Depends(get_curren
 async def update_product_group(
     pg_id: str, payload: ProductGroupUpdateRequest, user: dict = Depends(get_current_user)
 ):
-    supplier = await _require_supplier(user)
+    supplier = await _require_tyre_supplier(user)
     pg = await db.product_groups.find_one({"product_group_id": pg_id}, {"_id": 0})
     if not pg:
         raise HTTPException(status_code=404, detail="Product group not found")
@@ -2591,7 +2629,7 @@ async def update_product_group(
 async def bulk_upsert_sizes(
     pg_id: str, payload: SizesBulkUpsertRequest, user: dict = Depends(get_current_user)
 ):
-    supplier = await _require_supplier(user)
+    supplier = await _require_tyre_supplier(user)
     pg = await db.product_groups.find_one({"product_group_id": pg_id}, {"_id": 0})
     if not pg:
         raise HTTPException(status_code=404, detail="Product group not found")
@@ -2640,7 +2678,7 @@ async def bulk_upsert_sizes(
 
 @api_router.delete("/supplier/product-groups/{pg_id}/sizes/{size_id}")
 async def delete_size(pg_id: str, size_id: str, user: dict = Depends(get_current_user)):
-    supplier = await _require_supplier(user)
+    supplier = await _require_tyre_supplier(user)
     pg = await db.product_groups.find_one({"product_group_id": pg_id}, {"_id": 0})
     if not pg:
         raise HTTPException(status_code=404, detail="Product group not found")
@@ -2655,7 +2693,7 @@ async def csv_import_sizes(
     pg_id: str, payload: dict, user: dict = Depends(get_current_user)
 ):
     """Accepts {csv: "<full csv text>", mode: "upsert"|"overwrite"}. Returns row-level errors."""
-    supplier = await _require_supplier(user)
+    supplier = await _require_tyre_supplier(user)
     pg = await db.product_groups.find_one({"product_group_id": pg_id}, {"_id": 0})
     if not pg:
         raise HTTPException(status_code=404, detail="Product group not found")
@@ -2711,7 +2749,7 @@ async def supplier_api_sync(
     payload: ApiInventorySyncRequest, user: dict = Depends(get_current_user)
 ):
     """Idempotent API feed: upserts a product group by (brand, model) and its sizes."""
-    supplier = await _require_supplier(user)
+    supplier = await _require_tyre_supplier(user)
     pg = await db.product_groups.find_one(
         {"supplier_id": supplier["supplier_id"], "brand": payload.brand, "model": payload.model},
         {"_id": 0},

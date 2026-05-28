@@ -20,7 +20,16 @@ Build a real-time demand aggregation platform that turns fragmented consumer int
 8. Admin role is restricted to `ADMIN_EMAILS` env allowlist.
 
 ## What's implemented (latest — 2026-05-28)
-### Tyre Product Group Waves© — Auto Wave Engine (NEW, P0)
+### Supplier category multi-select + tyre gating (NEW)
+- Supplier model now stores `categories: List[str]` (multi-select) alongside back-compat `category`. `_serialize_supplier` returns `is_tyre_supplier: bool` for frontend gating.
+- Supplier onboarding form replaced the single-category dropdown with **tick-box cards** (Tyres / Automotive / Electronics / Home & Garden / Consumer Goods / Services / Other). "Tyres" tile carries an "Auto Engine" badge.
+- `/supplier/onboarding` now also serves EXISTING suppliers — pre-fills form + PATCHes `/suppliers/me` so anyone can add Tyres later without re-applying.
+- All `/api/supplier/product-groups/*` endpoints now require `_require_tyre_supplier()` — returns 403 with a helpful "tick the Tyres box" message for non-tyre suppliers.
+- `SupplierDashboard` only shows the "Tyre Product Groups" CTA when `supplier.is_tyre_supplier` is true; renders category chips below the business name.
+- `SupplierProductGroups` page detects 403 and renders a friendly "Restricted Section" gate with a deep link to onboarding to add Tyres.
+- Public/landing Navbar no longer surfaces "Tyre Waves" link (admin-only now); deep link `/tyres` still works.
+
+### Tyre Product Group Waves© — Auto Wave Engine (P0)
 Suppliers **no longer manually create tyre Waves**. They upload Product Groups; the platform manages the Wave lifecycle, threshold tracking, inventory allocation and live participation in real-time.
 - Collections: `product_groups`, `tyre_sizes`, `tyre_waves`, `tyre_participations`.
 - Supplier endpoints: `POST/GET /api/supplier/product-groups`, `GET/PATCH /api/supplier/product-groups/{id}`, `PUT /api/supplier/product-groups/{id}/sizes` (upsert / overwrite), `DELETE …/sizes/{size_id}`, `POST …/csv-import`, `POST /api/supplier/product-groups/api-sync` (idempotent API feed).
