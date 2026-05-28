@@ -213,7 +213,11 @@ export default function Landing() {
           </div>
           <div className="border-t border-white/30 pt-6 flex flex-col sm:flex-row justify-between gap-3 font-mono text-[10px] uppercase tracking-widest opacity-85">
             <span>Early access launching soon.</span>
-            <span>© {new Date().getFullYear()} The Collective Savers Ltd.</span>
+            <span className="flex flex-wrap gap-4">
+              <Link to="/terms" className="hover:text-[#FFD600]" data-testid="landing-footer-terms">Terms</Link>
+              <Link to="/privacy" className="hover:text-[#FFD600]" data-testid="landing-footer-privacy">Privacy</Link>
+              <span>© {new Date().getFullYear()} The Collective Savers Ltd.</span>
+            </span>
           </div>
         </div>
       </footer>

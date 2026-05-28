@@ -23,6 +23,7 @@ export default function SupplierOnboarding() {
   const { user, loading, setUser } = useAuth();
   const [supplier, setSupplier] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [acceptTerms, setAcceptTerms] = useState(false);
   const [form, setForm] = useState({
     business_name: "",
     contact_email: "",
@@ -69,6 +70,10 @@ export default function SupplierOnboarding() {
       toast.error("Please tick at least one product category");
       return;
     }
+    if (!supplier && !acceptTerms) {
+      toast.error("Please accept the Supplier Terms & Privacy Policy");
+      return;
+    }
     setSubmitting(true);
     try {
       const payload = {
@@ -81,15 +86,22 @@ export default function SupplierOnboarding() {
       };
       let data;
       if (supplier) {
-        // Existing supplier — PATCH /suppliers/me to update categories etc.
         ({ data } = await api.patch("/suppliers/me", payload));
         toast.success("Profile updated");
       } else {
         ({ data } = await api.post("/suppliers/apply", payload));
+        // Log T&Cs acceptance for new supplier sign-ups
+        try {
+          await Promise.all([
+            api.post("/terms/accept", { doc_id: "terms", version: "1.0", context: "supplier_apply" }),
+            api.post("/terms/accept", { doc_id: "privacy", version: "1.0", context: "supplier_apply" }),
+          ]);
+        } catch (err) {
+          console.warn("Terms acceptance log failed", err);
+        }
         toast.success("You're in! Your sandbox is live.");
       }
       setSupplier(data);
-      // Refresh user role
       try {
         const me = await api.get("/auth/me");
         setUser(me.data);
@@ -228,15 +240,31 @@ export default function SupplierOnboarding() {
               />
             </Field>
           </div>
+          {!supplier && (
+            <label className="mt-6 flex items-start gap-2 cursor-pointer" data-testid="apply-accept-terms-label">
+              <input
+                type="checkbox"
+                checked={acceptTerms}
+                onChange={(e) => setAcceptTerms(e.target.checked)}
+                className="mt-1 w-4 h-4 accent-[#FF5400]"
+                data-testid="apply-accept-terms-checkbox"
+              />
+              <span className="text-[11px] font-mono leading-relaxed text-[#1A1A1A]">
+                I agree to the <Link to="/terms" target="_blank" className="underline">Supplier Terms</Link>{" "}
+                and <Link to="/privacy" target="_blank" className="underline">Privacy Policy</Link>, including
+                fulfilment obligations and the published fee schedule.
+              </span>
+            </label>
+          )}
           <button
-            type="submit" disabled={submitting}
+            type="submit" disabled={submitting || (!supplier && !acceptTerms)}
             className="mt-6 w-full bg-[#FF5400] text-white border-2 border-ink font-bold uppercase tracking-wider px-6 py-4 text-base shadow-brut hover-brut disabled:opacity-60 inline-flex items-center justify-center gap-2"
             data-testid="apply-submit"
           >
             <Storefront weight="fill" /> {submitting ? "Saving..." : (supplier ? "Save Profile" : "Open My Sandbox")}
           </button>
           <div className="mt-3 text-[10px] font-mono uppercase tracking-widest text-[#3A3A3A] text-center">
-            By applying you accept the supplier terms · No fees to list
+            {supplier ? "Update is saved instantly · Changes apply to new waves only" : "No fees to list · Acceptance is logged for audit"}
           </div>
         </form>
       </div>

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useState, useCallback } from "react";
 import { api } from "./api";
+import { identify, track } from "./firebase";
 
 const AuthContext = createContext(null);
 
@@ -11,9 +12,11 @@ export function AuthProvider({ children }) {
     try {
       const { data } = await api.get("/auth/me");
       setUser(data);
+      identify(data);
     } catch (err) {
       console.debug("auth/me failed", err?.response?.status);
       setUser(null);
+      identify(null);
     } finally {
       setLoading(false);
     }
@@ -36,6 +39,8 @@ export function AuthProvider({ children }) {
     }
     localStorage.removeItem("session_token");
     setUser(null);
+    identify(null);
+    track("logout");
     window.location.href = "/";
   }, []);
 

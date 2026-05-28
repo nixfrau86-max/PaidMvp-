@@ -1,0 +1,41 @@
+{
+  "summary": "Iteration 6: Tested new Admin Users tab, T&Cs audit endpoints, and Firebase Analytics no-op. Backend: 20/20 pytest cases PASS for /api/admin/users (list/get/patch/delete + suspend/unsuspend invalidation + login gating + audit log), and /api/terms/* (docs/accept/me + admin audit + role guards). Frontend: route + checkbox + footer wiring is correct, BUT the Admin Users tab and T&Cs Audit tab buttons render zero content (CRITICAL — conditional render branches missing in AdminPanel.jsx).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PATCH /api/admin/users/{id} & DELETE /api/admin/users/{id}", "issue": "Code calls db.sessions.delete_many({'user_id': ...}) but the rest of the app reads/writes to db.user_sessions. The active sessions for the suspended/deleted user are NEVER actually purged. Functionally suspended users are still blocked because get_current_user re-checks user.status on every request, so the bug is silent. But stale session rows accumulate. Fix: change db.sessions to db.user_sessions in server.py inside the admin update + delete endpoints (3 locations)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "AdminPanel.jsx", "issue": "Tab BUTTONS for 'users' and 'terms' render correctly (data-testid='admin-tab-users' / 'admin-tab-terms'), but the conditional render block (lines 131-258) only handles tab === 'waves' | 'pending_waves' | 'suppliers' | 'fees'. There are NO branches for 'users' or 'terms', so clicking those tabs shows a completely empty page. UsersTab and TermsAuditTab components are defined (lines 541 and 802) but never mounted.", "selector": "[data-testid='users-tab'] / [data-testid='terms-tab']", "priority": "CRITICAL"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_admin_users_terms.py",
+    "/app/test_reports/pytest/iteration6_admin_terms.xml"
+  ],
+  "action_items": [
+    "MAIN-AGENT FIX (CRITICAL): In /app/frontend/src/pages/AdminPanel.jsx after the existing `{tab === 'fees' && <FeesTab />}` line (around line 258), add `{tab === 'users' && <UsersTab />}` and `{tab === 'terms' && <TermsAuditTab />}`. Without this the entire Users + T&Cs Audit feature is invisible.",
+    "MINOR FIX: In /app/backend/server.py inside ADMIN — USER MANAGEMENT section, replace `db.sessions.delete_many` with `db.user_sessions.delete_many` (search: there are 3 occurrences inside the PATCH and DELETE endpoints).",
+    "Re-test after fix to confirm UsersTab loads rows + suspend/delete/details flow, and TermsAuditTab renders acceptance rows with filter."
+  ],
+  "critical_code_review_comments": [
+    "AdminPanel.jsx is 884 lines — exceeds the 700-line guideline. Should be split: UsersTab, TermsAuditTab, FeesTab, UserDetailModal each deserve their own file under /app/frontend/src/pages/admin/. This makes the missing-render bug above easier to catch.",
+    "server.py is 3628 lines — also well over guideline. Splitting into routers/admin.py, routers/terms.py, etc. is overdue.",
+    "Two collection names ('sessions' vs 'user_sessions') co-exist for the same concept in server.py — only 'user_sessions' is real. Search & purge or alias.",
+    "Pydantic Literal in TermsAcceptRequest causes 422 (not 400) for unknown doc_id, contradicting the spec ('Unknown doc_id returns 400'). Either widen the type and validate manually to return 400, or update the spec — test currently accepts both."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_admin_users_terms.py (NEW)"
+  ],
+  "success_rate": {"backend": "100% (20/20)", "frontend": "70% (footer, /terms, /privacy, tyre-wave checkbox, supplier checkbox, admin tab buttons, non-admin guard, no Firebase JS errors — all OK; Users + T&Cs Audit panel CONTENT not rendering)"},
+  "test_credentials": "Admin: founder@thecollectivesavers.co.uk / SaversCollective. Consumer accounts created on-the-fly with TEST_ prefix via /api/auth/register.",
+  "seed_data_creation": "Test created ~5 TEST_-prefixed consumer accounts via register; one was hard-deleted as part of TestAdminDeleteUser; others remain (soft-deleted or active) — minor data residue, safe to ignore.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All new backend endpoints fully covered by /app/backend/tests/test_admin_users_terms.py — re-run with `REACT_APP_BACKEND_URL=... pytest backend/tests/test_admin_users_terms.py -v`. After main agent adds the missing `{tab==='users' && <UsersTab/>}` and `{tab==='terms' && <TermsAuditTab/>}` branches in AdminPanel.jsx, re-run the playwright admin flow to verify rows render, suspend/unsuspend works via UI, details modal opens, and the terms audit table populates. Firebase Analytics produced ZERO JS errors in preview env — confirmed silent no-op working.",
+  "rca of the issue": "AdminPanel.jsx tabs array (line 109) was extended with 'users' and 'terms' entries, and the corresponding components UsersTab/TermsAuditTab were appended at the bottom of the file (lines 541+ and 802+), BUT the developer forgot to add the two `{tab === 'users' && <UsersTab/>}` and `{tab === 'terms' && <TermsAuditTab/>}` conditional mounts in the JSX body between line 258 (`{tab === 'fees' && <FeesTab/>}`) and line 259 (`</Shell>`). Reproduction: login as founder@thecollectivesavers.co.uk, click 'Users' or 'T&Cs Audit' tab in /admin — tab button highlights, page area below stays empty. Mitigation: 2-line addition to AdminPanel.jsx (see action_items)."
+}

@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import Navbar from "../components/Navbar";
 import { api, wsUrl } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { track } from "../lib/firebase";
 import {
   Lightning, Lock, ArrowRight, CheckCircle, Clock, ShieldCheck, X,
   CaretDown, Sparkle,
@@ -25,6 +26,7 @@ export default function TyreWaveDetail() {
   const [selectedSize, setSelectedSize] = useState("");
   const [joining, setJoining] = useState(false);
   const [pulse, setPulse] = useState(false);
+  const [acceptTerms, setAcceptTerms] = useState(false);
 
   const reload = useCallback(async () => {
     try {
@@ -74,10 +76,31 @@ export default function TyreWaveDetail() {
       return;
     }
     if (!selectedSize) { toast.error("Pick your tyre size first"); return; }
+    if (!acceptTerms && !pg.has_joined) {
+      toast.error("Please accept the Terms & Privacy to continue");
+      return;
+    }
     setJoining(true);
     try {
+      // Log T&Cs acceptance BEFORE join so the audit trail captures intent
+      if (!pg.has_joined) {
+        try {
+          await Promise.all([
+            api.post("/terms/accept", { doc_id: "terms", version: "1.0", context: `tyre_join:${id}` }),
+            api.post("/terms/accept", { doc_id: "privacy", version: "1.0", context: `tyre_join:${id}` }),
+          ]);
+        } catch (err) {
+          console.warn("Terms acceptance log failed", err);
+        }
+      }
       const { data } = await api.post(`/tyre/waves/${id}/join`, { selected_size: selectedSize });
       if (data?.wave) setPg((prev) => ({ ...prev, wave: data.wave, has_joined: true, selected_size: data.selected_size }));
+      track("tyre_wave_join", {
+        wave_id: data?.wave?.wave_id || id,
+        product_group_id: id,
+        selected_size: selectedSize,
+        already_joined: Boolean(data?.already_joined),
+      });
       toast.success(data.already_joined ? "Updated size" : "Joined — card will be charged only when the Wave fills");
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Could not join wave");
@@ -246,14 +269,30 @@ export default function TyreWaveDetail() {
                   <CheckCircle weight="fill" /> You're in — size {pg.selected_size}
                 </div>
               ) : (
-                <button
-                  onClick={join}
-                  disabled={!selectedSize || joining || locked}
-                  className="mt-5 w-full bg-[#FF5400] text-white border-2 border-ink font-bold uppercase tracking-widest px-5 py-4 text-sm shadow-brut hover-brut inline-flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                  data-testid="join-wave-btn"
-                >
-                  {joining ? "Joining…" : <>Join Wave <ArrowRight weight="bold" /></>}
-                </button>
+                <>
+                  <label className="mt-5 flex items-start gap-2 cursor-pointer" data-testid="accept-terms-label">
+                    <input
+                      type="checkbox"
+                      checked={acceptTerms}
+                      onChange={(e) => setAcceptTerms(e.target.checked)}
+                      className="mt-1 w-4 h-4 accent-[#FF5400]"
+                      data-testid="accept-terms-checkbox"
+                    />
+                    <span className="text-[11px] font-mono leading-relaxed text-[#1A1A1A]">
+                      I agree to the <Link to="/terms" className="underline" target="_blank">Terms of Service</Link>
+                      {" "}and <Link to="/privacy" className="underline" target="_blank">Privacy Policy</Link>,
+                      and authorise a card pre-authorisation that will only be captured when this Wave fills.
+                    </span>
+                  </label>
+                  <button
+                    onClick={join}
+                    disabled={!selectedSize || joining || locked || !acceptTerms}
+                    className="mt-3 w-full bg-[#FF5400] text-white border-2 border-ink font-bold uppercase tracking-widest px-5 py-4 text-sm shadow-brut hover-brut inline-flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    data-testid="join-wave-btn"
+                  >
+                    {joining ? "Joining…" : <>Join Wave <ArrowRight weight="bold" /></>}
+                  </button>
+                </>
               )}
 
               <div className="mt-3 font-mono text-[10px] uppercase tracking-widest text-[#3A3A3A] flex items-center gap-1.5">

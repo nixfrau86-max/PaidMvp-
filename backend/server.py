@@ -67,6 +67,9 @@ class User(BaseModel):
     password_hash: Optional[str] = None
     auth_methods: List[str] = Field(default_factory=lambda: [])  # google | email | sms
     supplier_id: Optional[str] = None  # if user is a supplier, links to Supplier doc
+    status: Literal["active", "suspended", "deleted"] = "active"
+    suspended_reason: Optional[str] = None
+    suspended_at: Optional[datetime] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -385,6 +388,12 @@ async def get_current_user(
     user = await _get_user_from_session_token(token) if token else None
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
+    # Block suspended/deleted accounts (admins exempt — they must still access /admin)
+    user_status = user.get("status", "active")
+    if user_status == "suspended" and user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Your account has been suspended. Contact support.")
+    if user_status == "deleted":
+        raise HTTPException(status_code=403, detail="This account no longer exists")
     return user
 
 
@@ -769,6 +778,11 @@ async def auth_login(payload: LoginRequest, request: Request, response: Response
         raise HTTPException(status_code=401, detail="Invalid email or password")
     if not verify_password(payload.password, user["password_hash"]):
         await _record_failed_attempt(identifier)
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    # Block suspended / deleted accounts at the gate
+    if user.get("status") == "suspended" and user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Your account has been suspended. Contact support.")
+    if user.get("status") == "deleted":
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     await _clear_attempts(identifier)
@@ -3065,6 +3079,270 @@ async def _seed_tyre_product_groups():
             )
         count += 1
     return count
+
+
+# =====================================================================
+# ADMIN — USER MANAGEMENT
+# =====================================================================
+class AdminUserUpdateRequest(BaseModel):
+    role: Optional[UserRole] = None
+    status: Optional[Literal["active", "suspended", "deleted"]] = None
+    suspended_reason: Optional[str] = None
+
+
+def _serialize_user(u: dict) -> dict:
+    d = dict(u)
+    d.pop("_id", None)
+    d.pop("password_hash", None)
+    for k in ("created_at", "suspended_at"):
+        v = d.get(k)
+        if isinstance(v, datetime):
+            d[k] = v.isoformat()
+    d.setdefault("status", "active")
+    return d
+
+
+@api_router.get("/admin/users")
+async def admin_list_users(
+    q: Optional[str] = None,
+    role: Optional[str] = None,
+    user_status: Optional[str] = None,
+    limit: int = 100,
+    user: dict = Depends(get_current_user),
+):
+    """List + filter users for admin console."""
+    await require_role(user, ["admin"])
+    query: Dict[str, Any] = {}
+    if q:
+        qre = {"$regex": re.escape(q), "$options": "i"}
+        query["$or"] = [{"email": qre}, {"name": qre}, {"user_id": qre}]
+    if role and role != "all":
+        query["role"] = role
+    if user_status and user_status != "all":
+        query["status"] = user_status
+    docs = await db.users.find(query, {"_id": 0}).sort("created_at", -1).limit(max(1, min(500, int(limit)))).to_list(500)
+    total = await db.users.count_documents(query)
+    return {"users": [_serialize_user(u) for u in docs], "total": total}
+
+
+@api_router.get("/admin/users/{user_id}")
+async def admin_get_user(user_id: str, user: dict = Depends(get_current_user)):
+    await require_role(user, ["admin"])
+    u = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not u:
+        raise HTTPException(status_code=404, detail="User not found")
+    # Lightweight activity summary
+    parts = await db.participations.count_documents({"user_id": user_id})
+    tyre_parts = await db.tyre_participations.count_documents({"user_id": user_id})
+    txs = await db.payment_transactions.count_documents({"user_id": user_id})
+    return {
+        **_serialize_user(u),
+        "stats": {
+            "participations": parts,
+            "tyre_participations": tyre_parts,
+            "payment_transactions": txs,
+        },
+    }
+
+
+@api_router.patch("/admin/users/{user_id}")
+async def admin_update_user(
+    user_id: str,
+    payload: AdminUserUpdateRequest,
+    user: dict = Depends(get_current_user),
+):
+    await require_role(user, ["admin"])
+    if user_id == user["user_id"]:
+        raise HTTPException(status_code=400, detail="You cannot modify your own account here")
+    target = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    updates: Dict[str, Any] = {}
+    if payload.role is not None:
+        # Admin role gated by env allowlist
+        if payload.role == "admin":
+            allowlist = [e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()]
+            if target["email"].lower() not in allowlist:
+                raise HTTPException(
+                    status_code=400,
+                    detail="To grant admin, add the email to ADMIN_EMAILS env first",
+                )
+        updates["role"] = payload.role
+    if payload.status is not None:
+        if target.get("role") == "admin" and payload.status != "active":
+            raise HTTPException(status_code=400, detail="Cannot suspend or delete an admin account")
+        updates["status"] = payload.status
+        if payload.status == "suspended":
+            updates["suspended_reason"] = payload.suspended_reason or "Suspended by admin"
+            updates["suspended_at"] = datetime.now(timezone.utc).isoformat()
+            # Invalidate active sessions
+            await db.sessions.delete_many({"user_id": user_id})
+        elif payload.status == "active":
+            updates["suspended_reason"] = None
+            updates["suspended_at"] = None
+
+    if not updates:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+    await db.users.update_one({"user_id": user_id}, {"$set": updates})
+
+    # Audit log
+    await db.admin_audit_log.insert_one({
+        "audit_id": f"aud_{uuid.uuid4().hex[:10]}",
+        "actor_user_id": user["user_id"],
+        "actor_email": user["email"],
+        "action": "user_update",
+        "target_user_id": user_id,
+        "changes": updates,
+        "at": datetime.now(timezone.utc).isoformat(),
+    })
+
+    fresh = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    return _serialize_user(fresh)
+
+
+@api_router.delete("/admin/users/{user_id}")
+async def admin_delete_user(
+    user_id: str,
+    hard: bool = False,
+    user: dict = Depends(get_current_user),
+):
+    """Soft-delete (status='deleted') by default; ?hard=true purges the record + sessions."""
+    await require_role(user, ["admin"])
+    if user_id == user["user_id"]:
+        raise HTTPException(status_code=400, detail="You cannot delete your own account")
+    target = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    if target.get("role") == "admin":
+        raise HTTPException(status_code=400, detail="Cannot delete an admin account")
+
+    await db.sessions.delete_many({"user_id": user_id})
+
+    if hard:
+        await db.users.delete_one({"user_id": user_id})
+        action = "user_hard_delete"
+    else:
+        await db.users.update_one(
+            {"user_id": user_id},
+            {"$set": {
+                "status": "deleted",
+                "deleted_at": datetime.now(timezone.utc).isoformat(),
+                "email": f"{target['email']}.deleted.{uuid.uuid4().hex[:6]}",  # free up email
+            }},
+        )
+        action = "user_soft_delete"
+
+    await db.admin_audit_log.insert_one({
+        "audit_id": f"aud_{uuid.uuid4().hex[:10]}",
+        "actor_user_id": user["user_id"],
+        "actor_email": user["email"],
+        "action": action,
+        "target_user_id": user_id,
+        "target_email": target.get("email"),
+        "at": datetime.now(timezone.utc).isoformat(),
+    })
+    return {"success": True, "hard": bool(hard)}
+
+
+@api_router.get("/admin/audit-log")
+async def admin_audit_log(limit: int = 100, user: dict = Depends(get_current_user)):
+    await require_role(user, ["admin"])
+    docs = await db.admin_audit_log.find({}, {"_id": 0}).sort("at", -1).limit(max(1, min(500, int(limit)))).to_list(500)
+    return docs
+
+
+# =====================================================================
+# TERMS & CONDITIONS — Static docs + acceptance audit
+# =====================================================================
+# Static documents are version-bumped here; raising the version forces every
+# user to re-accept before continuing through gated flows (Join Wave / Apply).
+TERMS_DOCS = {
+    "terms": {
+        "title": "Terms of Service",
+        "version": "1.0",
+        "effective_date": "2026-05-28",
+        "summary": "Marketplace usage, collective-purchasing model, supplier fulfilment, refund policy.",
+    },
+    "privacy": {
+        "title": "Privacy Policy",
+        "version": "1.0",
+        "effective_date": "2026-05-28",
+        "summary": "What we collect, how we use it, your rights under UK GDPR.",
+    },
+}
+
+
+class TermsAcceptRequest(BaseModel):
+    doc_id: Literal["terms", "privacy"]
+    version: str
+    context: Optional[str] = None  # e.g. 'wave_join:vpp_xxx', 'supplier_apply', 'tyre_join:pg_xxx'
+
+
+@api_router.get("/terms/docs")
+async def terms_list_docs():
+    """Public list of T&C docs with current versions (for footer links + acceptance gates)."""
+    return [{"id": k, **v} for k, v in TERMS_DOCS.items()]
+
+
+@api_router.post("/terms/accept")
+async def terms_accept(
+    payload: TermsAcceptRequest,
+    request: Request,
+    user: dict = Depends(get_current_user),
+):
+    if payload.doc_id not in TERMS_DOCS:
+        raise HTTPException(status_code=400, detail="Unknown document")
+    current_ver = TERMS_DOCS[payload.doc_id]["version"]
+    record = {
+        "acceptance_id": f"acc_{uuid.uuid4().hex[:12]}",
+        "user_id": user["user_id"],
+        "user_email": user["email"],
+        "doc_id": payload.doc_id,
+        "version": payload.version,
+        "current_version": current_ver,
+        "is_current": payload.version == current_ver,
+        "context": payload.context or "general",
+        "ip": request.client.host if request.client else "unknown",
+        "user_agent": request.headers.get("user-agent", ""),
+        "accepted_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.terms_acceptances.insert_one(record)
+    record.pop("_id", None)
+    return record
+
+
+@api_router.get("/terms/me")
+async def terms_me(user: dict = Depends(get_current_user)):
+    """User's own acceptance history + a quick boolean per doc for the current version."""
+    docs = await db.terms_acceptances.find(
+        {"user_id": user["user_id"]}, {"_id": 0}
+    ).sort("accepted_at", -1).to_list(100)
+    accepted_current = {}
+    for doc_id, meta in TERMS_DOCS.items():
+        accepted_current[doc_id] = any(
+            d["doc_id"] == doc_id and d.get("version") == meta["version"] for d in docs
+        )
+    return {"acceptances": docs, "accepted_current": accepted_current}
+
+
+@api_router.get("/admin/terms/audit")
+async def admin_terms_audit(
+    doc_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+    limit: int = 200,
+    user: dict = Depends(get_current_user),
+):
+    await require_role(user, ["admin"])
+    q: Dict[str, Any] = {}
+    if doc_id:
+        q["doc_id"] = doc_id
+    if user_id:
+        q["user_id"] = user_id
+    docs = await db.terms_acceptances.find(q, {"_id": 0}).sort("accepted_at", -1).limit(
+        max(1, min(1000, int(limit)))
+    ).to_list(1000)
+    return {"acceptances": docs, "total": await db.terms_acceptances.count_documents(q)}
 
 
 # =====================================================================

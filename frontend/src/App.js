@@ -1,8 +1,9 @@
-import React from "react";
+import React, { useEffect } from "react";
 import "@/App.css";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { Toaster } from "sonner";
 import { AuthProvider } from "./lib/auth";
+import { track } from "./lib/firebase";
 
 import Landing from "./pages/Landing";
 import Browse from "./pages/Browse";
@@ -22,6 +23,8 @@ import Login from "./pages/Login";
 import TyreWaves from "./pages/TyreWaves";
 import TyreWaveDetail from "./pages/TyreWaveDetail";
 import SupplierProductGroups from "./pages/SupplierProductGroups";
+import Terms from "./pages/Terms";
+import Privacy from "./pages/Privacy";
 
 // Module-level constant — avoids new object identity on each render
 const TOAST_OPTIONS = {
@@ -41,6 +44,13 @@ const TOAST_OPTIONS = {
 
 function AppRouter() {
   const location = useLocation();
+  // Track every route change as a page_view for Firebase Analytics
+  useEffect(() => {
+    track("page_view", {
+      page_path: location.pathname,
+      page_location: window.location.href,
+    });
+  }, [location.pathname]);
   // CRITICAL: Detect session_id during render, before any other route logic
   if (location.hash?.includes("session_id=")) {
     return <AuthCallback />;
@@ -65,6 +75,8 @@ function AppRouter() {
       <Route path="/garage/onboarding" element={<GarageOnboarding />} />
       <Route path="/book/:vppId" element={<BookFitter />} />
       <Route path="/admin" element={<AdminPanel />} />
+      <Route path="/terms" element={<Terms />} />
+      <Route path="/privacy" element={<Privacy />} />
     </Routes>
   );
 }
