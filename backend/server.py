@@ -1265,11 +1265,14 @@ async def checkout_status(session_id: str, request: Request,
     api_key = os.environ.get("STRIPE_API_KEY")
     webhook_url = f"{str(request.base_url).rstrip('/')}/api/webhook/stripe"
     stripe_checkout = StripeCheckout(api_key=api_key, webhook_url=webhook_url)
+    status_resp: Optional[CheckoutStatusResponse] = None
     try:
-        status_resp: CheckoutStatusResponse = await stripe_checkout.get_checkout_status(session_id)
+        status_resp = await stripe_checkout.get_checkout_status(session_id)
     except Exception as e:
         logger.exception("Stripe status error")
         raise HTTPException(status_code=502, detail=f"Stripe status error: {e}")
+    if status_resp is None:
+        raise HTTPException(status_code=502, detail="Stripe returned empty status")
 
     # Update DB only if newly paid
     if status_resp.payment_status == "paid" and tx["payment_status"] != "paid":

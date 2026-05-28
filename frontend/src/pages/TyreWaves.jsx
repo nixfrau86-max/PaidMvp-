@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { api, wsUrl } from "../lib/api";
@@ -11,25 +11,26 @@ export default function TyreWaves() {
   const [sizeFilter, setSizeFilter] = useState("");
   const [q, setQ] = useState("");
 
-  const reload = async (params = {}) => {
+  const reload = useCallback(async (params = {}) => {
     const search = new URLSearchParams();
     if (params.size) search.set("size", params.size);
     if (params.q) search.set("q", params.q);
     const url = "/tyre/waves" + (search.toString() ? `?${search}` : "");
-    const [w, s] = await Promise.all([api.get(url), api.get("/tyre/sizes")]);
-    setWaves(w.data);
-    setSizes(s.data);
-    setLoading(false);
-  };
-
-  useEffect(() => {
-    reload();
+    try {
+      const [w, s] = await Promise.all([api.get(url), api.get("/tyre/sizes")]);
+      setWaves(w.data);
+      setSizes(s.data);
+    } catch (err) {
+      console.error("Failed to load tyre waves", err);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
     const t = setTimeout(() => reload({ size: sizeFilter, q }), 250);
     return () => clearTimeout(t);
-  }, [sizeFilter, q]);
+  }, [sizeFilter, q, reload]);
 
   // Live broadcast: update counters in-place
   useEffect(() => {
@@ -44,9 +45,13 @@ export default function TyreWaves() {
             )
           );
         }
-      } catch {}
+      } catch (err) {
+        console.warn("Bad tyrewaves WS payload", err);
+      }
     };
-    return () => { try { ws.close(); } catch {} };
+    return () => {
+      try { ws.close(); } catch (err) { console.warn("WS close error", err); }
+    };
   }, []);
 
   const heroStats = useMemo(() => {

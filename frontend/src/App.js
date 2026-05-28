@@ -23,6 +23,22 @@ import TyreWaves from "./pages/TyreWaves";
 import TyreWaveDetail from "./pages/TyreWaveDetail";
 import SupplierProductGroups from "./pages/SupplierProductGroups";
 
+// Module-level constant — avoids new object identity on each render
+const TOAST_OPTIONS = {
+  style: {
+    background: "#FFFFFF",
+    color: "#0A0A0A",
+    border: "2px solid #0A0A0A",
+    borderRadius: 0,
+    boxShadow: "4px 4px 0 0 #0A0A0A",
+    fontFamily: "JetBrains Mono, monospace",
+    fontSize: 12,
+    fontWeight: 600,
+    textTransform: "uppercase",
+    letterSpacing: "0.05em",
+  },
+};
+
 function AppRouter() {
   const location = useLocation();
   // CRITICAL: Detect session_id during render, before any other route logic
@@ -60,20 +76,7 @@ function App() {
         <BrowserRouter>
           <Toaster
             position="top-right"
-            toastOptions={{
-              style: {
-                background: "#FFFFFF",
-                color: "#0A0A0A",
-                border: "2px solid #0A0A0A",
-                borderRadius: 0,
-                boxShadow: "4px 4px 0 0 #0A0A0A",
-                fontFamily: "JetBrains Mono, monospace",
-                fontSize: 12,
-                fontWeight: 600,
-                textTransform: "uppercase",
-                letterSpacing: "0.05em",
-              },
-            }}
+            toastOptions={TOAST_OPTIONS}
           />
           <AppRouter />
         </BrowserRouter>

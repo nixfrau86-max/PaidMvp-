@@ -24,7 +24,7 @@ export default function SupplierProductGroups() {
   const [creating, setCreating] = useState(false);
   const [dataLoading, setDataLoading] = useState(true);
 
-  const reload = async () => {
+  const reload = useCallback(async () => {
     try {
       const { data } = await api.get("/supplier/product-groups");
       setGroups(data);
@@ -33,13 +33,13 @@ export default function SupplierProductGroups() {
       if (e?.response?.status === 403) navigate("/supplier/onboarding");
     }
     setDataLoading(false);
-  };
+  }, [navigate]);
 
   useEffect(() => {
     if (loading) return;
     if (!user) { navigate("/"); return; }
     reload();
-  }, [user, loading]);
+  }, [user, loading, navigate, reload]);
 
   if (pgId) {
     return <ProductGroupDetail pgId={pgId} onBack={() => navigate("/supplier/product-groups")} />;
@@ -146,13 +146,13 @@ function CreateModal({ onClose, onCreated }) {
     hero_image_url: "", target_count: 100,
   });
   const [sizes, setSizes] = useState([
-    { tyre_size: "", inventory: 0, supplier_price: 0, retail_price: 0, availability: "in_stock", eta_days: 2 },
+    { _key: `s_${Math.random().toString(36).slice(2)}`, tyre_size: "", inventory: 0, supplier_price: 0, retail_price: 0, availability: "in_stock", eta_days: 2 },
   ]);
   const [saving, setSaving] = useState(false);
 
   const upd = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
-  const updSize = (idx, k, v) =>
-    setSizes((arr) => arr.map((s, i) => i === idx ? { ...s, [k]: v } : s));
+  const updSize = (key, k, v) =>
+    setSizes((arr) => arr.map((s) => s._key === key ? { ...s, [k]: v } : s));
 
   const submit = async (e) => {
     e.preventDefault();
@@ -200,22 +200,22 @@ function CreateModal({ onClose, onCreated }) {
           <div className="border-t-2 border-ink pt-4">
             <div className="flex items-center justify-between mb-2">
               <h3 className="font-display text-lg uppercase">Sizes</h3>
-              <button type="button" onClick={() => setSizes((arr) => [...arr, { tyre_size: "", inventory: 0, supplier_price: 0, retail_price: 0, availability: "in_stock", eta_days: 2 }])} className="border-2 border-ink bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest font-mono shadow-brut-sm hover-brut inline-flex items-center gap-1">
+              <button type="button" onClick={() => setSizes((arr) => [...arr, { _key: `s_${Math.random().toString(36).slice(2)}`, tyre_size: "", inventory: 0, supplier_price: 0, retail_price: 0, availability: "in_stock", eta_days: 2 }])} className="border-2 border-ink bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest font-mono shadow-brut-sm hover-brut inline-flex items-center gap-1">
                 <Plus weight="bold" size={10} /> Add size
               </button>
             </div>
             <div className="space-y-2">
               {sizes.map((s, i) => (
-                <div key={i} className="grid grid-cols-[1.2fr_0.7fr_0.9fr_0.9fr_1.1fr_0.6fr_auto] gap-2 items-center">
-                  <input placeholder="225/65/R18" value={s.tyre_size} onChange={(e) => updSize(i, "tyre_size", e.target.value.toUpperCase())} className="inp" data-testid={`pg-size-${i}`} />
-                  <input type="number" placeholder="Inv" value={s.inventory} onChange={(e) => updSize(i, "inventory", e.target.value)} className="inp" />
-                  <input type="number" step="0.01" placeholder="Sup £" value={s.supplier_price} onChange={(e) => updSize(i, "supplier_price", e.target.value)} className="inp" />
-                  <input type="number" step="0.01" placeholder="Retail £" value={s.retail_price} onChange={(e) => updSize(i, "retail_price", e.target.value)} className="inp" />
-                  <select value={s.availability} onChange={(e) => updSize(i, "availability", e.target.value)} className="inp">
+                <div key={s._key} className="grid grid-cols-[1.2fr_0.7fr_0.9fr_0.9fr_1.1fr_0.6fr_auto] gap-2 items-center">
+                  <input placeholder="225/65/R18" value={s.tyre_size} onChange={(e) => updSize(s._key, "tyre_size", e.target.value.toUpperCase())} className="inp" data-testid={`pg-size-${i}`} />
+                  <input type="number" placeholder="Inv" value={s.inventory} onChange={(e) => updSize(s._key, "inventory", e.target.value)} className="inp" />
+                  <input type="number" step="0.01" placeholder="Sup £" value={s.supplier_price} onChange={(e) => updSize(s._key, "supplier_price", e.target.value)} className="inp" />
+                  <input type="number" step="0.01" placeholder="Retail £" value={s.retail_price} onChange={(e) => updSize(s._key, "retail_price", e.target.value)} className="inp" />
+                  <select value={s.availability} onChange={(e) => updSize(s._key, "availability", e.target.value)} className="inp">
                     {AVAIL.map((a) => <option key={a.v} value={a.v}>{a.l}</option>)}
                   </select>
-                  <input type="number" placeholder="ETA d" value={s.eta_days} onChange={(e) => updSize(i, "eta_days", e.target.value)} className="inp" />
-                  <button type="button" onClick={() => setSizes((arr) => arr.filter((_, j) => j !== i))} className="border-2 border-ink p-2 hover:bg-[#FFCDD2]">
+                  <input type="number" placeholder="ETA d" value={s.eta_days} onChange={(e) => updSize(s._key, "eta_days", e.target.value)} className="inp" />
+                  <button type="button" onClick={() => setSizes((arr) => arr.filter((x) => x._key !== s._key))} className="border-2 border-ink p-2 hover:bg-[#FFCDD2]">
                     <Trash weight="bold" size={14} />
                   </button>
                 </div>
@@ -240,16 +240,17 @@ function ProductGroupDetail({ pgId, onBack }) {
   const [loading, setLoading] = useState(true);
   const [showImport, setShowImport] = useState(false);
 
-  const reload = async () => {
+  const reload = useCallback(async () => {
     try {
-      const { data } = await api.get(`/supplier/product-groups/${pgId}`);
-      setData(data);
-    } catch (e) {
+      const { data: d } = await api.get(`/supplier/product-groups/${pgId}`);
+      setData(d);
+    } catch (err) {
+      console.error("Group fetch failed", err);
       toast.error("Group not found");
     }
     setLoading(false);
-  };
-  useEffect(() => { reload(); }, [pgId]);
+  }, [pgId]);
+  useEffect(() => { reload(); }, [reload]);
 
   if (loading || !data) {
     return (
@@ -393,7 +394,7 @@ function ImportModal({ pgId, example, onClose, onDone }) {
               {result.errors?.length > 0 && (
                 <ul className="mt-2 font-mono text-[11px] text-red-700 space-y-1 max-h-40 overflow-auto">
                   {result.errors.map((er, i) => (
-                    <li key={i}>Row {er.row || "?"}: {er.error}</li>
+                    <li key={`${er.row ?? "x"}-${i}`}>Row {er.row || "?"}: {er.error}</li>
                   ))}
                 </ul>
               )}

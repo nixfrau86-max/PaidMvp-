@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { toast } from "sonner";
 import Navbar from "../components/Navbar";
@@ -26,23 +26,24 @@ export default function TyreWaveDetail() {
   const [joining, setJoining] = useState(false);
   const [pulse, setPulse] = useState(false);
 
-  const reload = async () => {
+  const reload = useCallback(async () => {
     try {
       const { data } = await api.get(`/tyre/waves/${id}`);
       setPg(data);
       setSelectedSize(data.selected_size || "");
-    } catch (e) {
+    } catch (err) {
+      console.error("Tyre wave fetch failed", err);
       toast.error("Wave not found");
       navigate("/tyres");
     }
     setLoading(false);
-  };
+  }, [id, navigate]);
 
-  useEffect(() => { reload(); }, [id]);
+  useEffect(() => { reload(); }, [reload]);
 
   // Real-time wave updates
   useEffect(() => {
-    if (!pg?.wave?.wave_id) return;
+    if (!pg?.wave?.wave_id) return undefined;
     const ws = new WebSocket(wsUrl(`/api/ws/tyrewave/${pg.wave.wave_id}`));
     ws.onmessage = (e) => {
       try {
@@ -52,9 +53,13 @@ export default function TyreWaveDetail() {
           setPulse(true);
           setTimeout(() => setPulse(false), 500);
         }
-      } catch {}
+      } catch (err) {
+        console.warn("Bad tyrewave WS payload", err);
+      }
     };
-    return () => { try { ws.close(); } catch {} };
+    return () => {
+      try { ws.close(); } catch (err) { console.warn("WS close error", err); }
+    };
   }, [pg?.wave?.wave_id]);
 
   const selectedSizeDoc = useMemo(
