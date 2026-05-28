@@ -19,7 +19,22 @@ Build a real-time demand aggregation platform that turns fragmented consumer int
 7. Payment methods (admin-configurable fees + recommended flag + on/off): Open Banking (+£1, recommended), Apple Pay (+£3), Google Pay (+£3), Card (+£3), Bank Transfer (+£1.50). Wallet rails route through Stripe; OB/Bank Transfer mocked until TrueLayer/Faster Payments are wired.
 8. Admin role is restricted to `ADMIN_EMAILS` env allowlist.
 
-## What's implemented (current session — 2026-05-27)
+## What's implemented (latest — 2026-05-28)
+### Tyre Product Group Waves© — Auto Wave Engine (NEW, P0)
+Suppliers **no longer manually create tyre Waves**. They upload Product Groups; the platform manages the Wave lifecycle, threshold tracking, inventory allocation and live participation in real-time.
+- Collections: `product_groups`, `tyre_sizes`, `tyre_waves`, `tyre_participations`.
+- Supplier endpoints: `POST/GET /api/supplier/product-groups`, `GET/PATCH /api/supplier/product-groups/{id}`, `PUT /api/supplier/product-groups/{id}/sizes` (upsert / overwrite), `DELETE …/sizes/{size_id}`, `POST …/csv-import`, `POST /api/supplier/product-groups/api-sync` (idempotent API feed).
+- Public consumer endpoints: `GET /api/tyre/waves` (with `?size=` and `?q=`), `GET /api/tyre/sizes`, `GET /api/tyre/waves/{id}` (supplier identity hidden, supplier_price stripped), `POST /api/tyre/waves/{id}/join` (idempotent, validates size + stock), `GET /api/me/tyre-waves`.
+- WebSockets: `/api/ws/tyrewaves` (global feed), `/api/ws/tyrewave/{wave_id}` (per-wave live counter with pulse animation).
+- Auto-lock: once `participants_count >= target_count`, wave state transitions to `locked` and broadcasts to subscribers.
+- CSV import: tolerant column names, row-level errors returned without aborting the batch.
+- Privacy: estimated savings band (15–25%) shown pre-lock; final collective price revealed only at checkout post-lock.
+- Frontend: `/tyres` (search by size or brand → premium wave card grid), `/tyre-wave/:id` (hero + size tiles + sticky wave-progress card + Join CTA with anonymous redirect-to-login), `/supplier/product-groups` (list + create modal + CSV import modal + per-PG detail with inventory table).
+- Auto-seed at startup with 3 product groups (Michelin CrossClimate 2, Continental PremiumContact 7, Pirelli P Zero PZ4) for instant demo.
+- Manual VPP/Wave flow preserved for non-tyre categories (hybrid system).
+- Testing: iteration_5 — 23/23 backend + critical frontend paths pass.
+
+## What's implemented (previous — 2026-05-27)
 - **Configurable fee engine** (`platform_config` collection, `GET /api/checkout/quote/{vpp_id}`, `GET/PUT /api/admin/fees`).
 - Admin **Fees & Payments** tab — edit commission %, flat/percent service-fee mode, per-method fees, enable/disable, recommended flag.
 - Checkout rebuilt around live quote API: 6-line summary, live recompute on method switch, Open Banking flagged "Recommended — maximise savings".

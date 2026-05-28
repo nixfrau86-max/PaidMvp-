@@ -63,7 +63,11 @@ export default function TyreWaveDetail() {
   );
 
   const join = async () => {
-    if (!user) { navigate("/login"); return; }
+    if (!user) {
+      toast.info("Sign in to join this Wave");
+      navigate("/login", { state: { from: `/tyre-wave/${id}` } });
+      return;
+    }
     if (!selectedSize) { toast.error("Pick your tyre size first"); return; }
     setJoining(true);
     try {

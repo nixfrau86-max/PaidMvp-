@@ -2758,7 +2758,12 @@ async def list_tyre_waves(size: Optional[str] = None, q: Optional[str] = None):
             continue
         if norm:
             has = await db.tyre_sizes.find_one(
-                {"product_group_id": pg["product_group_id"], "tyre_size": norm},
+                {
+                    "product_group_id": pg["product_group_id"],
+                    "tyre_size": norm,
+                    "availability": {"$ne": "out_of_stock"},
+                    "inventory": {"$gt": 0},
+                },
                 {"_id": 0},
             )
             if not has:
