@@ -19,8 +19,23 @@ Build a real-time demand aggregation platform that turns fragmented consumer int
 7. Payment methods (admin-configurable fees + recommended flag + on/off): Open Banking (+£1, recommended), Apple Pay (+£3), Google Pay (+£3), Card (+£3), Bank Transfer (+£1.50). Wallet rails route through Stripe; OB/Bank Transfer mocked until TrueLayer/Faster Payments are wired.
 8. Admin role is restricted to `ADMIN_EMAILS` env allowlist.
 
-## What's implemented (latest — 2026-05-28b)
-### Admin Users tab + T&Cs audit + Firebase Analytics (NEW, P0)
+## What's implemented (latest — 2026-05-28c)
+### Refactor: AdminPanel.jsx split + server.py partial routes/ extraction (NEW)
+- **AdminPanel.jsx refactor** — was 887 LOC monolith, now **144 LOC** slim composer importing 7 focused tab modules from `/app/frontend/src/pages/admin/`:
+  - `_shared.jsx` (Shell, Th, Td, Field, Stat, SupplierStatusBadge)
+  - `CreateVPPForm.jsx`
+  - `WavesTab.jsx`, `PendingWavesTab.jsx`, `SuppliersTab.jsx`
+  - `UsersTab.jsx` (with UserStatusBadge + UserDetailModal as colocated helpers)
+  - `TermsTab.jsx`, `FeesTab.jsx`
+- **server.py routes/ scaffold** — created `/app/backend/routes/` package + `/app/backend/core.py` shared singletons (db, client, logger). Extracted ~270 LOC of admin user management + T&Cs into:
+  - `routes/admin_users.py` — `/api/admin/users/*`, `/api/admin/audit-log` (uses `build_router(deps)` DI pattern to avoid circular imports)
+  - `routes/terms.py` — `/api/terms/*`, `/api/admin/terms/audit`
+- server.py down from **3,638 → 3,389 LOC** in this pass. Tyre PG + admin VPP + suppliers/garages/auth/checkout still inline (next pass).
+- **Defence-in-depth admin auto-demotion**: any user with role=admin whose email is NOT in `ADMIN_EMAILS` env is auto-demoted to `consumer` on login + on session creation. Protects against past leaked-admin DB state.
+- **Rogue admin cleanup** (2026-05-28): purged 4 test-artifact admins (`dbg@x`, `test-user-b6401dca7e`, `test-user-12a6839647`, `test-user-39a23a5eb3`) via hard-delete; demoted 3 real-looking admins (`ilonashmeish@gmail.com`, `busta@busta.com`, `nixfrau86@gmail.com`) to `consumer`. Only `founder@thecollectivesavers.co.uk` retains admin.
+- **Iteration_7 testing**: 100% backend pytest (20/20) + 100% frontend admin UI navigation (all 6 tabs render, 100 user rows, action buttons present, /terms + /privacy public pages load, zero JS console errors).
+
+### Admin Users tab + T&Cs audit + Firebase Analytics (2026-05-28b)
 - **Admin Users tab** (`/admin` → Users): list with search (email/name/user_id), role + status filters, paginated table. Inline role select (consumer/supplier/garage/admin, admin grants gated by `ADMIN_EMAILS` env allowlist). Actions: suspend (with reason), unsuspend, soft-delete (frees email + invalidates sessions), hard-delete (irreversible, double-confirm via email retype), and Details modal showing activity stats (VPP + Tyre participations + payment_transactions). Cannot modify self / admin.
 - **Admin Audit log** — every admin action (`user_update`, `user_soft_delete`, `user_hard_delete`) recorded in `admin_audit_log` with actor + target + changes + timestamp. `GET /api/admin/audit-log` returns the latest 500.
 - **Suspension is enforced at the gate**: `get_current_user()` rejects suspended (403) + deleted (403) accounts; `/api/auth/login` returns 403 before issuing a session for suspended users. All active sessions are purged on suspend/delete via `db.user_sessions.delete_many`.
