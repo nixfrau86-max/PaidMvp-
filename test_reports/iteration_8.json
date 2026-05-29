@@ -1,0 +1,74 @@
+{
+  "summary": "Full validation of NEW Regional Product Waves© engine + Phase-1 admin supplier controls. Backend pytest: 27/27 passed covering regions CRUD, supplier wave CRUD (create/list/get/edit/delete/order-summary), public stripping of supplier_id+supplier_cost, join validation (tyres require garage / electronics require delivery_address), auto-activation when units>=min_activation, consumer wave-orders cancel (releases reservations), admin oversight (list/state/delete) and admin supplier suspend/unsuspend + supplier detail. Frontend: /waves browse, /wave/:id detail (variant tiles, qty, accept-terms, Join), /supplier/waves manager (Create Wave modal with products+variants), /admin Regional Waves tab (Region chip manager + waves table with state dropdown + delete), /admin Suppliers tab (Suspend + soft + hard delete buttons) — all render correctly with proper data-testids. No critical issues.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "tests_executed": {
+    "backend": {
+      "pytest_file": "/app/backend/tests/test_regional_waves.py",
+      "passed": 27,
+      "failed": 0,
+      "covers": [
+        "GET /api/regions (public active-only) + ?all_regions=true (admin)",
+        "POST/PATCH/DELETE /api/admin/regions (admin-only enforced)",
+        "GET /api/wave-categories (tyres/electronics/footwear)",
+        "POST /api/supplier/waves (validates min_activation<=ideal_target; rejects invalid region)",
+        "GET /api/supplier/waves + /{id} + /{id}/order-summary",
+        "PATCH /api/supplier/waves/{id} (title+ideal_target preserved; min>ideal rejected)",
+        "DELETE /api/supplier/waves/{id}",
+        "GET /api/waves (public list strips supplier_id + supplier_cost from variants)",
+        "GET /api/waves?category=electronics filter",
+        "POST /api/waves/{id}/join — tyres require garage (400), electronics require delivery_address (400), success path, auto-activates wave when units_committed reaches min_activation",
+        "GET /api/me/wave-orders + DELETE /api/me/wave-orders/{id} (releases inventory)",
+        "GET /api/admin/regional-waves (supplier_name present), PATCH state, DELETE",
+        "GET /api/admin/suppliers (account_status returned), GET /{id}/detail (stats.waves)",
+        "PATCH /api/admin/suppliers/{id}/account suspend/unsuspend round-trip",
+        "Admin-only enforcement on /api/admin/regional-waves and /api/admin/suppliers/*"
+      ],
+      "junit_xml": "/app/test_reports/pytest/iteration8_waves.xml"
+    },
+    "frontend": {
+      "playwright_flows": [
+        "Public /waves browse (anonymous): 2 live waves rendered, filters category/region/search present, wave-card-* testids found",
+        "/wave/:id detail (anonymous): variant-tile-*, wave-units, wave-state, accept-terms-checkbox, join-wave-btn, delivery-address present",
+        "Admin login → /admin → admin-tab-regional (Regional Waves): 5 region-chip-* + new-region-input + add-region-btn + admin-wave-row/state/delete for each wave",
+        "Admin Suppliers tab: 5 supplier rows with verify + supplier-suspend-* + supplier-soft-delete-* + supplier-hard-delete-* testids",
+        "Supplier login → /supplier/waves: empty state + create-wave-btn; Create Wave modal opens with wave-form-modal, add-product-btn, product-block-0, product-model-0, variant-row-0-0, add-variant-0, save-wave-btn"
+      ],
+      "js_console_errors": "Only an expected 401 on initial /auth/me when anonymous; one transient WebSocket close warning on /api/ws/waves (cosmetic)",
+      "results": {
+        "waves_page_loads": true,
+        "wave_detail_renders": true,
+        "supplier_create_wave_modal_opens": true,
+        "admin_regional_waves_tab_loads": true,
+        "admin_suppliers_action_buttons_present": true,
+        "public_view_strips_supplier_id_and_cost": true
+      }
+    }
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_regional_waves.py",
+    "/app/test_reports/pytest/iteration8_waves.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "routes/waves.py + routes/admin_suppliers.py use build_router(deps) DI pattern consistent with admin_users.py/terms.py — clean separation.",
+    "Public _public_wave correctly strips supplier_id at wave level AND supplier_cost at variant level — verified by test.",
+    "Auto-activation transition open→activated is triggered inside join handler via _recompute and verified end-to-end.",
+    "Cancel order (DELETE /me/wave-orders/{id}) correctly recomputes units_committed and releases reservation — verified.",
+    "Admin Regional Waves tab uses testid 'admin-tab-regional' (not 'admin-tab-regional-waves') — naming is acceptable but inconsistent with verbose 'pending_waves' sibling; consider standardising.",
+    "Suspend supplier correctly propagates to linked users collection + purges sessions, and refuses to touch admin-owned suppliers (defence-in-depth)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_regional_waves.py (new — 27 tests)"
+  ],
+  "success_rate": { "backend": "100%", "frontend": "100%" },
+  "test_credentials": "Admin founder@thecollectivesavers.co.uk / SaversCollective ; Supplier supplier_test@collective.co / Supplier1234 ; consumer registered fresh via /api/auth/register (cookie-based session).",
+  "seed_data_creation": "Tests create TEST_-prefixed transient waves and a TEST_ region that are deleted in their own teardown. No persistent test data left behind.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend regression suite: /app/backend/tests/test_regional_waves.py (27 tests, ~5s). Login is cookie-based (no bearer). Public /api/waves must keep stripping supplier_id and supplier_cost — there is an explicit test for that. Admin Regional Waves tab testid is 'admin-tab-regional'. Auto-activation min threshold test creates a footwear wave with ideal=5/min=2 and joins 2 units. Tyre garages must exist for tyre-join positive tests (we only assert the 400 path; positive tyre-join needs a real garage_id from GET /api/garages)."
+}

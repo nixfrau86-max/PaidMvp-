@@ -27,11 +27,8 @@ export default function Navbar() {
         </Link>
 
         <div className="hidden md:flex items-center gap-1 text-xs font-bold uppercase tracking-[0.15em]">
-          {user && user.role === "admin" && (
-            <Link to="/tyres" className="px-3 py-2 hover:bg-[#F4F4F4]" data-testid="nav-tyres">Tyre Waves</Link>
-          )}
           {user && (user.role === "consumer" || user.role === "admin") && (
-            <Link to="/browse" className="px-3 py-2 hover:bg-[#F4F4F4]" data-testid="nav-browse">Browse Waves</Link>
+            <Link to="/waves" className="px-3 py-2 hover:bg-[#F4F4F4]" data-testid="nav-waves">Waves</Link>
           )}
           {user && user.role === "consumer" && (
             <Link to="/dashboard" className="px-3 py-2 hover:bg-[#F4F4F4]" data-testid="nav-dashboard">My Waves</Link>

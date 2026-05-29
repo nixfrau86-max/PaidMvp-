@@ -13,6 +13,7 @@ import SuppliersTab from "./admin/SuppliersTab";
 import UsersTab from "./admin/UsersTab";
 import TermsAuditTab from "./admin/TermsTab";
 import FeesTab from "./admin/FeesTab";
+import RegionalWavesTab from "./admin/RegionalWavesTab";
 
 export default function AdminPanel() {
   const navigate = useNavigate();
@@ -67,6 +68,40 @@ export default function AdminPanel() {
     await api.post(`/admin/suppliers/${id}/reject`, { reason });
     load();
   };
+  const suspendSupplier = async (s) => {
+    const reason = window.prompt(`Suspend ${s.business_name}? The owner will be signed out and locked. Reason:`, "Policy violation");
+    if (reason === null) return;
+    try {
+      await api.patch(`/admin/suppliers/${s.supplier_id}/account`, { status: "suspended", reason });
+      toast.success("Supplier suspended");
+      load();
+    } catch (e) { toast.error(e?.response?.data?.detail || "Failed"); }
+  };
+  const unsuspendSupplier = async (s) => {
+    try {
+      await api.patch(`/admin/suppliers/${s.supplier_id}/account`, { status: "active" });
+      toast.success("Supplier reactivated");
+      load();
+    } catch (e) { toast.error(e?.response?.data?.detail || "Failed"); }
+  };
+  const deleteSupplier = async (s) => {
+    if (!window.confirm(`Soft-delete ${s.business_name}? The owner is demoted to consumer and signed out.`)) return;
+    try {
+      await api.delete(`/admin/suppliers/${s.supplier_id}`);
+      toast.success("Supplier deleted");
+      load();
+    } catch (e) { toast.error(e?.response?.data?.detail || "Failed"); }
+  };
+  const hardDeleteSupplier = async (s) => {
+    if (!window.confirm(`HARD DELETE ${s.business_name}? This permanently removes the supplier record.`)) return;
+    const conf = window.prompt("Type the business name to confirm hard delete:");
+    if (conf !== s.business_name) { toast.error("Name mismatch — aborted"); return; }
+    try {
+      await api.delete(`/admin/suppliers/${s.supplier_id}?hard=true`);
+      toast.success("Supplier permanently deleted");
+      load();
+    } catch (e) { toast.error(e?.response?.data?.detail || "Failed"); }
+  };
   const approveWave = async (id) => {
     await api.post(`/admin/waves/${id}/approve`, {});
     toast.success("Wave approved & live");
@@ -113,6 +148,7 @@ export default function AdminPanel() {
       <div className="border-2 border-ink bg-white shadow-brut-sm flex mb-6 overflow-x-auto" data-testid="admin-tabs">
         {[
           { id: "waves", label: `All Waves (${vpps.length})` },
+          { id: "regional", label: "Regional Waves" },
           { id: "pending_waves", label: `Pending Waves (${pendingWaves.length})`, badge: pendingWaves.length },
           { id: "suppliers", label: `Suppliers (${suppliers.length})`, badge: stats.pending_suppliers },
           { id: "users", label: "Users" },
@@ -134,8 +170,9 @@ export default function AdminPanel() {
       </div>
 
       {tab === "waves" && <WavesTab vpps={vpps} onSetState={setState} onRemove={remove} />}
+      {tab === "regional" && <RegionalWavesTab />}
       {tab === "pending_waves" && <PendingWavesTab pendingWaves={pendingWaves} onApprove={approveWave} onReject={rejectWave} />}
-      {tab === "suppliers" && <SuppliersTab suppliers={suppliers} onVerify={verifySupplier} onReject={rejectSupplier} />}
+      {tab === "suppliers" && <SuppliersTab suppliers={suppliers} onVerify={verifySupplier} onReject={rejectSupplier} onSuspend={suspendSupplier} onUnsuspend={unsuspendSupplier} onDelete={deleteSupplier} onHardDelete={hardDeleteSupplier} />}
       {tab === "fees" && <FeesTab />}
       {tab === "users" && <UsersTab />}
       {tab === "terms" && <TermsAuditTab />}

@@ -23,6 +23,9 @@ import Login from "./pages/Login";
 import TyreWaves from "./pages/TyreWaves";
 import TyreWaveDetail from "./pages/TyreWaveDetail";
 import SupplierProductGroups from "./pages/SupplierProductGroups";
+import WaveBrowse from "./pages/WaveBrowse";
+import WaveDetail from "./pages/WaveDetail";
+import SupplierWaves from "./pages/SupplierWaves";
 import Terms from "./pages/Terms";
 import Privacy from "./pages/Privacy";
 
@@ -60,6 +63,8 @@ function AppRouter() {
       <Route path="/" element={<Landing />} />
       <Route path="/login" element={<Login />} />
       <Route path="/browse" element={<Browse />} />
+      <Route path="/waves" element={<WaveBrowse />} />
+      <Route path="/wave/:id" element={<WaveDetail />} />
       <Route path="/tyres" element={<TyreWaves />} />
       <Route path="/tyre-wave/:id" element={<TyreWaveDetail />} />
       <Route path="/vpp/:id" element={<VPPDetail />} />
@@ -68,6 +73,7 @@ function AppRouter() {
       <Route path="/dashboard" element={<MyParties />} />
       <Route path="/supplier" element={<SupplierDashboard />} />
       <Route path="/supplier/onboarding" element={<SupplierOnboarding />} />
+      <Route path="/supplier/waves" element={<SupplierWaves />} />
       <Route path="/supplier/waves/new" element={<SupplierWaveNew />} />
       <Route path="/supplier/product-groups" element={<SupplierProductGroups />} />
       <Route path="/supplier/product-groups/:pgId" element={<SupplierProductGroups />} />

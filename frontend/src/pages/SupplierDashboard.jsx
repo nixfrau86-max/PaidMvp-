@@ -31,7 +31,7 @@ export default function SupplierDashboard() {
     try {
       const [s, w, o] = await Promise.all([
         api.get("/suppliers/me"),
-        api.get("/suppliers/me/waves"),
+        api.get("/supplier/waves"),
         api.get("/supplier/orders"),
       ]);
       setSupplier(s.data);
@@ -89,21 +89,12 @@ export default function SupplierDashboard() {
             )}
           </div>
           <div className="flex flex-wrap gap-2">
-            {supplier.is_tyre_supplier && (
-              <Link
-                to="/supplier/product-groups"
-                className="bg-ink text-white border-2 border-ink font-bold uppercase tracking-wider px-5 py-3 text-xs shadow-brut hover-brut inline-flex items-center gap-2"
-                data-testid="manage-pgs-btn"
-              >
-                <Package weight="bold" /> Tyre Product Groups
-              </Link>
-            )}
             <Link
-              to="/supplier/waves/new"
+              to="/supplier/waves"
               className="bg-[#FF5400] text-white border-2 border-ink font-bold uppercase tracking-wider px-5 py-3 text-xs shadow-brut hover-brut inline-flex items-center gap-2"
               data-testid="create-wave-btn"
             >
-              <Plus weight="bold" /> Create Wave
+              <Plus weight="bold" /> Manage Regional Waves
             </Link>
           </div>
         </div>
@@ -232,38 +223,43 @@ function WavesTab({ waves, isProvisional }) {
         <Package weight="duotone" size={36} className="mx-auto mb-3 text-[#FF5400]" />
         <div className="font-display text-2xl uppercase mb-2">No waves yet.</div>
         <p className="text-[#3A3A3A] mb-5 text-sm">
-          Launch your first Wave — {isProvisional ? "it goes live immediately." : "publish unlimited."}
+          Launch your first Regional Wave — pick a region, category and unit target.
         </p>
-        <Link to="/supplier/waves/new" className="bg-[#FF5400] text-white border-2 border-ink font-bold uppercase tracking-wider px-5 py-3 text-xs shadow-brut hover-brut inline-flex items-center gap-2">
-          Create First Wave <ArrowRight weight="bold" />
+        <Link to="/supplier/waves" className="bg-[#FF5400] text-white border-2 border-ink font-bold uppercase tracking-wider px-5 py-3 text-xs shadow-brut hover-brut inline-flex items-center gap-2">
+          Open Wave Manager <ArrowRight weight="bold" />
         </Link>
       </div>
     );
   }
+  const SB = {
+    open: { label: "Open", bg: "#00C853" },
+    almost_full: { label: "Almost Full", bg: "#FFD600" },
+    activated: { label: "Activated", bg: "#0021A5", text: "#fff" },
+    processing: { label: "Processing", bg: "#FF5400", text: "#fff" },
+    fulfilment: { label: "Fulfilment", bg: "#0021A5", text: "#fff" },
+    completed: { label: "Completed", bg: "#525252", text: "#fff" },
+    expired: { label: "Expired", bg: "#525252", text: "#fff" },
+  };
   return (
     <div className="border-2 border-ink bg-white shadow-brut overflow-x-auto">
       <table className="w-full font-mono text-sm">
         <thead className="bg-ink text-white">
-          <tr>
-            <Th>Wave</Th><Th>Status</Th><Th>State</Th><Th>Joined</Th><Th>Paid</Th><Th>Batch Value</Th>
-          </tr>
+          <tr><Th>Wave</Th><Th>Region</Th><Th>Category</Th><Th>State</Th><Th>Units</Th><Th></Th></tr>
         </thead>
         <tbody>
-          {waves.map(w => (
-            <tr key={w.vpp_id} className="border-t-2 border-ink hover:bg-[#FAFAFA]" data-testid={`wave-row-${w.vpp_id}`}>
-              <Td>
-                <Link to={`/vpp/${w.vpp_id}`} className="flex gap-2 items-center hover:underline">
-                  <img src={w.image_url} alt="" className="w-10 h-10 object-cover border-2 border-ink" />
-                  <span className="font-bold uppercase text-xs">{w.title}</span>
-                </Link>
-              </Td>
-              <Td><PublishBadge status={w.publish_status} /></Td>
-              <Td><StateBadge state={w.state} progressPct={w.progress_pct} /></Td>
-              <Td>{w.participants_count}/{w.threshold}</Td>
-              <Td>{w.paid_count || 0}</Td>
-              <Td>£{w.total_supplier_value?.toFixed(2) || "0.00"}</Td>
-            </tr>
-          ))}
+          {waves.map(w => {
+            const sb = SB[w.state] || SB.open;
+            return (
+              <tr key={w.wave_id} className="border-t-2 border-ink hover:bg-[#FAFAFA]" data-testid={`wave-row-${w.wave_id}`}>
+                <Td><span className="font-bold uppercase text-xs">{w.title}</span><div className="text-[10px] text-[#3A3A3A]">{w.brand}</div></Td>
+                <Td>{w.region_name}</Td>
+                <Td className="capitalize">{w.category_label}</Td>
+                <Td><span className="inline-flex border-2 border-ink px-2 py-1 text-[9px] font-bold uppercase tracking-widest" style={{ background: sb.bg, color: sb.text || "#0A0A0A" }}>{sb.label}</span></Td>
+                <Td>{w.units_committed}/{w.ideal_target}</Td>
+                <Td><Link to="/supplier/waves" className="text-[#FF5400] font-bold uppercase tracking-widest text-[10px] underline">Manage</Link></Td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

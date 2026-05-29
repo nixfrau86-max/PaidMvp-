@@ -1844,6 +1844,7 @@ def _serialize_supplier(s: dict) -> dict:
     if not d.get("categories"):
         d["categories"] = [d["category"]] if d.get("category") else []
     d["is_tyre_supplier"] = "Tyres" in (d.get("categories") or [])
+    d.setdefault("account_status", "active")
     return d
 
 
@@ -3095,14 +3096,20 @@ async def _seed_tyre_product_groups():
 # =====================================================================
 from routes.admin_users import build_router as _build_admin_users_router  # noqa: E402
 from routes.terms import build_router as _build_terms_router  # noqa: E402
+from routes.admin_suppliers import build_router as _build_admin_suppliers_router  # noqa: E402
+from routes.waves import build_router as _build_waves_router  # noqa: E402
 
 _route_deps = {
     'db': db,
     'get_current_user': get_current_user,
+    'get_current_user_optional': get_current_user_optional,
     'require_role': require_role,
+    'manager': manager,
 }
 api_router.include_router(_build_admin_users_router(_route_deps))
 api_router.include_router(_build_terms_router(_route_deps))
+api_router.include_router(_build_admin_suppliers_router(_route_deps))
+api_router.include_router(_build_waves_router(_route_deps))
 
 
 
@@ -3145,6 +3152,28 @@ async def ws_tyre_wave(websocket: WebSocket, wave_id: str):
 @app.websocket("/api/ws/tyrewaves")
 async def ws_tyre_waves_feed(websocket: WebSocket):
     room = "tyrewaves:all"
+    await manager.connect(websocket, room)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket, room)
+
+
+@app.websocket("/api/ws/wave/{wave_id}")
+async def ws_regional_wave(websocket: WebSocket, wave_id: str):
+    room = f"wave:{wave_id}"
+    await manager.connect(websocket, room)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket, room)
+
+
+@app.websocket("/api/ws/waves")
+async def ws_regional_waves_feed(websocket: WebSocket):
+    room = "waves:feed"
     await manager.connect(websocket, room)
     try:
         while True:
@@ -3354,6 +3383,14 @@ async def startup():
             logger.info(f"Seeded {c} tyre product groups")
     except Exception as e:
         logger.warning(f"Tyre PG seed warning: {e}")
+    # Seed regions + demo Regional Waves
+    try:
+        from routes.waves import seed_regions_and_waves
+        rc = await seed_regions_and_waves(db)
+        if rc:
+            logger.info(f"Seeded {rc} regions/regional-waves")
+    except Exception as e:
+        logger.warning(f"Region/wave seed warning: {e}")
     # Seed/refresh founder admin
     try:
         founder_email = os.environ.get("FOUNDER_EMAIL", "").strip().lower()
