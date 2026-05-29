@@ -19,7 +19,28 @@ Build a real-time demand aggregation platform that turns fragmented consumer int
 7. Payment methods (admin-configurable fees + recommended flag + on/off): Open Banking (+£1, recommended), Apple Pay (+£3), Google Pay (+£3), Card (+£3), Bank Transfer (+£1.50). Wallet rails route through Stripe; OB/Bank Transfer mocked until TrueLayer/Faster Payments are wired.
 8. Admin role is restricted to `ADMIN_EMAILS` env allowlist.
 
-## What's implemented (latest — 2026-05-28c)
+## What's implemented (latest — 2026-05-29)
+### 🌊 Regional Product Waves© — Architecture Pivot (Phase 1 + 2, NEW)
+The platform pivoted from the tyre-only auto-engine to a generalized **Regional Product Waves©** system. Core principle: **ONE WAVE = ONE REGION + ONE CATEGORY + ONE UNIT TARGET**.
+- **Categories**: tyres · electronics · footwear (extensible). `GET /api/wave-categories`.
+- **Regions** (admin-managed, seeded local: Warwickshire, Coventry, Leamington Spa, Rugby, Midlands): `GET /api/regions`, `POST/PATCH/DELETE /api/admin/regions`.
+- **Suppliers create waves directly** (retiring the product-group auto-engine): region + category + brand + product models + variants (label, supplier_cost, retail_price, wave_price, inventory_qty) + ideal_target + min_activation + ETA. CRUD at `/api/supplier/waves[/{id}]`, `+/order-summary`. Edit + remove supported (remove releases reservations; blocked if captured payments exist). Manager UI at `/supplier/waves` (`SupplierWaves.jsx`).
+- **Consumers** browse at `/waves` (`WaveBrowse.jsx`, filter by category/region/search) and join at `/wave/:id` (`WaveDetail.jsx`): pick product → variant → quantity → garage (tyres) or delivery address (electronics) → accept terms → Join. `GET /api/waves`, `GET /api/waves/{id}`, `POST /api/waves/{id}/join`, `GET/DELETE /api/me/wave-orders[/{id}]`.
+- **Wave states**: `open → almost_full (≥80% capacity) → activated (≥min_activation units) → processing → fulfilment → completed` (or `expired`). Auto-activation on join via `_recompute`.
+- **Inventory reservation**: join reserves variant stock (reserved_qty), 25-min `reservation_expires_at` stamped (enforcement/sweeper deferred to Phase 3 Stripe). Cancel releases stock + recomputes.
+- **Privacy**: public `_public_wave` strips `supplier_id` (wave) + `supplier_cost` (variant). Verified by test.
+- **Real-time**: WS `/api/ws/wave/{id}` (per-wave) + `/api/ws/waves` (feed) broadcast `units_committed/participants_count/state/progress_pct`.
+- **Admin oversight**: `/admin` → **Regional Waves** tab (`RegionalWavesTab.jsx`) — regions manager + all-waves table with state dropdown + delete. `GET /api/admin/regional-waves`, `PATCH …/{id}/state`, `DELETE …/{id}`.
+- **Backend module**: `/app/backend/routes/waves.py` (build_router DI). Seeds 2 demo waves on startup.
+
+### 🛡️ Admin Supplier Management (Phase 1, NEW)
+- `/admin` → Suppliers tab now shows **account_status** badge + **Suspend / Unsuspend / Soft-delete / Hard-delete** actions (mirrors Users tab). `routes/admin_suppliers.py`: `GET /api/admin/suppliers/{id}/detail`, `PATCH /api/admin/suppliers/{id}/account`, `DELETE /api/admin/suppliers/{id}[?hard=true]`.
+- Suspend propagates to the linked user (status + session purge); refuses to touch admin-owned suppliers. Soft-delete demotes owner to consumer + frees supplier_id.
+
+### Testing — iteration_8
+- Backend: **27/27 pytest** (`/app/backend/tests/test_regional_waves.py`). Frontend: all flows pass, zero critical issues. 100% / 100%.
+
+## What's implemented (previous — 2026-05-28c)
 ### Refactor: AdminPanel.jsx split + server.py partial routes/ extraction (NEW)
 - **AdminPanel.jsx refactor** — was 887 LOC monolith, now **144 LOC** slim composer importing 7 focused tab modules from `/app/frontend/src/pages/admin/`:
   - `_shared.jsx` (Shell, Th, Td, Field, Stat, SupplierStatusBadge)
