@@ -631,6 +631,29 @@ async def auth_me(user: dict = Depends(get_current_user)):
     return user
 
 
+class ProfileUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    phone: Optional[str] = None
+
+
+@api_router.patch("/me/profile")
+async def update_my_profile(payload: ProfileUpdateRequest, user: dict = Depends(get_current_user)):
+    """Update the signed-in member's editable profile details (name, phone)."""
+    updates: Dict[str, Any] = {}
+    if payload.name is not None:
+        name = payload.name.strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="Name cannot be empty")
+        updates["name"] = name
+    if payload.phone is not None:
+        updates["phone"] = payload.phone.strip() or None
+    if not updates:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+    await db.users.update_one({"user_id": user["user_id"]}, {"$set": updates})
+    fresh = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "password_hash": 0})
+    return fresh
+
+
 @api_router.post("/auth/logout")
 async def auth_logout(
     response: Response,

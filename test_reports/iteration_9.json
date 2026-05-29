@@ -1,0 +1,39 @@
+{
+  "summary": "Frontend-only verification of the Collective Savers Regional Waves update covering 5 acceptance checks: consumer 'My Waves' dashboard wave-order card + garage/slot, Account panel edit/save/persistence, supplier order-summary modal with destinations[].fittings, removal of legacy 'fitter-notice' from /checkout, and regression on /waves + tyre wave detail garage+slot+Join gating. All checks passed except the supplier order-summary 'fittings' indented line could not be observed under supplier_test (see notes).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/waves/{id}/join", "issue": "When client posts only fitting_slot_iso (no fitting_slot_label), the persisted participation has fitting_slot_label=null and supplier order-summary destinations[].fittings stays empty. Frontend WaveDetail likely passes label so end-to-end UI works, but server should compute label from ISO defensively."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verified_flows": {
+    "consumer_dashboard_wave_order": "PASS — wave-order-wp_ea6214d320 renders 'Conti Eco 6 Waves©' with 'Fitting garage / Coventry Tyre Centre' and green slot label 'Mon 1 Jun 09:00' via fitting-<id>.",
+    "account_panel": "PASS — email input is disabled with value member_demo@collective.co; save-btn disabled when nothing changed; editing name+phone enabled it; click Save -> toast 'Account details updated'; values persisted after page reload; save-btn returned to disabled (no changes).",
+    "supplier_order_summary_modal": "PARTIAL PASS — supplier_test owns 0 of the seeded waves (GET /api/supplier/waves returned []) so the seeded Rugby Conti Eco wave's summary couldn't be opened by this account. Created a transient QA tyre wave under supplier_test, joined as member_demo with garage + slot, opened summary-wave-<id>: modal renders 'Fulfilment destinations' heading + garage name 'Rugby Wheel & Tyre' + 2 units. The '↳ slot · N units' indent did NOT appear because fitting_slot_label was null in the new participation (curl-join payload lacked label). UI conditional logic (d.fittings non-empty) is correct; backend label generation is the gap. Cleanup: QA wave deleted.",
+    "checkout_cleanup": "PASS — /checkout page does not render any element with data-testid='fitter-notice' and no 'Pick your fitter once the Wave locks' text found in DOM.",
+    "regression_waves_browse_and_detail": "PASS — /waves shows wave cards (3+ found); /wave/wave_fbfe6f0ba2 tyre detail shows garage select (5 garage options), slot-picker present with 154 slot-<iso> buttons after garage selection, join-wave-btn is disabled (gated) until a slot is picked."
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Re-seed demo data so supplier_test@collective.co owns at least one tyres wave with members joined (incl. fitting slots) — this allows the supplier order-summary modal's '↳ slot · N units' line to be visually verified under the documented credentials.",
+    "Optional hardening: in backend POST /api/waves/{id}/join compute fitting_slot_label from fitting_slot_iso when the client omits it (currently the supplier order-summary will silently drop the fitting line)."
+  ],
+  "critical_code_review_comments": [
+    "MyParties.jsx imports 'FloppyDisk' from @phosphor-icons/react which exists in newer versions; verified no runtime icon error during testing.",
+    "AccountPanel: dirty-check compares name.trim() vs user?.name but compares phone.trim() vs user?.phone || '' — fine, but trimming on input value rather than on initial render means whitespace-only differences may falsely enable Save (minor).",
+    "SummaryModal: keys use `${f.slot}-${i}` which is fine; consider falling back to `f.units` for ordering stability if backend later returns multiple same-slot rows."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped per request)", "frontend": "100% on observable flows; supplier summary visual coverage 70% due to seed gap"},
+  "test_credentials": "member_demo@collective.co / Member1234 (consumer) — works; supplier_test@collective.co / Supplier1234 — works but owns no seeded waves",
+  "seed_data_creation": "Created transient wave_440cd1f846 (supplier_test) and joined as member_demo for supplier-modal verification, then deleted. Restored member name to 'Demo Member' and cleared phone after test.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Login flow: /login -> click intent-consumer or intent-supplier -> click [data-testid=tab-email] -> fill [data-testid=email-email] + [data-testid=email-password] -> submit. Auth is httpOnly cookies; /api/auth/login (NOT /api/auth/email/login). To exercise supplier order-summary fitting line under supplier_test, either re-seed a wave owned by sup_098d680534 with participants having both fitting_slot_iso AND fitting_slot_label, or have backend auto-compute label.",
+  "rca_of_the_issue": "The visual gap on supplier order-summary fittings line is rooted in: (a) the documented supplier credentials own no seeded waves, so the Rugby Conti Eco wave summary is not reachable for them; and (b) the join endpoint stores fitting_slot_label=null when caller posts only ISO, leaving destinations[].fittings empty server-side. Frontend rendering logic in SupplierWaves.jsx SummaryModal is correct (conditionally shows '↳ slot · N units' when d.fittings present)."
+}

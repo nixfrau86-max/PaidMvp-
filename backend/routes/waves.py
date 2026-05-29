@@ -404,7 +404,7 @@ def build_router(deps: Dict[str, Any]) -> APIRouter:
         ).to_list(2000)
 
         breakdown: Dict[str, dict] = {}
-        destinations: Dict[str, int] = {}
+        destinations: Dict[str, dict] = {}
         total_units = 0
         for p in parts:
             for it in p.get("items", []):
@@ -414,15 +414,19 @@ def build_router(deps: Dict[str, Any]) -> APIRouter:
                 breakdown[key]["units"] += it["qty"]
                 total_units += it["qty"]
             dest = p.get("garage_name") or p.get("delivery_address") or "—"
-            destinations[dest] = destinations.get(dest, 0) + p.get("units", 0)
+            d = destinations.setdefault(dest, {"destination": dest, "units": 0, "fittings": []})
+            d["units"] += p.get("units", 0)
+            if p.get("fitting_slot_label"):
+                d["fittings"].append({"slot": p["fitting_slot_label"], "units": p.get("units", 0)})
 
         return {
             "wave_id": wave_id,
             "title": w["title"],
             "state": w["state"],
+            "category": w["category"],
             "total_units": total_units,
             "variant_breakdown": list(breakdown.values()),
-            "destinations": [{"destination": k, "units": v} for k, v in destinations.items()],
+            "destinations": list(destinations.values()),
         }
 
     # =================================================================

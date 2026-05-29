@@ -310,7 +310,18 @@ function SummaryModal({ summary, onClose }) {
             <div className="font-display text-lg uppercase mb-1">Fulfilment destinations</div>
             {summary.destinations.length === 0 ? <div className="font-mono text-xs text-[#3A3A3A]">—</div> :
               summary.destinations.map((d) => (
-                <div key={d.destination} className="flex justify-between border-b border-[#eee] py-1 font-mono text-sm"><span>{d.destination}</span><span className="font-bold">{d.units} units</span></div>
+                <div key={d.destination} className="border-b border-[#eee] py-2">
+                  <div className="flex justify-between font-mono text-sm"><span className="font-bold">{d.destination}</span><span className="font-bold">{d.units} units</span></div>
+                  {(d.fittings || []).length > 0 && (
+                    <div className="mt-1 pl-2 space-y-0.5">
+                      {d.fittings.map((f, i) => (
+                        <div key={`${f.slot}-${i}`} className="flex justify-between font-mono text-[11px] text-[#3A3A3A] uppercase tracking-widest">
+                          <span>↳ {f.slot}</span><span>{f.units} units</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               ))}
           </div>
         </div>

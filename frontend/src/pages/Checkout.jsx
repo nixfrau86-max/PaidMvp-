@@ -5,7 +5,7 @@ import Navbar from "../components/Navbar";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import {
-  CreditCard, Bank, ArrowsLeftRight, Lock, ShieldCheck, DeviceMobile, Sparkle, Wrench, AppleLogo, GoogleLogo,
+  CreditCard, Bank, ArrowsLeftRight, Lock, ShieldCheck, DeviceMobile, Sparkle, AppleLogo, GoogleLogo,
 } from "@phosphor-icons/react";
 
 // Local UI metadata. Backend owns labels/fees/order/recommended/enabled.
@@ -80,8 +80,6 @@ export default function Checkout() {
   }
 
   const { vpp, service_fee } = quote;
-  const cat = (vpp.category || "").toLowerCase();
-  const isAutomotive = cat === "tyres" || cat === "automotive";
   const savingsPct = vpp.retail_price > 0 ? Math.round((selected.total_savings / vpp.retail_price) * 100) : 0;
 
   return (
@@ -100,24 +98,6 @@ export default function Checkout() {
 
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
           <div className="lg:col-span-3 space-y-5">
-            {isAutomotive && (
-              <div className="border-2 border-ink bg-white shadow-brut p-5" data-testid="fitter-notice">
-                <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 border-2 border-ink bg-[#FFD600] flex items-center justify-center shrink-0">
-                    <Wrench weight="duotone" size={20} />
-                  </div>
-                  <div>
-                    <div className="text-[10px] font-bold uppercase tracking-widest font-mono text-[#FF5400] mb-1">Fitting included</div>
-                    <h3 className="font-display text-lg uppercase leading-tight">Pick your fitter once the Wave locks.</h3>
-                    <p className="text-xs text-[#3A3A3A] mt-1 font-mono">
-                      For safety + insurance reasons, tyres ship to a verified garage — never to a private address.
-                      As soon as this Wave locks, we'll email you a link to choose a local fitter and a slot that suits you.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
             <div className="border-2 border-ink bg-white shadow-brut p-6" data-testid="payment-method-list">
               <div className="text-[10px] font-bold uppercase tracking-widest font-mono mb-4">Choose payment method</div>
               <div className="space-y-3">
