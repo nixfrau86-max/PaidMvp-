@@ -489,6 +489,15 @@ def build_router(deps: Dict[str, Any]) -> APIRouter:
             if not (payload.delivery_address and payload.delivery_address.strip()):
                 raise HTTPException(status_code=400, detail="Please enter a delivery address")
 
+        # Derive a human fitting-slot label if the client sent only the ISO
+        fitting_label = payload.fitting_slot_label
+        if w["category"] == "tyres" and payload.fitting_slot_iso and not fitting_label:
+            try:
+                dt = datetime.fromisoformat(payload.fitting_slot_iso)
+                fitting_label = dt.strftime("%a %-d %b %H:%M")
+            except (ValueError, TypeError):
+                fitting_label = payload.fitting_slot_iso
+
         # Validate stock + build items
         variant_index = {v["variant_id"]: (p, v) for p in w["products"] for v in p["variants"]}
         items, subtotal, units = [], 0.0, 0
@@ -531,7 +540,7 @@ def build_router(deps: Dict[str, Any]) -> APIRouter:
             "garage_id": payload.garage_id,
             "garage_name": garage_name,
             "fitting_slot_iso": payload.fitting_slot_iso,
-            "fitting_slot_label": payload.fitting_slot_label,
+            "fitting_slot_label": fitting_label,
             "delivery_address": payload.delivery_address,
             "status": "reserved",
             "reservation_expires_at": _iso(_now() + timedelta(minutes=RESERVATION_MINUTES)),

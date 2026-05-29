@@ -40,6 +40,13 @@ The platform pivoted from the tyre-only auto-engine to a generalized **Regional 
 ### Testing — iteration_8
 - Backend: **27/27 pytest** (`/app/backend/tests/test_regional_waves.py`). Frontend: all flows pass, zero critical issues. 100% / 100%.
 
+### Fitting logistics surfaced + account editing (2026-05-29d)
+- **Member "My Waves" (`/dashboard`, `MyParties.jsx`)** now has a **Regional Waves** section: each order card shows the chosen **fitting garage + 30-min fitting slot** (tyres) or **delivery address** (electronics), plus items/subtotal/status. (Old VPP sections retained below.)
+- **Account panel** added to the consumer console: edit **name + phone** (email shown read-only). New backend `PATCH /api/me/profile` (returns sanitized user, strips `password_hash`).
+- **Supplier order-summary** destinations now list **fitting slots per garage** (`↳ slot · N units`). `join_wave` also **derives the slot label from the ISO** server-side if the client omits it.
+- **Removed** the "Fitting included / Pick your fitter once the Wave locks" notice from the legacy checkout window (fitter + slot are now chosen *during* wave join).
+- Verified: frontend testing_agent iteration_9 (all observable flows PASS), curl, 27/27 regression.
+
 ### Garage fix + fitting slots + contact email (2026-05-29c)
 - **Fixed "Selected garage is not available"** — root cause: (1) zero garages were seeded; (2) `join_wave` validated `status=="verified"` but garages use the `is_verified` boolean. Fixed validation to `is_verified && is_active`. Public `GET /api/garages` now lists **only approved** (verified + active) garages so the dropdown can't offer un-joinable garages.
 - **Seeded 4 approved local garages** (`seed_garages` in waves.py): Coventry Tyre Centre, Warwick Fast Fit, Leamington Garage Hub, Rugby Wheel & Tyre — verified, Mon–Fri 9–5, 30-min slots (DEFAULT_AVAILABILITY).
