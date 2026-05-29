@@ -54,7 +54,7 @@ export default function Privacy() {
 
         <S title="6. Your rights (UK GDPR)">
           Access, rectification, erasure, restriction, portability, and objection.
-          Email <a href="mailto:privacy@thecollectivesavers.co.uk">privacy@thecollectivesavers.co.uk</a> with your request.
+          Email <a href="mailto:founder@thecollectivesavers.co.uk">founder@thecollectivesavers.co.uk</a> with your request.
         </S>
 
         <S title="7. Retention">
@@ -64,7 +64,7 @@ export default function Privacy() {
         </S>
 
         <S title="8. Contact">
-          <a href="mailto:privacy@thecollectivesavers.co.uk">privacy@thecollectivesavers.co.uk</a>
+          <a href="mailto:founder@thecollectivesavers.co.uk">founder@thecollectivesavers.co.uk</a>
         </S>
       </article>
     </div>

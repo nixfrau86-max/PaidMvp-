@@ -73,7 +73,7 @@ export default function Terms() {
         </Section>
 
         <Section title="9. Contact">
-          Questions? Reach us at <a href="mailto:hello@thecollectivesavers.co.uk">hello@thecollectivesavers.co.uk</a>.
+          Questions? Reach us at <a href="mailto:founder@thecollectivesavers.co.uk">founder@thecollectivesavers.co.uk</a>.
         </Section>
       </article>
     </div>

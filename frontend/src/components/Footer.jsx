@@ -12,7 +12,7 @@ export default function Footer() {
         <nav className="flex flex-wrap gap-4 font-mono text-[11px] uppercase tracking-widest" data-testid="footer-nav">
           <Link to="/terms" className="hover:text-[#FF5400]" data-testid="footer-terms">Terms</Link>
           <Link to="/privacy" className="hover:text-[#FF5400]" data-testid="footer-privacy">Privacy</Link>
-          <a href="mailto:hello@thecollectivesavers.co.uk" className="hover:text-[#FF5400]">Contact</a>
+          <a href="mailto:founder@thecollectivesavers.co.uk" className="hover:text-[#FF5400]">Contact</a>
         </nav>
       </div>
     </footer>

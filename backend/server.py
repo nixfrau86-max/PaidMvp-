@@ -1454,8 +1454,8 @@ async def garage_update(payload: GarageUpdateRequest, user: dict = Depends(get_c
 
 @api_router.get("/garages")
 async def list_garages(postcode: Optional[str] = None, garage_type: Optional[str] = None):
-    """Public directory — for users to select a garage at checkout."""
-    q: Dict[str, Any] = {"is_active": True}
+    """Public directory — for users to select an APPROVED garage at checkout / wave join."""
+    q: Dict[str, Any] = {"is_active": True, "is_verified": True}
     if garage_type:
         q["garage_type"] = garage_type
     if postcode:
@@ -1573,8 +1573,11 @@ def _generate_slots_for_date(date_str: str, av: dict, booked: set) -> List[dict]
 
 
 @api_router.get("/garages/{garage_id}/slots")
-async def list_garage_slots(garage_id: str, days: int = 14):
-    """Return upcoming open slots grouped by date for the next N days."""
+async def list_garage_slots(garage_id: str, days: int = 14, min_lead_days: int = 0):
+    """Return upcoming open slots grouped by date for the next N days.
+
+    `min_lead_days` skips the first N days — used by the tyre wave flow so fitting
+    slots only start ~2 working days out (tyres arrive next working day to the garage)."""
     g = await db.garages.find_one({"garage_id": garage_id, "is_active": True}, {"_id": 0})
     if not g:
         raise HTTPException(status_code=404, detail="Garage not found")
@@ -1586,8 +1589,9 @@ async def list_garage_slots(garage_id: str, days: int = 14):
     booked = {b["slot_iso"] for b in booked_docs}
 
     today = datetime.now(timezone.utc).date()
+    start = max(0, int(min_lead_days))
     out = []
-    for i in range(max(1, min(days, 30))):
+    for i in range(start, start + max(1, min(days, 30))):
         d = today + timedelta(days=i)
         date_str = d.isoformat()
         slots = _generate_slots_for_date(date_str, av, booked)
@@ -3383,14 +3387,15 @@ async def startup():
             logger.info(f"Seeded {c} tyre product groups")
     except Exception as e:
         logger.warning(f"Tyre PG seed warning: {e}")
-    # Seed regions + demo Regional Waves
+    # Seed regions + demo Regional Waves + approved garages
     try:
-        from routes.waves import seed_regions_and_waves
+        from routes.waves import seed_regions_and_waves, seed_garages
         rc = await seed_regions_and_waves(db)
-        if rc:
-            logger.info(f"Seeded {rc} regions/regional-waves")
+        gc = await seed_garages(db)
+        if rc or gc:
+            logger.info(f"Seeded {rc} regions/regional-waves, {gc} garages")
     except Exception as e:
-        logger.warning(f"Region/wave seed warning: {e}")
+        logger.warning(f"Region/wave/garage seed warning: {e}")
     # Seed/refresh founder admin
     try:
         founder_email = os.environ.get("FOUNDER_EMAIL", "").strip().lower()

@@ -29,6 +29,9 @@ export default function WaveDetail() {
   const [qty, setQty] = useState(1);
   const [garages, setGarages] = useState([]);
   const [garageId, setGarageId] = useState("");
+  const [slotDays, setSlotDays] = useState([]);
+  const [slotsLoading, setSlotsLoading] = useState(false);
+  const [selectedSlot, setSelectedSlot] = useState(null); // { iso, label, date }
   const [address, setAddress] = useState("");
   const [acceptTerms, setAcceptTerms] = useState(false);
   const [joining, setJoining] = useState(false);
@@ -50,9 +53,20 @@ export default function WaveDetail() {
 
   useEffect(() => {
     if (w?.category === "tyres") {
-      api.get("/garages").then(({ data }) => setGarages(data)).catch(() => {});
+      api.get("/garages").then(({ data }) => setGarages(data)).catch((err) => console.warn("garages load failed", err));
     }
   }, [w?.category]);
+
+  // Load fitting slots when a garage is selected (tyres only)
+  useEffect(() => {
+    if (w?.category !== "tyres" || !garageId) { setSlotDays([]); setSelectedSlot(null); return; }
+    setSelectedSlot(null);
+    setSlotsLoading(true);
+    api.get(`/garages/${garageId}/slots?days=12&min_lead_days=2`)
+      .then(({ data }) => setSlotDays((data.days || []).filter((d) => d.slots.length > 0)))
+      .catch((err) => { console.warn("slots load failed", err); setSlotDays([]); })
+      .finally(() => setSlotsLoading(false));
+  }, [garageId, w?.category]);
 
   useEffect(() => {
     if (!w?.wave_id) return undefined;
@@ -81,6 +95,7 @@ export default function WaveDetail() {
     }
     if (!variant) { toast.error("Select a product option first"); return; }
     if (w.category === "tyres" && !garageId) { toast.error("Select an approved fitting garage"); return; }
+    if (w.category === "tyres" && !selectedSlot) { toast.error("Pick a preferred fitting slot"); return; }
     if (w.category !== "tyres" && !address.trim()) { toast.error("Enter a delivery address"); return; }
     if (!acceptTerms) { toast.error("Please accept the Terms & Privacy to continue"); return; }
     setJoining(true);
@@ -89,8 +104,13 @@ export default function WaveDetail() {
         items: [{ product_id: product.product_id, variant_id: variant.variant_id, qty }],
         accept_terms: true,
       };
-      if (w.category === "tyres") payload.garage_id = garageId;
-      else payload.delivery_address = address.trim();
+      if (w.category === "tyres") {
+        payload.garage_id = garageId;
+        payload.fitting_slot_iso = selectedSlot.iso;
+        payload.fitting_slot_label = selectedSlot.label;
+      } else {
+        payload.delivery_address = address.trim();
+      }
       const { data } = await api.post(`/waves/${id}/join`, payload);
       track("wave_join", { wave_id: id, category: w.category, units: qty });
       toast.success(`Reserved ${qty} unit${qty > 1 ? "s" : ""} — secured for ${data.reservation_minutes} min. Card captured only on activation.`);
@@ -199,6 +219,49 @@ export default function WaveDetail() {
                   <p className="mt-3 font-mono text-[10px] uppercase tracking-widest text-[#3A3A3A]">
                     Not sure of your size? It's printed on your tyre sidewall, e.g. <span className="text-ink font-bold">225/65 R18</span> (width / profile / rim).
                   </p>
+
+                  {/* Fitting slot picker */}
+                  {garageId && (
+                    <div className="mt-5 border-t-2 border-ink pt-4" data-testid="slot-picker">
+                      <div className="font-mono text-[10px] uppercase tracking-widest text-[#3A3A3A] mb-1">Preferred fitting slot</div>
+                      <p className="font-mono text-[10px] tracking-widest text-[#3A3A3A] mb-3">
+                        Tyres arrive at your garage the next working day. Pick a 30-min slot 1–2 days after.
+                      </p>
+                      {slotsLoading ? (
+                        <div className="font-mono text-[11px] uppercase tracking-widest text-[#3A3A3A]">Loading slots…</div>
+                      ) : slotDays.length === 0 ? (
+                        <div className="font-mono text-[11px] uppercase tracking-widest text-[#3A3A3A]">No slots available — try another garage.</div>
+                      ) : (
+                        <div className="space-y-3 max-h-72 overflow-auto pr-1">
+                          {slotDays.map((d) => (
+                            <div key={d.date} data-testid={`slot-day-${d.date}`}>
+                              <div className="font-mono text-[10px] font-bold uppercase tracking-widest mb-1.5">
+                                {new Date(d.date).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {d.slots.map((s) => {
+                                  const isSel = selectedSlot?.iso === s.slot_iso;
+                                  return (
+                                    <button key={s.slot_iso} type="button"
+                                      onClick={() => setSelectedSlot({ iso: s.slot_iso, label: `${new Date(d.date).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })} ${s.label}`, date: d.date })}
+                                      className={`border-2 border-ink px-2.5 py-1.5 font-mono text-[11px] tracking-widest ${isSel ? "bg-ink text-white" : "bg-white hover:bg-[#F4F4F4]"}`}
+                                      data-testid={`slot-${s.slot_iso}`}>
+                                      {s.label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {selectedSlot && (
+                        <div className="mt-3 border-2 border-ink bg-[#00C853] text-ink p-2 inline-flex items-center gap-2 font-mono text-[10px] font-bold uppercase tracking-widest" data-testid="selected-slot">
+                          <CheckCircle weight="fill" size={12} /> {selectedSlot.label}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </>
               ) : (
                 <textarea value={address} onChange={(e) => setAddress(e.target.value)} placeholder="House / flat, street, town, postcode" rows={3} className="w-full border-2 border-ink px-3 py-3 font-mono text-sm" data-testid="delivery-address" />
@@ -239,7 +302,7 @@ export default function WaveDetail() {
                       I agree to the <Link to="/terms" className="underline" target="_blank">Terms</Link> and <Link to="/privacy" className="underline" target="_blank">Privacy Policy</Link>. My inventory is reserved now; payment is captured only when the Wave activates.
                     </span>
                   </label>
-                  <button onClick={join} disabled={!variant || joining || !acceptTerms} className="mt-3 w-full bg-[#FF5400] text-white border-2 border-ink font-bold uppercase tracking-widest px-5 py-4 text-sm shadow-brut hover-brut inline-flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed" data-testid="join-wave-btn">
+                  <button onClick={join} disabled={!variant || joining || !acceptTerms || (w.category === "tyres" && (!garageId || !selectedSlot))} className="mt-3 w-full bg-[#FF5400] text-white border-2 border-ink font-bold uppercase tracking-widest px-5 py-4 text-sm shadow-brut hover-brut inline-flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed" data-testid="join-wave-btn">
                     {joining ? "Reserving…" : <>Join Wave <ArrowRight weight="bold" /></>}
                   </button>
                 </>

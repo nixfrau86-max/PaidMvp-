@@ -40,6 +40,13 @@ The platform pivoted from the tyre-only auto-engine to a generalized **Regional 
 ### Testing — iteration_8
 - Backend: **27/27 pytest** (`/app/backend/tests/test_regional_waves.py`). Frontend: all flows pass, zero critical issues. 100% / 100%.
 
+### Garage fix + fitting slots + contact email (2026-05-29c)
+- **Fixed "Selected garage is not available"** — root cause: (1) zero garages were seeded; (2) `join_wave` validated `status=="verified"` but garages use the `is_verified` boolean. Fixed validation to `is_verified && is_active`. Public `GET /api/garages` now lists **only approved** (verified + active) garages so the dropdown can't offer un-joinable garages.
+- **Seeded 4 approved local garages** (`seed_garages` in waves.py): Coventry Tyre Centre, Warwick Fast Fit, Leamington Garage Hub, Rugby Wheel & Tyre — verified, Mon–Fri 9–5, 30-min slots (DEFAULT_AVAILABILITY).
+- **30-min fitting slot picker** added to the tyre wave join flow (`WaveDetail.jsx`): after picking a garage, members choose a 30-min slot starting **2 days out** (tyres arrive next working day). New `min_lead_days` param on `GET /api/garages/{id}/slots`. Join stores `fitting_slot_iso` + `fitting_slot_label` on the participation; Join is gated until a slot is chosen.
+- **Contact email** changed to `founder@thecollectivesavers.co.uk` in Footer, Terms, Privacy.
+- Verified end-to-end (curl tyre-join with garage+slot succeeds, screenshot of slot picker, 27/27 regression pass).
+
 ### Code-review fixes (2026-05-29b)
 - **Array-index keys → stable keys**: `SupplierWaves.jsx` form arrays now use a client-generated `_key` (products + variants) and composite keys in the order-summary modal; index-based `data-testid`s preserved for tests. (`_key` is never sent to the backend.)
 - **Empty catch blocks** logged: `Browse.jsx`, `VPPDetail.jsx`, `CheckoutSuccess.jsx`, `GarageOnboarding.jsx` now `console.warn` on failure.

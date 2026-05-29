@@ -106,6 +106,8 @@ class JoinItem(BaseModel):
 class WaveJoinRequest(BaseModel):
     items: List[JoinItem]
     garage_id: Optional[str] = None              # required for tyres
+    fitting_slot_iso: Optional[str] = None       # preferred 30-min fitting slot (tyres)
+    fitting_slot_label: Optional[str] = None
     delivery_address: Optional[str] = None       # required for electronics/footwear
     accept_terms: bool = False
 
@@ -476,7 +478,7 @@ def build_router(deps: Dict[str, Any]) -> APIRouter:
             if not payload.garage_id:
                 raise HTTPException(status_code=400, detail="Please select an approved fitting garage")
             g = await db.garages.find_one({"garage_id": payload.garage_id}, {"_id": 0})
-            if not g or g.get("status") != "verified":
+            if not g or not g.get("is_verified") or not g.get("is_active", True):
                 raise HTTPException(status_code=400, detail="Selected garage is not available")
             garage_name = g.get("business_name") or g.get("name")
         else:
@@ -524,6 +526,8 @@ def build_router(deps: Dict[str, Any]) -> APIRouter:
             "subtotal": round(subtotal, 2),
             "garage_id": payload.garage_id,
             "garage_name": garage_name,
+            "fitting_slot_iso": payload.fitting_slot_iso,
+            "fitting_slot_label": payload.fitting_slot_label,
             "delivery_address": payload.delivery_address,
             "status": "reserved",
             "reservation_expires_at": _iso(_now() + timedelta(minutes=RESERVATION_MINUTES)),
@@ -622,6 +626,39 @@ def build_router(deps: Dict[str, Any]) -> APIRouter:
 # Seeding (called from server.startup)
 # --------------------------------------------------------------------------
 SEED_REGIONS = ["Warwickshire", "Coventry", "Leamington Spa", "Rugby", "Midlands"]
+
+SEED_GARAGES = [
+    {"business_name": "Coventry Tyre Centre", "city": "Coventry", "postcode": "CV1 2AB", "phone": "+44 24 7600 1010"},
+    {"business_name": "Warwick Fast Fit", "city": "Warwick", "postcode": "CV34 4QP", "phone": "+44 1926 400 200"},
+    {"business_name": "Leamington Garage Hub", "city": "Leamington Spa", "postcode": "CV31 1XT", "phone": "+44 1926 300 300"},
+    {"business_name": "Rugby Wheel & Tyre", "city": "Rugby", "postcode": "CV21 2AA", "phone": "+44 1788 500 500"},
+]
+
+
+async def seed_garages(db) -> int:
+    """Idempotent seed of approved local fitting garages (verified + active)."""
+    created = 0
+    for g in SEED_GARAGES:
+        if await db.garages.find_one({"business_name": g["business_name"]}, {"_id": 0}):
+            continue
+        await db.garages.insert_one({
+            "garage_id": f"gar_{uuid.uuid4().hex[:10]}",
+            "user_id": f"seed_garage_{uuid.uuid4().hex[:8]}",
+            "business_name": g["business_name"],
+            "contact_email": "founder@thecollectivesavers.co.uk",
+            "contact_phone": g["phone"],
+            "garage_type": "local_garage",
+            "services": ["tyre_fitting", "balancing", "tpms"],
+            "address_line1": f"1 High Street",
+            "city": g["city"],
+            "postcode": g["postcode"],
+            "is_active": True,
+            "is_verified": True,
+            "verified_at": _iso(_now()),
+            "created_at": _iso(_now()),
+        })
+        created += 1
+    return created
 
 
 async def seed_regions_and_waves(db) -> int:
