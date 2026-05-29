@@ -16,8 +16,9 @@ const STATE_BADGE = {
   expired: { label: "Expired", bg: "#525252", text: "#fff" },
 };
 
-const emptyVariant = () => ({ label: "", supplier_cost: "", retail_price: "", wave_price: "", inventory_qty: "" });
-const emptyProduct = () => ({ model: "", variants: [emptyVariant()] });
+const uid = () => (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `k_${Math.random().toString(36).slice(2)}`);
+const emptyVariant = () => ({ _key: uid(), label: "", supplier_cost: "", retail_price: "", wave_price: "", inventory_qty: "" });
+const emptyProduct = () => ({ _key: uid(), model: "", variants: [emptyVariant()] });
 
 export default function SupplierWaves() {
   const navigate = useNavigate();
@@ -162,7 +163,7 @@ function WaveForm({ regions, categories, editing, onClose, onSaved }) {
     min_activation: editing?.min_activation ?? 40,
     deadline_days: 30,
     products: editing?.products?.length
-      ? editing.products.map((p) => ({ product_id: p.product_id, model: p.model, variants: p.variants.map((v) => ({ variant_id: v.variant_id, label: v.label, supplier_cost: v.supplier_cost, retail_price: v.retail_price, wave_price: v.wave_price, inventory_qty: v.inventory_qty })) }))
+      ? editing.products.map((p) => ({ _key: p.product_id || uid(), product_id: p.product_id, model: p.model, variants: p.variants.map((v) => ({ _key: v.variant_id || uid(), variant_id: v.variant_id, label: v.label, supplier_cost: v.supplier_cost, retail_price: v.retail_price, wave_price: v.wave_price, inventory_qty: v.inventory_qty })) }))
       : [emptyProduct()],
   }));
   const [saving, setSaving] = useState(false);
@@ -253,7 +254,7 @@ function WaveForm({ regions, categories, editing, onClose, onSaved }) {
               <button type="button" onClick={addProduct} className="bg-white border-2 border-ink px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest shadow-brut-sm hover-brut inline-flex items-center gap-1" data-testid="add-product-btn"><Plus weight="bold" size={10} /> Add product</button>
             </div>
             {form.products.map((p, pi) => (
-              <div key={pi} className="border-2 border-ink mb-3" data-testid={`product-block-${pi}`}>
+              <div key={p._key} className="border-2 border-ink mb-3" data-testid={`product-block-${pi}`}>
                 <div className="flex items-center gap-2 p-2 border-b-2 border-ink bg-[#FAFAFA]">
                   <input value={p.model} onChange={(e) => updProduct(pi, "model", e.target.value)} className="inp flex-1" placeholder="Model (e.g. EcoContact 6)" data-testid={`product-model-${pi}`} />
                   {form.products.length > 1 && <button type="button" onClick={() => removeProduct(pi)} className="p-2 border-2 border-ink"><Trash weight="bold" size={12} /></button>}
@@ -263,7 +264,7 @@ function WaveForm({ regions, categories, editing, onClose, onSaved }) {
                     <span>Option / size</span><span>Cost £</span><span>RRP £</span><span>Wave £</span><span>Stock</span><span></span>
                   </div>
                   {p.variants.map((v, vi) => (
-                    <div key={vi} className="grid grid-cols-2 sm:grid-cols-[1.3fr_1fr_1fr_1fr_0.8fr_auto] gap-2" data-testid={`variant-row-${pi}-${vi}`}>
+                    <div key={v._key} className="grid grid-cols-2 sm:grid-cols-[1.3fr_1fr_1fr_1fr_0.8fr_auto] gap-2" data-testid={`variant-row-${pi}-${vi}`}>
                       <input value={v.label} onChange={(e) => updVariant(pi, vi, "label", e.target.value)} className="inp" placeholder="225/65 R18" />
                       <input type="number" step="0.01" value={v.supplier_cost} onChange={(e) => updVariant(pi, vi, "supplier_cost", e.target.value)} className="inp" placeholder="0" />
                       <input type="number" step="0.01" value={v.retail_price} onChange={(e) => updVariant(pi, vi, "retail_price", e.target.value)} className="inp" placeholder="0" />
@@ -301,15 +302,15 @@ function SummaryModal({ summary, onClose }) {
           <div>
             <div className="font-display text-lg uppercase mb-1">By option</div>
             {summary.variant_breakdown.length === 0 ? <div className="font-mono text-xs text-[#3A3A3A]">No committed units yet.</div> :
-              summary.variant_breakdown.map((b, i) => (
-                <div key={i} className="flex justify-between border-b border-[#eee] py-1 font-mono text-sm"><span>{b.model} · {b.label}</span><span className="font-bold">{b.units} units</span></div>
+              summary.variant_breakdown.map((b) => (
+                <div key={`${b.model}-${b.label}`} className="flex justify-between border-b border-[#eee] py-1 font-mono text-sm"><span>{b.model} · {b.label}</span><span className="font-bold">{b.units} units</span></div>
               ))}
           </div>
           <div>
             <div className="font-display text-lg uppercase mb-1">Fulfilment destinations</div>
             {summary.destinations.length === 0 ? <div className="font-mono text-xs text-[#3A3A3A]">—</div> :
-              summary.destinations.map((d, i) => (
-                <div key={i} className="flex justify-between border-b border-[#eee] py-1 font-mono text-sm"><span>{d.destination}</span><span className="font-bold">{d.units} units</span></div>
+              summary.destinations.map((d) => (
+                <div key={d.destination} className="flex justify-between border-b border-[#eee] py-1 font-mono text-sm"><span>{d.destination}</span><span className="font-bold">{d.units} units</span></div>
               ))}
           </div>
         </div>

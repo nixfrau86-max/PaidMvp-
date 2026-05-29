@@ -30,7 +30,7 @@ export default function CheckoutSuccess() {
           setStatus("expired");
           return;
         }
-      } catch (e) { /* ignore */ }
+      } catch (err) { console.warn("Checkout status poll error", err); }
       setAttempts(n + 1);
       setTimeout(() => poll(n + 1), 2000);
     };

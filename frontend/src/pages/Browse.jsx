@@ -37,9 +37,9 @@ export default function Browse() {
             return out;
           });
         }
-      } catch {}
+      } catch (err) { console.warn("Bad VPP WS payload", err); }
     };
-    return () => { try { ws.close(); } catch {} };
+    return () => { try { ws.close(); } catch (err) { console.warn("WS close error", err); } };
   }, []);
 
   const categories = useMemo(

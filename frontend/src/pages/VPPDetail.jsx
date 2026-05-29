@@ -61,15 +61,15 @@ export default function VPPDetail() {
               prevState.current = msg.vpp.state;
             }
           }
-        } catch {}
+        } catch (err) { console.warn("Bad VPP WS payload", err); }
       };
-    } catch {}
+    } catch (err) { console.warn("VPP WS init error", err); }
     return () => {
       closed = true;
       try {
         if (ws && ws.readyState === WebSocket.OPEN) ws.close();
         else if (ws) ws.onopen = () => ws.close();
-      } catch {}
+      } catch (err) { console.warn("VPP WS close error", err); }
     };
   }, [id]);
 

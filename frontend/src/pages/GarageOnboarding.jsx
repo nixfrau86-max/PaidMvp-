@@ -69,7 +69,7 @@ export default function GarageOnboarding() {
       try {
         const me = await api.get("/auth/me");
         setUser(me.data);
-      } catch {}
+      } catch (err) { console.warn("Refresh user after garage apply failed", err); }
       toast.success("Garage registered. Welcome aboard.");
       navigate("/garage");
     } catch (err) {

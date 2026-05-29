@@ -40,6 +40,11 @@ The platform pivoted from the tyre-only auto-engine to a generalized **Regional 
 ### Testing — iteration_8
 - Backend: **27/27 pytest** (`/app/backend/tests/test_regional_waves.py`). Frontend: all flows pass, zero critical issues. 100% / 100%.
 
+### Code-review fixes (2026-05-29b)
+- **Array-index keys → stable keys**: `SupplierWaves.jsx` form arrays now use a client-generated `_key` (products + variants) and composite keys in the order-summary modal; index-based `data-testid`s preserved for tests. (`_key` is never sent to the backend.)
+- **Empty catch blocks** logged: `Browse.jsx`, `VPPDetail.jsx`, `CheckoutSuccess.jsx`, `GarageOnboarding.jsx` now `console.warn` on failure.
+- **Deferred (with rationale)**: (a) localStorage→httpOnly auth migration — sensitive auth change; must route through `integration_playbook_expert_v2` and get its own tested task (the app already issues httpOnly session cookies; localStorage is only a bearer fallback). (b) `build_router` "complexity 101" in `routes/waves.py`/`admin_users.py` — reflects the intentional DI closure pattern, not a defect. (c) Several hook-dep suggestions (`api`, `WebSocket`, `URLSearchParams`, `data`, `err`) are false positives — ESLint react-hooks passes clean; adding them would break the code. (d) Static decorative index keys (`WaveBackground.jsx`, `Landing.jsx`) left as-is (lists never reorder).
+
 ## What's implemented (previous — 2026-05-28c)
 ### Refactor: AdminPanel.jsx split + server.py partial routes/ extraction (NEW)
 - **AdminPanel.jsx refactor** — was 887 LOC monolith, now **144 LOC** slim composer importing 7 focused tab modules from `/app/frontend/src/pages/admin/`:
