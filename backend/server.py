@@ -3419,6 +3419,19 @@ async def startup():
             logger.info(f"Seeded {rc} regions/regional-waves, {gc} garages")
     except Exception as e:
         logger.warning(f"Region/wave/garage seed warning: {e}")
+
+    # Background worker: materialise scheduled follow-on waves (auto-respawn)
+    async def _scheduled_waves_loop():
+        from routes.waves import process_due_scheduled_waves
+        while True:
+            try:
+                n = await process_due_scheduled_waves(db, manager)
+                if n:
+                    logger.info(f"Created {n} scheduled follow-on wave(s)")
+            except Exception as e:
+                logger.warning(f"scheduled-waves worker error: {e}")
+            await asyncio.sleep(60)
+    asyncio.create_task(_scheduled_waves_loop())
     # Seed/refresh founder admin
     try:
         founder_email = os.environ.get("FOUNDER_EMAIL", "").strip().lower()

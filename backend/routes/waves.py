@@ -616,7 +616,14 @@ def build_router(deps: Dict[str, Any]) -> APIRouter:
         if r.matched_count == 0:
             raise HTTPException(status_code=404, detail="Wave not found")
         await _broadcast_wave(wave_id, {"type": "wave_update", "state": payload.state})
-        return await db.waves.find_one({"wave_id": wave_id}, {"_id": 0})
+        respawn = None
+        if payload.state == "completed":
+            fresh = await db.waves.find_one({"wave_id": wave_id}, {"_id": 0})
+            respawn = await complete_wave_and_respawn(db, manager, fresh)
+        result = await db.waves.find_one({"wave_id": wave_id}, {"_id": 0})
+        if respawn:
+            result["respawn_result"] = respawn
+        return result
 
     @router.delete("/admin/regional-waves/{wave_id}")
     async def admin_delete_wave(wave_id: str, user: dict = Depends(get_current_user)):
@@ -633,6 +640,154 @@ def build_router(deps: Dict[str, Any]) -> APIRouter:
         return {"success": True}
 
     return router
+
+
+# --------------------------------------------------------------------------
+# Auto-respawn: when a wave COMPLETES with stock remaining, spin up a follow-on
+# wave for the leftover inventory until stock depletes. Time guard: create
+# immediately on a working day before 16:00 (London); otherwise schedule for the
+# next working day at 08:00.
+# --------------------------------------------------------------------------
+def _london_now() -> datetime:
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo("Europe/London"))
+    except Exception:
+        return datetime.now(timezone.utc)
+
+
+def _next_creation_time_london(now: Optional[datetime] = None) -> Optional[datetime]:
+    """Return None to create immediately, else the London datetime to create at.
+
+    Rule: working day (Mon–Fri) before 16:00 → now. Otherwise next working day 08:00."""
+    now = now or _london_now()
+    if now.weekday() < 5 and now.hour < 16:
+        return None
+    d = now + timedelta(days=1)
+    while d.weekday() >= 5:  # skip Sat/Sun
+        d = d + timedelta(days=1)
+    return d.replace(hour=8, minute=0, second=0, microsecond=0)
+
+
+def _compute_remaining_products(wave: dict):
+    """Build fresh product/variant list for leftover (unsold) stock."""
+    new_products, total = [], 0
+    for p in wave.get("products", []):
+        variants = []
+        for v in p.get("variants", []):
+            remaining = int(v.get("inventory_qty", 0)) - int(v.get("sold_qty", 0))
+            if remaining > 0:
+                variants.append({
+                    "variant_id": f"var_{uuid.uuid4().hex[:8]}",
+                    "label": v["label"], "supplier_cost": v["supplier_cost"],
+                    "retail_price": v["retail_price"], "wave_price": v["wave_price"],
+                    "inventory_qty": remaining, "reserved_qty": 0, "sold_qty": 0,
+                })
+                total += remaining
+        if variants:
+            new_products.append({"product_id": f"prd_{uuid.uuid4().hex[:8]}", "model": p["model"], "variants": variants})
+    return new_products, total
+
+
+def _build_respawn_doc(wave: dict, remaining_products: List[dict], total_remaining: int) -> dict:
+    base_title = wave.get("origin_title") or wave["title"]
+    rnd = int(wave.get("round", 1)) + 1
+    return {
+        "wave_id": f"wave_{uuid.uuid4().hex[:10]}",
+        "supplier_id": wave["supplier_id"],
+        "category": wave["category"],
+        "region_id": wave.get("region_id"),
+        "region_name": wave.get("region_name"),
+        "brand": wave.get("brand"),
+        "title": f"{base_title} · Round {rnd}",
+        "origin_title": base_title,
+        "description": wave.get("description", ""),
+        "image_url": wave.get("image_url", ""),
+        "products": remaining_products,
+        "ideal_target": total_remaining,
+        "min_activation": min(int(wave.get("min_activation", total_remaining)), total_remaining),
+        "eta": wave.get("eta", ""),
+        "state": "open",
+        "units_committed": 0,
+        "participants_count": 0,
+        "round": rnd,
+        "origin_wave_id": wave.get("origin_wave_id", wave["wave_id"]),
+        "parent_wave_id": wave["wave_id"],
+        "created_at": _now(),
+        "activated_at": None,
+        "deadline": _now() + timedelta(days=30),
+    }
+
+
+async def complete_wave_and_respawn(db, manager, wave: dict) -> dict:
+    """Mark a completed wave's committed units as sold, then respawn leftover stock."""
+    if wave.get("respawned"):
+        return {"respawned": False, "reason": "already_processed"}
+    wid = wave["wave_id"]
+    parts = await db.wave_participations.find(
+        {"wave_id": wid, "status": {"$in": ACTIVE_PART_STATUSES}}, {"_id": 0}
+    ).to_list(5000)
+    sold: Dict[str, int] = {}
+    for pt in parts:
+        for it in pt.get("items", []):
+            sold[it["variant_id"]] = sold.get(it["variant_id"], 0) + it["qty"]
+    prods = wave.get("products", [])
+    for p in prods:
+        for v in p.get("variants", []):
+            if v["variant_id"] in sold:
+                v["sold_qty"] = max(int(v.get("sold_qty", 0)), sold[v["variant_id"]])
+            v["reserved_qty"] = 0
+    await db.waves.update_one({"wave_id": wid}, {"$set": {"products": prods, "respawned": True}})
+    wave["products"] = prods
+
+    sold_total = sum(sold.values())
+    remaining_products, total_remaining = _compute_remaining_products(wave)
+    # Only respawn after a wave that actually sold units (avoids dead-wave loops)
+    if sold_total <= 0 or total_remaining <= 0:
+        return {"respawned": False, "reason": "no_stock_or_no_sales", "sold": sold_total, "remaining": total_remaining}
+
+    doc = _build_respawn_doc(wave, remaining_products, total_remaining)
+    when = _next_creation_time_london()
+    if when is None:
+        await db.waves.insert_one(dict(doc))
+        await db.suppliers.update_one({"supplier_id": doc["supplier_id"]}, {"$inc": {"waves_published": 1}})
+        await manager.broadcast("waves:feed", {"type": "wave_created", "wave_id": doc["wave_id"], "title": doc["title"]})
+        return {"respawned": True, "scheduled": False, "new_wave_id": doc["wave_id"], "units": total_remaining}
+
+    spec = dict(doc)
+    spec["created_at"] = None
+    spec["deadline"] = None
+    await db.scheduled_waves.insert_one({
+        "scheduled_id": f"sw_{uuid.uuid4().hex[:10]}",
+        "create_at": when.astimezone(timezone.utc).isoformat(),
+        "create_at_local": when.isoformat(),
+        "spec": spec,
+        "origin_wave_id": doc["origin_wave_id"],
+        "parent_wave_id": wid,
+        "created": False,
+    })
+    return {"respawned": True, "scheduled": True, "create_at": when.isoformat(), "units": total_remaining}
+
+
+async def process_due_scheduled_waves(db, manager) -> int:
+    """Background worker tick: materialise any scheduled follow-on waves now due."""
+    now_iso = _now().isoformat()
+    due = await db.scheduled_waves.find({"created": False, "create_at": {"$lte": now_iso}}, {"_id": 0}).to_list(100)
+    count = 0
+    for sw in due:
+        spec = dict(sw["spec"])
+        spec["wave_id"] = spec.get("wave_id") or f"wave_{uuid.uuid4().hex[:10]}"
+        spec["created_at"] = _now()
+        spec["deadline"] = _now() + timedelta(days=30)
+        spec["activated_at"] = None
+        spec["state"] = "open"
+        await db.waves.insert_one(dict(spec))
+        await db.suppliers.update_one({"supplier_id": spec["supplier_id"]}, {"$inc": {"waves_published": 1}})
+        await db.scheduled_waves.update_one({"scheduled_id": sw["scheduled_id"]},
+                                            {"$set": {"created": True, "created_wave_id": spec["wave_id"], "created_real_at": now_iso}})
+        await manager.broadcast("waves:feed", {"type": "wave_created", "wave_id": spec["wave_id"], "title": spec.get("title")})
+        count += 1
+    return count
 
 
 # --------------------------------------------------------------------------

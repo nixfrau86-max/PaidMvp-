@@ -40,6 +40,11 @@ The platform pivoted from the tyre-only auto-engine to a generalized **Regional 
 ### Testing — iteration_8
 - Backend: **27/27 pytest** (`/app/backend/tests/test_regional_waves.py`). Frontend: all flows pass, zero critical issues. 100% / 100%.
 
+### Auto-respawn wave lifecycle (2026-05-29e)
+- **Leftover-stock respawn**: when a wave is marked **completed**, committed units are recorded as **sold**; if any stock remains, a **follow-on wave** ("· Round N") is auto-created for the leftover inventory — repeating until stock depletes. Only respawns if the round actually sold ≥1 unit (avoids dead loops).
+- **Time guard (Europe/London)**: create immediately on a working day before 16:00; otherwise schedule for the **next working day 08:00** (weekends skipped). A 60s background worker (`process_due_scheduled_waves`) materialises due `scheduled_waves`.
+- Backend: `routes/waves.py` (`complete_wave_and_respawn`, `_next_creation_time_london`, `_compute_remaining_products`, `_build_respawn_doc`), hooked into `PATCH /api/admin/regional-waves/{id}/state` on `completed`. Tests: `tests/test_wave_respawn.py` (6 pass).
+
 ### Fitting logistics surfaced + account editing (2026-05-29d)
 - **Member "My Waves" (`/dashboard`, `MyParties.jsx`)** now has a **Regional Waves** section: each order card shows the chosen **fitting garage + 30-min fitting slot** (tyres) or **delivery address** (electronics), plus items/subtotal/status. (Old VPP sections retained below.)
 - **Account panel** added to the consumer console: edit **name + phone** (email shown read-only). New backend `PATCH /api/me/profile` (returns sanitized user, strips `password_hash`).
