@@ -1,167 +1,160 @@
-<analysis>**original_problem_statement**: Build The Collective Savers™ — a real-time demand aggregation platform driven by Value Party Power Systems (VPPs) rebranded as Waves. The platform allows consumers to group-buy products to unlock supplier pricing. The UX must feel like a premium, modern, invisible infrastructure, focusing entirely on savings unlocked. The platform monetises collective purchasing power via transparent platform and payment method fees.
+<analysis>**original_problem_statement**: Pivot the platform to a Regional Product Waves© architecture, moving away from the automated tyre-only engine to supplier-created regional waves (Tyres, Electronics, Footwear). Implement Admin & Supplier wave management controls. Integrate fitting slot logistics (30-minute intervals). Implement automated wave respawning logic for unsold inventory. Implement Phase 3: Stripe Pay-on-activation flow (Join -> Wave Activates -> User Pays -> Slot Confirmed).
+PRODUCT REQUIREMENTS: 
+- Core Pivot: .
+- Payment Flow: Stripe Pay-on-activation. User joins wave -> Wave reaches minimum threshold -> Activates -> User receives payment link -> Captured payment confirms booking.
+- Fulfillment: Garages get real-time booking slots in 30-minute intervals.
+- Auto-Respawn: Completed waves automatically respawn a new wave for remaining stock.
 
-**PRODUCT REQUIREMENTS**:
-- **Roles**: Consumers, Suppliers, Garages, Admin.
-- **Auth**: Google OAuth, Email/Password, SMS OTP (Twilio).
-- **Core Flow**: Join a Wave -> Pre-authorize Card (Card-on-file via SetupIntent) -> Wave Locks -> Order Sent to Supplier -> For Tyre Waves, user selects an authorized Garage.
-- **Payments**: Stripe, Open Banking (mocked), Bank Transfer. Configurable dynamic fee engine at checkout.
-- **Auto Wave Engine for Tyres**: Suppliers only create Product Groups and upload inventory sizes; the platform auto-generates one unified wave per product group. 
+**User's preferred language**: English (INSTRUCT next agent to respond in the user's preferred language only)
 
-**User's preferred language**: English (INSTRUCT next agent to respond in English only)
-
-**what currently exists?**: A full-stack React + FastAPI + MongoDB application. Features a dynamic checkout (fee engine), a 3-way multi-role authentication system, a real-time WebSocket feed for Wave updates, and a fully functional Auto Wave Engine for Tyres. The admin panel is modularized into tabs (Users, Terms, Fees, Suppliers, Waves). T&Cs audit logging and Firebase Analytics are wired up. Backend routing has begun modularization.
+**what currently exists?**: A full-stack React + FastAPI + MongoDB app. The new Regional Product Waves© engine (Phase 1 and 2) is fully functional. Admin and Supplier controls are active. Garages have 30-min booking slots. Auto-respawn logic with timezone support is built. The backend for Stripe Pay-on-activation (Phase 3) is implemented. The previous aggressive ESLint build blocker was investigated and verified as resolved (the app compiles with warnings, not errors). 
 
 **Last working item**:
-- **Last item agent was working**: Refactoring  (~3,660 LOC) into  modules, splitting  (~890 LOC) into modular files, and cleaning up rogue admin accounts.
-- **Status**: COMPLETED
-- **Agent Testing Done**: Y
-- **Which testing method agent to use?**: NA (testing already done by testing_agent_v3_fork)
-- **User Testing Done**: N
+- Last item agent was working: The agent investigated the previously reported ESLint blocking issue and confirmed that the frontend compiles successfully (rules are already downgraded in ). The agent then formulated a plan to finish Phase 3 Stripe Pay-on-activation Integration and used  to present the plan and seek the user's approval.
+- Status: USER VERIFICATION PENDING
+- Agent Testing Done: Y (Verified logs, configurations, and backend Stripe 200 OK responses).
+- Which testing method agent to use?: Frontend testing agent/screenshot tool
+- User Testing Done: N
 
 **All Pending/In progress Issue list**:
-Issue 1: Stripe SetupIntent & Payment Pre-auth Flow (P0)
-   - Attempted fixes: Discussed in previous sessions and explicitly prioritized by the user in this session, but the agent completely forgot to implement it while building the Tyre Waves functionality.
-   - Next debug checklist: Modify the Stripe integration on the backend/frontend. When a User/Supplier joins a wave for the first time, generate a Stripe  to save the card on file.
-   - Why fix this issue and what will be achieved with the fix? Core product requirement. Users should not be charged immediately upon joining a wave; their payment must be pre-authorized and locked until the wave succeeds.
-   - Status: NOT STARTED
-   - Is recurring issue? N
-   - Should Test frontend/backend/both after fix? both
-   - Blocked on other issue: None
-
-Issue 2: Insecure Data Storage / Auth Tokens in localStorage (P1)
-   - Attempted fixes: Flagged in user code review, but agent deferred it due to architectural impact.
-   - Next debug checklist: Migrate JWT/auth token storage from  to  cookies across the frontend and backend auth routes.
-   - Why fix this issue and what will be achieved with the fix? Prevents XSS attacks and secures user sessions.
-   - Status: NOT STARTED
-   - Is recurring issue? N
-   - Should Test frontend/backend/both after fix? both
-   - Blocked on other issue: None
-
-Issue 3: High Component/Function Complexity (P2)
-   - Attempted fixes: Agent extracted Admin/Terms to  and split , but  is still massive (~3,377 LOC) and contains Checkout, Auth, and Tyre Waves. React components like  and  are too complex.
-   - Next debug checklist: Extract Auth, Checkout, and Tyre Waves from  into . Split  and  into smaller UI components.
-   - Why fix this issue and what will be achieved with the fix? Code maintainability and adherence to SOLID principles.
-   - Status: IN PROGRESS
-   - Is recurring issue? N
-   - Should Test frontend/backend/both after fix? both
-   - Blocked on other issue: None
+  - Issue 1: Insecure Data Storage / Auth Tokens in localStorage (P1)
+     - Attempted fixes: Flagged by user code review, deferred in previous iterations.
+     - Next debug checklist: Migrate JWT storage from  to  cookies across frontend and backend.
+     - Why fix this issue and what will be achieved with the fix? Fixes XSS vulnerabilities and enhances security.
+     - Status: NOT STARTED
+     - Is recurring issue? N
+     - Should Test frontend/backend/both after fix? both
+     - Blocked on other issue: None
+  - Issue 2: High Backend/Frontend Complexity (P2)
+     - Attempted fixes: Agent deferred refactoring.
+     - Next debug checklist: Break down large functions like  (complexity 101) and React components like , , and  into smaller hooks/files.
+     - Why fix this issue and what will be achieved with the fix? Improves code maintainability and avoids future context overload.
+     - Status: NOT STARTED
+     - Is recurring issue? N
+     - Should Test frontend/backend/both after fix? both
+     - Blocked on other issue: None
 
 **In progress Task List**:
-Task 1: Resend Transactional Emails Integration (P0)
-   - Where to resume: Wait for the user to provide the Resend API key (User explicitly said Resend later when you share key). Once received, implement email notifications.
-   - What will be achieved with this? Automated platform communications for approvals, wave locks, and bookings.
-   - Status: BLOCKED
-   - Should Test frontend/backend/both after fix? backend
-   - Blocked on something: Waiting for user to provide the Resend API Key.
+  - Task 1: Phase 3 Stripe Pay-on-activation Integration (P0)
+     - Where to resume: Wait for user to approve the proposed plan in the chat. Then, test the Pay now CTA from , ensure  and  work correctly, and verify the Stripe checkout session link works via UI.
+     - What will be achieved with this? Core revenue flow for the regional waves architecture.
+     - Status: IN PROGRESS (Awaiting user confirmation)
+     - Should Test frontend/backend/both after fix? frontend
+     - Blocked on something: User approval of the plan.
+  - Task 2: Resend Transactional Emails Integration (P0)
+     - Where to resume: Wait for user to provide the Resend API key.
+     - What will be achieved with this? Automated platform communications (booking confirmations, wave activation emails).
+     - Status: BLOCKED
+     - Should Test frontend/backend/both after fix? backend
+     - Blocked on something: User API key.
 
-**Upcoming and Future Tasks**:
-- P1: Wire Live Twilio Credentials (SMS OTP is currently in DEV mode logging to the backend console).
+**Upcoming and Future Tasks**
+Upcoming Tasks:
+- P1: Phase 4 Premium UX & discovery (Stripe/Revolut-inspired UI, live counters, progress bars).
+- P1: Wire Live Twilio Credentials (currently DEV mode).
+Future Tasks:
 - P2: Implement Consumer iCal feed generation.
-- P2: Real Open Banking Integration (TrueLayer/Plaid).
-- P2: Stripe Connect integration for automated Supplier split-payments/settlement.
-- P2: Implement Refer a Driver growth loop (Viral incentive).
-- P2: Implement Apple Sign-in (Deferred currently due to Apple Developer Program requirements).
+- P2: Open Banking Integration (TrueLayer/Plaid).
+- P2: Stripe Connect integration for supplier split-payments.
+- P2: Implement Refer a Driver growth loop.
+- P2: Apple Sign-in integration.
 - P2: Admin dashboard commission/revenue chart.
 
-**Completed work in this session**:
-- Built Tyre Product Group Waves MVP Auto-Engine (Backend logic, WebSockets, , , ). (DONE)
-- Gated tyre features inside Supplier Onboarding via a Categories multi-select tick-box. (DONE)
-- Removed Tyre Waves link from public landing page (now accessible internally for tagged suppliers/admins). (DONE)
-- Added Firebase Analytics and wired page-view/identity tracking. (DONE)
-- Created Admin Users management tab (list, suspend, soft/hard delete, role management). (DONE)
-- Created T&Cs static pages (, ) and wired acceptance checkbox with an audit logging API. (DONE)
-- Fixed multiple code review issues (hook dependencies, index-as-key, empty catches). (DONE)
-- Cleaned up rogue admin accounts and fixed a login bug that mistakenly auto-promoted them. (DONE)
-- Refactored  into 7 modular files inside . (DONE)
-- Refactored  by extracting  and  into  and . (DONE)
+**Completed work in this session**
+- Investigated ESLint frontend compilation issue and confirmed frontend correctly builds and runs without fatal blocking errors.
+- Verified Stripe backend payment routes () are returning 200 OK successfully.
+- (Carried over from previous session) Pivoted architecture to supplier-created Regional Product Waves© (DONE)
+- (Carried over from previous session) Added 30-min garage fitting slot selection to Tyre Wave flow (DONE)
+- (Carried over from previous session) Built Auto-Respawn engine for unsold wave inventory (DONE)
 
-**Earlier issues found/mentioned but not fixed**:
-Issue 1: 
-   - Debug checklist:  uses  checks instead of . A code reviewer flagged this, but the agent rejected it stating PEP-8 requires . This is technically correct by the agent, but ensuring the rest of the codebase aligns with standard PEP-8 conventions is worth noting.
-   - Why to solve this issue and what will be achieved with this? Codebase consistency.
-   - Should Test frontend/backend/both after fix: backend
+**Earlier issues found/mentioned but not fixed**
+  - Issue 1: Missing React Hook Dependencies
+   - Debug checklist: Review React compiler/ESLint warnings and add missing dependencies in  and  across multiple files.
+   - Why to solve this issue and what will be achieved with this? Resolves stale closure bugs.
+   - Should Test frontend/backend/both after fix: frontend
    - Is recurring issue? N
 
-**Known issue recurrence from previous fork**:
-- Issue recurrence in previous fork: None
-- Recurrence count: 0
-- Status: RESOLVED
+**Known issue recurrence from previous fork**
+  - Issue recurrence in previous fork: None
+  - Recurrence count: 0
+  - Status: RESOLVED
 
-**Code Architecture**:
+**Code Architecture**
 
 
-**Key Technical Concepts**:
-Frontend: React, Tailwind CSS, Shadcn UI components, Firebase Analytics
+**Key Technical Concepts**
+Frontend: React, Tailwind CSS, Shadcn UI
 Backend: FastAPI, MongoDB (Motor), WebSockets
-Architecture: SPA consuming REST APIs and WebSockets. Dynamic Fee Engine. 
+Architecture: Regional Waves, Pay-on-activation Stripe Checkout, Async Scheduling (Wave Respawn).
 
-**key DB schema**:
-- : 
-- : 
-- : 
-- : 
+**key DB schema**
+  - : 
+  - : 
+  - : 
+  - : 
 
-**changes in tech stack**:
-- Added  NPM package for Analytics.
+**changes in tech stack**
+  - None
 
-**All files of reference**:
--  &  (New modular routes).
--  (7 new modular files for the Admin dashboard).
--  (Firebase initialization).
-- , ,  (New Tyre Auto-Engine pages).
+**All files of reference**
+  -  (Core wave/respawn engine)
+  -  (Stripe integration backend)
+  -  (New user dashboard)
+  -  (Tyre/slot selection flow)
+  -  and  (Verified linting config)
 
-**Areas that need refactoring**:
--  is still ~3,377 lines and needs Auth, Checkout, and Tyre Waves extracted to .
--  and  are overly complex and need splitting.
-- Auth token storage should migrate from  to  cookies.
+**Areas that need refactoring**
+  -   is extremely massive (cyclomatic complexity 101, 500+ lines). 
+  - JWT token storage requires extraction from  to  cookies.
 
-**key api endpoints**:
-- , 
-- , 
-- , 
+**key api endpoints**
+  - , 
+  -  (Stripe checkout generation)
+  - 
+  - , 
 
-**Critical Info for New Agent**:
-- **Missing Stripe Pre-Auth**: The user explicitly instructed the agent to build Tyre Waves + Stripe pre-auth now, but the agent entirely forgot to implement Stripe SetupIntents. **This is your highest priority P0 task.**
-- Admin accounts are strictly controlled by the  environment variable in the backend. 
-- Auto Wave Engine: Suppliers do *not* create tyre waves manually. They create Product Groups, and the backend auto-generates a single Wave per product group encompassing all uploaded tyre sizes.
--  has started being modularized. Follow the pattern established in  for future backend features.
+**Critical Info for New Agent**
+  - **LINTING BLOCKER RESOLVED:** The previous fork reported a strict ESLint compilation blocker. This is actually a false alarm; the rules are already downgraded to warnings in , and the frontend logs confirm it compiles. Proceed directly with Phase 3 UI functionality.
+  - **Stripe Architecture:** Option A (Pay-on-activation) is strictly followed. User joins without card -> Wave hits minimum target -> Activates -> Dashboard displays Pay Now -> Checkout session confirms booking.
+  - **Plan Sent:** The agent just used  to confirm the next execution plan. Your very first step must be to read the user's response and proceed accordingly.
 
-**documents and test reports created in this job**:
-- 
-- 
-- 
--  (Updated continuously)
+**documents and test reports created in this job**
+  - 
+  - 
+  - 
+  - 
 
-**Last 10 User Messages and any pending HUMAN messages**:
-1. (User) Provided strict architecture/requirements for Tyre Product Group Waves auto-engine.
-2. (User) Clarified to build Tyre waves + Stripe Pre-Auth now, skip Resend. (Agent built Tyre Waves, forgot Stripe).
-3. (User) Provided a Code Quality Report with React/Python bugs.
-4. (User) Asked to hide Tyre Waves from public landing, gate supplier tyre creation with tick-boxes, and show commission structure.
-5. (User) Asked for an Admin Users control tab, T&Cs static pages + audit log, and to install Firebase Analytics.
-6. (User) Shared Firebase config snippet.
-7. (User) Asked to refactor  into , split  into modular pages, and clean up specific rogue admin emails.
-*PENDING HUMAN MESSAGE: None, but Resend API key is still awaited from an earlier session.*
+**Last 10 User Messages and any pending HUMAN messages** 
+  - Provided strict architecture/requirements for Regional Product Waves© pivot. (COMPLETED)
+  - Answered clarification questions: local garages prioritized, no DVLA plate lookup yet, delay Stripe Connect. (COMPLETED)
+  - Provided comprehensive Code Quality Report highlighting missing deps, high complexity, and bad keys. (PENDING FIXES)
+  - Found bug: Selected garage is not available and requested 30-min slot integration + email change to founder@. (COMPLETED)
+  - Feature Request: Show chosen garage + slot in My Waves, remove Wrench from checkout, add user profile edit. (COMPLETED)
+  - Confirmed Phase 3 Stripe integration is next. Added new requirement: Auto-respawn waves for remaining stock. (COMPLETED)
+  - Elected Option A: Pay-on-activation for the Stripe workflow. (COMPLETED - Backend done, UI pending)
+  - Current Handoff Summary mapping out blockers. (COMPLETED)
+  - User requested: Please use ask_human tool and confirm your plan now. (COMPLETED)
+  - *PENDING HUMAN MESSAGE:* The previous agent submitted an  prompt waiting for the user to confirm the plan. Await and act on the incoming user message.
 
-**Project Health Check**:
-- Broken: Stripe Pre-auth flow is missing. 
-- Mocked: Open Banking / Bank transfer discounts. Twilio SMS OTP (DEV mode).
+**Project Health Check:**
+  - Broken: None (The previously reported ESLint build error was verified to be a warning only).
+  - Mocked: Twilio SMS Auth (DEV mode).
 
-**3rd Party Integrations**:
-- Stripe (Payments) — requires User API Key (using test key )
-- Twilio (SMS Auth) — requires User API Key (currently in dev mode)
-- Resend (Emails) — requires User API Key (Pending user response)
-- Firebase (Analytics) — requires User Config (Added this session)
-- Emergent-managed Google Auth — requires no action.
+**3rd Party Integrations**
+  - Stripe (Payments) — requires User API Key (using test key  from environment)
+  - Twilio (SMS Auth) — requires User API Key (currently in dev mode)
+  - Resend (Emails) — requires User API Key (Pending user response)
+  - Firebase (Analytics) — requires User Config
 
-**Testing status**:
-- Testing agent used after significant changes: YES (Iterations 5, 6, 7)
-- Troubleshoot agent used after agent stuck in loop: NO
-- Test files created: 
-- Known regressions: None.
+**Testing status**
+  - Testing agent used after significant changes: YES
+  - Troubleshoot agent used after agent stuck in loop: NO
+  - Test files created: , 
+  - Known regressions: None (UI compilation block resolved).
 
-**Credentials to test flow**:
-Check .
-Founder Admin:  | Password: 
+**Credentials to test flow:**
+  - Admin Email:  
+  - Password: 
 
-**What agent forgot to execute**:
-- **Stripe SetupIntent Pre-Auth:** In Message 8, the user explicitly stated: Build Tyre Waves + Stripe pre-auth now. The agent built the entire Tyre Waves engine, refactored code, fixed bugs, and added Firebase, but **completely forgot** to implement the Stripe SetupIntent pre-authorization flow. This is a critical missed requirement that needs immediate attention.</analysis>
+**What agent forgot to execute**
+  - The agent deferred the user's previous Code Quality Report recommendations: specifically, migrating  to  cookies (security vulnerability) and breaking down the  massive functions.</analysis>
