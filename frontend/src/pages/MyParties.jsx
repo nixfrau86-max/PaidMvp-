@@ -85,7 +85,7 @@ export default function MyParties() {
                 <div className="text-[10px] font-bold uppercase tracking-widest font-mono mb-1">Action required</div>
                 <h3 className="font-display text-2xl uppercase leading-tight">Book your fitting.</h3>
                 <p className="text-sm mt-1">
-                  Your Wave has locked. Pick a verified garage + time slot — we'll dispatch your order to them directly.
+                  Your Wave has locked. Pick a verified garage + time slot — we&apos;ll dispatch your order to them directly.
                 </p>
               </div>
             </div>
@@ -194,6 +194,29 @@ function WaveOrderCard({ order }) {
           </>
         )}
       </div>
+      {/* payment CTA / status */}
+      {(() => {
+        const payable = ["activated", "processing", "fulfilment"].includes(w.state) && order.payment_status !== "paid" && ["reserved", "authorized"].includes(order.status);
+        if (order.payment_status === "paid") {
+          return (
+            <div className="mt-3 border-2 border-ink bg-[#00C853] p-2 inline-flex items-center gap-2 font-mono text-[10px] font-bold uppercase tracking-widest" data-testid={`order-paid-${order.participation_id}`}>
+              <CheckCircle weight="fill" size={12} /> Paid · {order.payment_method}
+            </div>
+          );
+        }
+        if (payable) {
+          return (
+            <Link to={`/wave-pay/${order.participation_id}`} className="mt-3 w-full bg-[#FF5400] text-white border-2 border-ink font-bold uppercase tracking-widest px-4 py-3 text-xs shadow-brut hover-brut inline-flex items-center justify-center gap-2" data-testid={`pay-now-${order.participation_id}`}>
+              <Lock weight="fill" size={12} /> Pay now · Wave activated
+            </Link>
+          );
+        }
+        return (
+          <div className="mt-3 font-mono text-[10px] uppercase tracking-widest text-[#3A3A3A]" data-testid={`order-await-${order.participation_id}`}>
+            Reserved · payment opens when the Wave activates
+          </div>
+        );
+      })()}
     </div>
   );
 }

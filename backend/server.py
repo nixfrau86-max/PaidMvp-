@@ -1369,7 +1369,11 @@ async def stripe_webhook(request: Request):
                 {"$set": {"payment_status": "paid", "status": "complete",
                           "paid_at": datetime.now(timezone.utc).isoformat()}}
             )
-            await _mark_participant_paid(tx["vpp_id"], tx["user_id"], tx["payment_method"])
+            if tx.get("kind") == "wave":
+                from routes.wave_payments import settle_wave_participation
+                await settle_wave_participation(db, manager, tx["participation_id"], tx.get("payment_method", "card"))
+            else:
+                await _mark_participant_paid(tx["vpp_id"], tx["user_id"], tx["payment_method"])
     return {"received": True}
 
 
@@ -3125,6 +3129,7 @@ from routes.admin_users import build_router as _build_admin_users_router  # noqa
 from routes.terms import build_router as _build_terms_router  # noqa: E402
 from routes.admin_suppliers import build_router as _build_admin_suppliers_router  # noqa: E402
 from routes.waves import build_router as _build_waves_router  # noqa: E402
+from routes.wave_payments import build_router as _build_wave_payments_router  # noqa: E402
 
 _route_deps = {
     'db': db,
@@ -3132,11 +3137,14 @@ _route_deps = {
     'get_current_user_optional': get_current_user_optional,
     'require_role': require_role,
     'manager': manager,
+    'get_fee_config': get_fee_config,
+    'compute_service_fee': compute_service_fee,
 }
 api_router.include_router(_build_admin_users_router(_route_deps))
 api_router.include_router(_build_terms_router(_route_deps))
 api_router.include_router(_build_admin_suppliers_router(_route_deps))
 api_router.include_router(_build_waves_router(_route_deps))
+api_router.include_router(_build_wave_payments_router(_route_deps))
 
 
 

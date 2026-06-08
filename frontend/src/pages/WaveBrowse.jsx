@@ -103,7 +103,7 @@ export default function WaveBrowse() {
             One region. One product.<br /><span className="text-[#FF5400]">One collective price.</span>
           </h1>
           <p className="mt-5 text-base sm:text-lg text-[#3A3A3A] max-w-2xl">
-            Join an active Wave near you — momentum unlocks supplier pricing the high street can't match.
+            Join an active Wave near you — momentum unlocks supplier pricing the high street can&apos;t match.
           </p>
           <div className="mt-6 inline-flex flex-wrap gap-3 items-center font-mono text-[11px] uppercase tracking-widest">
             <div className="border-2 border-ink bg-white px-3 py-2 shadow-brut-sm flex items-center gap-2" data-testid="stat-live-waves">

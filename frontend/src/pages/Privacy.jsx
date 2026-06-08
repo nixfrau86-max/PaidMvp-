@@ -48,7 +48,7 @@ export default function Privacy() {
 
         <S title="5. Cookies">
           We use a strictly-necessary <code>session_token</code> cookie for
-          authentication and Firebase Analytics' first-party cookies for product
+          authentication and Firebase Analytics&apos; first-party cookies for product
           telemetry. You can opt out of analytics from your account settings.
         </S>
 

@@ -218,7 +218,7 @@ export default function SupplierOnboarding() {
                 })}
               </div>
               <div className="mt-2 text-[10px] font-mono uppercase tracking-widest text-[#3A3A3A]">
-                Non-tyre suppliers won't see the Tyre Product Groups section.
+                Non-tyre suppliers won&apos;t see the Tyre Product Groups section.
               </div>
             </Field>
             <Field label="Short description *">

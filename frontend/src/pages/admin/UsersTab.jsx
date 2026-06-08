@@ -145,7 +145,7 @@ export default function UsersTab() {
                   <Td><span className="text-[10px]">{u.created_at?.slice(0, 10)}</span></Td>
                   <Td>
                     {isMe ? (
-                      <span className="font-mono text-[10px] uppercase tracking-widest text-[#3A3A3A]">It's you</span>
+                      <span className="font-mono text-[10px] uppercase tracking-widest text-[#3A3A3A]">It&apos;s you</span>
                     ) : isAdmin ? (
                       <span className="font-mono text-[10px] uppercase tracking-widest text-[#0021A5]">Admin · protected</span>
                     ) : (

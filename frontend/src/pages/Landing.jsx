@@ -129,7 +129,7 @@ export default function Landing() {
             Help shape what<br />comes next.
           </h2>
           <p className="text-[#3A3A3A] leading-relaxed mb-8">
-            Early members will help define the categories we unlock, the suppliers we partner with, and the way our purchasing network evolves. This isn't a discount programme — it's coordinated access.
+            Early members will help define the categories we unlock, the suppliers we partner with, and the way our purchasing network evolves. This isn&apos;t a discount programme — it&apos;s coordinated access.
           </p>
           <ul className="space-y-3">
             {[
@@ -338,8 +338,8 @@ function WaitlistForm({ compact = false }) {
       <div className="border-2 border-ink bg-[#FFD600] shadow-brut p-5 inline-flex items-center gap-3 max-w-md" data-testid="waitlist-success">
         <Sparkle weight="fill" size={22} />
         <div>
-          <div className="font-display text-lg uppercase tracking-tight">You're on the list.</div>
-          <div className="font-mono text-xs uppercase tracking-widest text-[#3A3A3A] mt-0.5">We'll be in touch.</div>
+          <div className="font-display text-lg uppercase tracking-tight">You&apos;re on the list.</div>
+          <div className="font-mono text-xs uppercase tracking-widest text-[#3A3A3A] mt-0.5">We&apos;ll be in touch.</div>
         </div>
       </div>
     );

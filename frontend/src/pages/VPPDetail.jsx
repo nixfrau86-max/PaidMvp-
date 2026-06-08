@@ -212,7 +212,7 @@ export default function VPPDetail() {
                 </button>
               ) : vpp.has_joined ? (
                 <div className="bg-[#FFD600] text-ink border-2 border-white p-4 flex items-center gap-2 font-bold uppercase tracking-wider text-sm">
-                  <Lightning weight="fill" size={20} /> You're In — Waiting for Lock
+                  <Lightning weight="fill" size={20} /> You&apos;re In — Waiting for Lock
                 </div>
               ) : canJoin ? (
                 <button

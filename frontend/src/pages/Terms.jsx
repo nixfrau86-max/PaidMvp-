@@ -16,15 +16,15 @@ export default function Terms() {
         <h1 className="font-display text-4xl sm:text-5xl uppercase tracking-tighter leading-[0.95] mb-6">Terms of Service.</h1>
 
         <Section title="1. Who we are">
-          The Collective Savers™ ("we", "us", "the platform") operates a real-time demand
-          aggregation marketplace ("Waves") that lets consumers group-buy goods at
+          The Collective Savers™ (&quot;we&quot;, &quot;us&quot;, &quot;the platform&quot;) operates a real-time demand
+          aggregation marketplace (&quot;Waves&quot;) that lets consumers group-buy goods at
           supplier-level pricing. This site is operated from the United Kingdom and
           governed by the laws of England & Wales.
         </Section>
 
         <Section title="2. How Waves work">
           Joining a Wave is a binding offer to purchase the goods at the unlocked price,
-          subject to the Wave reaching its target participation threshold ("Wave Lock").
+          subject to the Wave reaching its target participation threshold (&quot;Wave Lock&quot;).
           Until the Wave locks, your card is <strong>pre-authorised, not charged</strong>.
           When a Wave locks we capture the agreed amount and the supplier dispatches.
           If a Wave does not lock within the published window, the pre-authorisation is

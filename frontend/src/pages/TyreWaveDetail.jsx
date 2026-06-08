@@ -266,7 +266,7 @@ export default function TyreWaveDetail() {
               {/* CTA */}
               {pg.has_joined ? (
                 <div className="mt-5 border-2 border-ink bg-[#00C853] text-ink p-3 inline-flex items-center gap-2 font-mono text-[11px] font-bold uppercase tracking-widest">
-                  <CheckCircle weight="fill" /> You're in — size {pg.selected_size}
+                  <CheckCircle weight="fill" /> You&apos;re in — size {pg.selected_size}
                 </div>
               ) : (
                 <>

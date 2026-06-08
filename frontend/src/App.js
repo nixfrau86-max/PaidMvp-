@@ -26,6 +26,8 @@ import SupplierProductGroups from "./pages/SupplierProductGroups";
 import WaveBrowse from "./pages/WaveBrowse";
 import WaveDetail from "./pages/WaveDetail";
 import SupplierWaves from "./pages/SupplierWaves";
+import WavePayment from "./pages/WavePayment";
+import WavePaymentSuccess from "./pages/WavePaymentSuccess";
 import Terms from "./pages/Terms";
 import Privacy from "./pages/Privacy";
 
@@ -65,6 +67,8 @@ function AppRouter() {
       <Route path="/browse" element={<Browse />} />
       <Route path="/waves" element={<WaveBrowse />} />
       <Route path="/wave/:id" element={<WaveDetail />} />
+      <Route path="/wave-pay/:participationId" element={<WavePayment />} />
+      <Route path="/wave-payment/success" element={<WavePaymentSuccess />} />
       <Route path="/tyres" element={<TyreWaves />} />
       <Route path="/tyre-wave/:id" element={<TyreWaveDetail />} />
       <Route path="/vpp/:id" element={<VPPDetail />} />

@@ -138,7 +138,7 @@ function ChooseIntent({ onPick }) {
           <div className="w-12 h-12 bg-[#FFD600] border-2 border-ink flex items-center justify-center mb-5">
             <User weight="duotone" size={24} />
           </div>
-          <div className="font-display text-2xl uppercase mb-2">I'm a Member</div>
+          <div className="font-display text-2xl uppercase mb-2">I&apos;m a Member</div>
           <p className="text-sm text-[#3A3A3A] mb-4">
             Browse and join Waves to unlock collective pricing.
           </p>
@@ -155,7 +155,7 @@ function ChooseIntent({ onPick }) {
           <div className="w-12 h-12 bg-[#FF5400] border-2 border-white flex items-center justify-center mb-5">
             <Storefront weight="duotone" size={24} />
           </div>
-          <div className="font-display text-2xl uppercase mb-2">I'm a Supplier</div>
+          <div className="font-display text-2xl uppercase mb-2">I&apos;m a Supplier</div>
           <p className="text-sm text-white/85 mb-4">
             Sell into pre-confirmed batch demand. Your first Wave goes live instantly.
           </p>
@@ -172,7 +172,7 @@ function ChooseIntent({ onPick }) {
           <div className="w-12 h-12 bg-white border-2 border-ink flex items-center justify-center mb-5">
             <Wrench weight="duotone" size={24} />
           </div>
-          <div className="font-display text-2xl uppercase mb-2">I'm a Garage</div>
+          <div className="font-display text-2xl uppercase mb-2">I&apos;m a Garage</div>
           <p className="text-sm text-white/95 mb-4">
             Register your bay. Receive fitting bookings from Wave members.
           </p>
