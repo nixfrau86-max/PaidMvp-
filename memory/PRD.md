@@ -20,6 +20,13 @@ Build a real-time demand aggregation platform that turns fragmented consumer int
 8. Admin role is restricted to `ADMIN_EMAILS` env allowlist.
 
 ## What's implemented (latest — 2026-06-09)
+### 💳 Phase 3 Stripe Pay-on-activation — VERIFIED END-TO-END (DONE)
+- **Root-cause fix:** `emergentintegrations` was pinned to `0.1.0`, where `StripeCheckout.get_checkout_status()` failed with `No such checkout.session` (create worked, status didn't) — payments could never settle. Upgraded to **0.2.0** (`requirements.txt`), which fixed status retrieval with the Emergent test key `STRIPE_API_KEY=sk_test_emergent`.
+- **Full E2E verified** via real UI + Stripe hosted checkout (test card 4242): Pay Now → `/wave-pay/:pid` → Stripe checkout (£165.50) → success page "PAID! You're locked in." → backend settled: participation `captured`/`paid`, stock moved reserved→sold (0/2), `payment_transactions` paid, and **fitting booking auto-confirmed** (garage + slot Thu 11 Jun 09:00, status `confirmed`).
+- **Mock rails verified** (Open Banking / Bank Transfer): `wave-checkout` → `mock-confirm` settles identically (captured/paid).
+- Settlement is idempotent (guarded on `payment_status=="paid"`). Regression **35 passed**. Cleaned all TEST_ wave artifacts.
+
+## What's implemented (latest — 2026-06-09)
 ### 🌊 Wave-logic review fixes (lifecycle correctness — DONE)
 Reviewed `routes/waves.py` + `wave_payments.py` + startup workers; fixed all findings:
 - **#1 Fill-to-capacity.** `activated` is now a **non-blocking latch** — a wave keeps accepting joins after hitting `min_activation`, right up to `ideal_target` (capacity). New wave-level capacity guard in `join_wave` + frontend `WaveDetail` now shows the Join form for `activated` waves (and "Fully subscribed" at capacity). Previously waves closed at `min_activation`, wasting capacity. `_recompute` moved to module-level `_recompute_wave` (reused by workers).
