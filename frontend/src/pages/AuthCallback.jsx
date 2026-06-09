@@ -23,8 +23,9 @@ export default function AuthCallback() {
 
     (async () => {
       try {
+        // Backend sets the httpOnly `session_token` cookie on this exchange.
+        // We deliberately do NOT persist the token in JS (XSS-safe; cookie-only auth).
         const { data } = await api.post("/auth/session", { session_id });
-        if (data.session_token) localStorage.setItem("session_token", data.session_token);
         setUser(data.user);
         // Clean hash from URL
         window.history.replaceState(null, "", "/dashboard");

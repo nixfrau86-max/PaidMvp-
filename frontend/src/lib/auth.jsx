@@ -37,7 +37,6 @@ export function AuthProvider({ children }) {
     } catch (err) {
       console.warn("logout request failed", err);
     }
-    localStorage.removeItem("session_token");
     setUser(null);
     identify(null);
     track("logout");

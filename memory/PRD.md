@@ -19,6 +19,12 @@ Build a real-time demand aggregation platform that turns fragmented consumer int
 7. Payment methods (admin-configurable fees + recommended flag + on/off): Open Banking (+£1, recommended), Apple Pay (+£3), Google Pay (+£3), Card (+£3), Bank Transfer (+£1.50). Wallet rails route through Stripe; OB/Bank Transfer mocked until TrueLayer/Faster Payments are wired.
 8. Admin role is restricted to `ADMIN_EMAILS` env allowlist.
 
+## What's implemented (latest — 2026-06-09)
+### 🔒 Security hardening + complexity refactor (Code-review issues — DONE)
+- **Issue 1 (P1) — Auth tokens out of localStorage → httpOnly cookie only.** Removed the axios `localStorage` bearer interceptor (`lib/api.js`), the `localStorage.setItem` in `AuthCallback.jsx`, and the `removeItem` in `auth.jsx` logout. Auth now rides entirely on the existing `session_token` httpOnly+secure+samesite=none cookie (`withCredentials`). Verified: login → `/dashboard` works, `localStorage.getItem('session_token')` is `null`, `/api/auth/me` returns 401 without the cookie. Bearer fallback kept server-side only (for curl/test agents).
+  - **Bonus leak closed**: `password_hash` was being returned by `/auth/me`, `/auth/session`, `/auth/role`. Fixed at source — `_get_user_from_session_token` now projects `{"_id":0,"password_hash":0}`; `/auth/session` also pops it. Login verification unaffected (uses its own query). Playbook saved at `/app/auth_testing.md`.
+- **Issue 2 (P2) — `routes/waves.py` complexity.** Extracted the stateless helpers (`_variant_available`, `_wave_units`, `_public_wave`, `_normalize_products`) and a new `_derive_fitting_label` + `_validate_join_items` out of the `build_router()` closure to module level. `join_wave` is now ~2 lines of orchestration. Behaviour identical — regression `test_regional_waves.py` + `test_wave_respawn.py` = **31 passed, 2 skipped**. (Pre-existing failures in legacy `test_tyre_waves.py`/`test_garage_calendar_sync.py` confirmed unrelated via git-stash.)
+
 ## What's implemented (latest — 2026-05-29)
 ### 🌊 Regional Product Waves© — Architecture Pivot (Phase 1 + 2, NEW)
 The platform pivoted from the tyre-only auto-engine to a generalized **Regional Product Waves©** system. Core principle: **ONE WAVE = ONE REGION + ONE CATEGORY + ONE UNIT TARGET**.

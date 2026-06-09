@@ -116,6 +116,115 @@ class StateUpdateRequest(BaseModel):
     state: str
 
 
+
+# --------------------------------------------------------------------------
+# Pure helpers (stateless — no db/manager needed). Kept at module level to keep
+# build_router() lean and to make them unit-testable in isolation.
+# --------------------------------------------------------------------------
+def _variant_available(v: dict) -> int:
+    return int(v.get("inventory_qty", 0)) - int(v.get("reserved_qty", 0)) - int(v.get("sold_qty", 0))
+
+
+def _wave_units(w: dict) -> int:
+    return int(w.get("units_committed", 0))
+
+
+def _public_wave(w: dict, full: bool = False) -> dict:
+    """Strip supplier identity + supplier_cost for consumer views."""
+    d = dict(w)
+    d.pop("_id", None)
+    for k in ("created_at", "activated_at", "deadline"):
+        d[k] = _iso(d.get(k))
+    products = []
+    for p in d.get("products", []):
+        variants = []
+        for v in p.get("variants", []):
+            vv = {
+                "variant_id": v["variant_id"],
+                "label": v["label"],
+                "retail_price": v["retail_price"],
+                "wave_price": v["wave_price"],
+                "available": _variant_available(v),
+            }
+            if full:
+                vv["inventory_qty"] = v.get("inventory_qty", 0)
+                vv["reserved_qty"] = v.get("reserved_qty", 0)
+                vv["sold_qty"] = v.get("sold_qty", 0)
+                vv["supplier_cost"] = v.get("supplier_cost")
+            variants.append(vv)
+        products.append({"product_id": p["product_id"], "model": p["model"], "variants": variants})
+    d["products"] = products
+    if not full:
+        d.pop("supplier_id", None)
+    ideal = max(1, int(d.get("ideal_target", 1)))
+    d["progress_pct"] = round(min(100.0, _wave_units(w) / ideal * 100), 1)
+    d["category_label"] = CATEGORY_LABELS.get(d.get("category"), d.get("category"))
+    return d
+
+
+def _normalize_products(products: List[ProductInput]) -> List[dict]:
+    out = []
+    for p in products:
+        variants = []
+        for v in p.variants:
+            variants.append({
+                "variant_id": v.variant_id or f"var_{uuid.uuid4().hex[:8]}",
+                "label": v.label.strip(),
+                "supplier_cost": float(v.supplier_cost),
+                "retail_price": float(v.retail_price),
+                "wave_price": float(v.wave_price),
+                "inventory_qty": int(v.inventory_qty),
+                "reserved_qty": 0,
+                "sold_qty": 0,
+            })
+        out.append({
+            "product_id": p.product_id or f"prd_{uuid.uuid4().hex[:8]}",
+            "model": p.model.strip(),
+            "variants": variants,
+        })
+    return out
+
+
+def _derive_fitting_label(category: str, iso: Optional[str], label: Optional[str]) -> Optional[str]:
+    """Derive a human fitting-slot label if only the ISO was supplied (tyres)."""
+    if label or category != "tyres" or not iso:
+        return label
+    try:
+        return datetime.fromisoformat(iso).strftime("%a %-d %b %H:%M")
+    except (ValueError, TypeError):
+        return iso
+
+
+def _validate_join_items(wave: dict, join_items: List[JoinItem]):
+    """Validate stock + build participation items.
+
+    Returns (items, subtotal, units, inc_ops, array_filters). Raises HTTPException
+    on any invalid quantity / variant / insufficient stock."""
+    variant_index = {v["variant_id"]: (p, v) for p in wave["products"] for v in p["variants"]}
+    items, subtotal, units = [], 0.0, 0
+    inc_ops, array_filters = {}, []
+    for idx, it in enumerate(join_items):
+        if it.qty < 1:
+            raise HTTPException(status_code=400, detail="Quantity must be at least 1")
+        if it.variant_id not in variant_index:
+            raise HTTPException(status_code=400, detail="Invalid product variant")
+        p, v = variant_index[it.variant_id]
+        avail = _variant_available(v)
+        if it.qty > avail:
+            raise HTTPException(status_code=400, detail=f"Only {avail} units left for {v['label']}")
+        items.append({
+            "product_id": p["product_id"], "variant_id": v["variant_id"],
+            "model": p["model"], "label": v["label"], "qty": it.qty,
+            "wave_price": v["wave_price"], "retail_price": v["retail_price"],
+        })
+        subtotal += v["wave_price"] * it.qty
+        units += it.qty
+        inc_ops[f"products.$[p{idx}].variants.$[v{idx}].reserved_qty"] = it.qty
+        array_filters.append({f"p{idx}.product_id": p["product_id"]})
+        array_filters.append({f"v{idx}.variant_id": v["variant_id"]})
+    return items, subtotal, units, inc_ops, array_filters
+
+
 # --------------------------------------------------------------------------
 # Router
 # --------------------------------------------------------------------------
@@ -138,44 +247,6 @@ def build_router(deps: Dict[str, Any]) -> APIRouter:
         if s.get("account_status") in ("suspended", "deleted"):
             raise HTTPException(status_code=403, detail="Supplier account is not active")
         return s
-
-    def _variant_available(v: dict) -> int:
-        return int(v.get("inventory_qty", 0)) - int(v.get("reserved_qty", 0)) - int(v.get("sold_qty", 0))
-
-    def _wave_units(w: dict) -> int:
-        return int(w.get("units_committed", 0))
-
-    def _public_wave(w: dict, full: bool = False) -> dict:
-        """Strip supplier identity + supplier_cost for consumer views."""
-        d = dict(w)
-        d.pop("_id", None)
-        for k in ("created_at", "activated_at", "deadline"):
-            d[k] = _iso(d.get(k))
-        products = []
-        for p in d.get("products", []):
-            variants = []
-            for v in p.get("variants", []):
-                vv = {
-                    "variant_id": v["variant_id"],
-                    "label": v["label"],
-                    "retail_price": v["retail_price"],
-                    "wave_price": v["wave_price"],
-                    "available": _variant_available(v),
-                }
-                if full:
-                    vv["inventory_qty"] = v.get("inventory_qty", 0)
-                    vv["reserved_qty"] = v.get("reserved_qty", 0)
-                    vv["sold_qty"] = v.get("sold_qty", 0)
-                    vv["supplier_cost"] = v.get("supplier_cost")
-                variants.append(vv)
-            products.append({"product_id": p["product_id"], "model": p["model"], "variants": variants})
-        d["products"] = products
-        if not full:
-            d.pop("supplier_id", None)
-        ideal = max(1, int(d.get("ideal_target", 1)))
-        d["progress_pct"] = round(min(100.0, _wave_units(w) / ideal * 100), 1)
-        d["category_label"] = CATEGORY_LABELS.get(d.get("category"), d.get("category"))
-        return d
 
     async def _broadcast_wave(wave_id: str, payload: dict):
         await manager.broadcast(f"wave:{wave_id}", payload)
@@ -213,28 +284,6 @@ def build_router(deps: Dict[str, Any]) -> APIRouter:
             "progress_pct": round(min(100.0, fresh.get("units_committed", 0) / max(1, fresh.get("ideal_target", 1)) * 100), 1),
         })
         return fresh
-
-    def _normalize_products(products: List[ProductInput]) -> List[dict]:
-        out = []
-        for p in products:
-            variants = []
-            for v in p.variants:
-                variants.append({
-                    "variant_id": v.variant_id or f"var_{uuid.uuid4().hex[:8]}",
-                    "label": v.label.strip(),
-                    "supplier_cost": float(v.supplier_cost),
-                    "retail_price": float(v.retail_price),
-                    "wave_price": float(v.wave_price),
-                    "inventory_qty": int(v.inventory_qty),
-                    "reserved_qty": 0,
-                    "sold_qty": 0,
-                })
-            out.append({
-                "product_id": p.product_id or f"prd_{uuid.uuid4().hex[:8]}",
-                "model": p.model.strip(),
-                "variants": variants,
-            })
-        return out
 
     # =================================================================
     # REGIONS
@@ -489,38 +538,9 @@ def build_router(deps: Dict[str, Any]) -> APIRouter:
             if not (payload.delivery_address and payload.delivery_address.strip()):
                 raise HTTPException(status_code=400, detail="Please enter a delivery address")
 
-        # Derive a human fitting-slot label if the client sent only the ISO
-        fitting_label = payload.fitting_slot_label
-        if w["category"] == "tyres" and payload.fitting_slot_iso and not fitting_label:
-            try:
-                dt = datetime.fromisoformat(payload.fitting_slot_iso)
-                fitting_label = dt.strftime("%a %-d %b %H:%M")
-            except (ValueError, TypeError):
-                fitting_label = payload.fitting_slot_iso
-
-        # Validate stock + build items
-        variant_index = {v["variant_id"]: (p, v) for p in w["products"] for v in p["variants"]}
-        items, subtotal, units = [], 0.0, 0
-        inc_ops, array_filters = {}, []
-        for idx, it in enumerate(payload.items):
-            if it.qty < 1:
-                raise HTTPException(status_code=400, detail="Quantity must be at least 1")
-            if it.variant_id not in variant_index:
-                raise HTTPException(status_code=400, detail="Invalid product variant")
-            p, v = variant_index[it.variant_id]
-            avail = _variant_available(v)
-            if it.qty > avail:
-                raise HTTPException(status_code=400, detail=f"Only {avail} units left for {v['label']}")
-            items.append({
-                "product_id": p["product_id"], "variant_id": v["variant_id"],
-                "model": p["model"], "label": v["label"], "qty": it.qty,
-                "wave_price": v["wave_price"], "retail_price": v["retail_price"],
-            })
-            subtotal += v["wave_price"] * it.qty
-            units += it.qty
-            inc_ops[f"products.$[p{idx}].variants.$[v{idx}].reserved_qty"] = it.qty
-            array_filters.append({f"p{idx}.product_id": p["product_id"]})
-            array_filters.append({f"v{idx}.variant_id": v["variant_id"]})
+        # Derive a human fitting-slot label + validate stock (module helpers)
+        fitting_label = _derive_fitting_label(w["category"], payload.fitting_slot_iso, payload.fitting_slot_label)
+        items, subtotal, units, inc_ops, array_filters = _validate_join_items(w, payload.items)
 
         if payload.accept_terms:
             await db.terms_acceptances.insert_one({

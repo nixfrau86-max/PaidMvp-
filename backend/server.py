@@ -372,7 +372,7 @@ async def _get_user_from_session_token(session_token: str) -> Optional[dict]:
     if expires_at and expires_at < datetime.now(timezone.utc):
         return None
     user_doc = await db.users.find_one(
-        {"user_id": session_doc["user_id"]}, {"_id": 0}
+        {"user_id": session_doc["user_id"]}, {"_id": 0, "password_hash": 0}
     )
     return user_doc
 
@@ -623,6 +623,7 @@ async def auth_session(request: Request, response: Response):
     )
     # Normalize datetime in response
     safe_user = dict(user)
+    safe_user.pop("password_hash", None)
     return {"user": safe_user, "session_token": session_token}
 
 
