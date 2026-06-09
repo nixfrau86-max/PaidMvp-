@@ -3429,14 +3429,20 @@ async def startup():
     except Exception as e:
         logger.warning(f"Region/wave/garage seed warning: {e}")
 
-    # Background worker: materialise scheduled follow-on waves (auto-respawn)
+    # Background worker: respawn scheduling + reservation/payment sweep + deadline expiry
     async def _scheduled_waves_loop():
-        from routes.waves import process_due_scheduled_waves
+        from routes.waves import process_due_scheduled_waves, sweep_payment_windows, expire_overdue_waves
         while True:
             try:
                 n = await process_due_scheduled_waves(db, manager)
                 if n:
                     logger.info(f"Created {n} scheduled follow-on wave(s)")
+                r = await sweep_payment_windows(db, manager)
+                if r:
+                    logger.info(f"Released {r} unpaid reservation(s) past the payment window")
+                e = await expire_overdue_waves(db, manager)
+                if e:
+                    logger.info(f"Expired {e} overdue under-filled wave(s)")
             except Exception as e:
                 logger.warning(f"scheduled-waves worker error: {e}")
             await asyncio.sleep(60)

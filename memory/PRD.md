@@ -20,6 +20,18 @@ Build a real-time demand aggregation platform that turns fragmented consumer int
 8. Admin role is restricted to `ADMIN_EMAILS` env allowlist.
 
 ## What's implemented (latest — 2026-06-09)
+### 🌊 Wave-logic review fixes (lifecycle correctness — DONE)
+Reviewed `routes/waves.py` + `wave_payments.py` + startup workers; fixed all findings:
+- **#1 Fill-to-capacity.** `activated` is now a **non-blocking latch** — a wave keeps accepting joins after hitting `min_activation`, right up to `ideal_target` (capacity). New wave-level capacity guard in `join_wave` + frontend `WaveDetail` now shows the Join form for `activated` waves (and "Fully subscribed" at capacity). Previously waves closed at `min_activation`, wasting capacity. `_recompute` moved to module-level `_recompute_wave` (reused by workers).
+- **#2 `almost_full` revived** via the recompute reorder + activated_at latch.
+- **#3 Reservation/payment sweeper** — new `sweep_payment_windows(db, manager, hours=48)`: releases unpaid reservations on activated waves past a 48h payment window, freeing locked stock. Wired into the 60s startup worker.
+- **#4 Deadline expiry** — new `expire_overdue_waves(db, manager)`: under-filled waves past `deadline` → `expired` + reservations released. Wired into the worker.
+- **#5 Atomic reservation** — `join_wave` now increments `reserved_qty` first, verifies no variant went negative, and rolls back on a concurrent-join race (returns 409). Prevents oversell.
+- **#6 Respawn counts only paid units** — `complete_wave_and_respawn` now sums only `captured` participations as sold; reserved-but-unpaid units flow into the leftover respawn pool.
+- **#7 Activation latch on cancellations** — once `activated_at` is stamped, state never downgrades.
+- Tests: `tests/test_wave_lifecycle.py` (2, join-past-activation + capacity), workers verified directly. Regression **35 passed** (regional + respawn + lifecycle). Stale demo waves reset → fresh open seeds.
+
+## What's implemented (latest — 2026-06-09)
 ### 🔒 Security hardening + complexity refactor (Code-review issues — DONE)
 - **Issue 1 (P1) — Auth tokens out of localStorage → httpOnly cookie only.** Removed the axios `localStorage` bearer interceptor (`lib/api.js`), the `localStorage.setItem` in `AuthCallback.jsx`, and the `removeItem` in `auth.jsx` logout. Auth now rides entirely on the existing `session_token` httpOnly+secure+samesite=none cookie (`withCredentials`). Verified: login → `/dashboard` works, `localStorage.getItem('session_token')` is `null`, `/api/auth/me` returns 401 without the cookie. Bearer fallback kept server-side only (for curl/test agents).
   - **Bonus leak closed**: `password_hash` was being returned by `/auth/me`, `/auth/session`, `/auth/role`. Fixed at source — `_get_user_from_session_token` now projects `{"_id":0,"password_hash":0}`; `/auth/session` also pops it. Login verification unaffected (uses its own query). Playbook saved at `/app/auth_testing.md`.

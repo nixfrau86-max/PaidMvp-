@@ -129,7 +129,8 @@ export default function WaveDetail() {
   }
 
   const pct = w.progress_pct || 0;
-  const accepting = w.state === "open" || w.state === "almost_full";
+  const atCapacity = (w.units_committed || 0) >= (w.ideal_target || 0);
+  const accepting = ["open", "almost_full", "activated"].includes(w.state) && !atCapacity;
   const saving = variant ? Math.max(0, variant.retail_price - variant.wave_price) : 0;
 
   return (
@@ -308,7 +309,7 @@ export default function WaveDetail() {
                 </>
               ) : (
                 <div className="mt-5 border-2 border-ink bg-[#0021A5] text-white p-3 inline-flex items-center gap-2 font-mono text-[11px] font-bold uppercase tracking-widest" data-testid="wave-closed">
-                  <CheckCircle weight="fill" /> {STATE_LABEL[w.state] || w.state}
+                  <CheckCircle weight="fill" /> {atCapacity ? "Fully subscribed — capacity reached" : (STATE_LABEL[w.state] || w.state)}
                 </div>
               )}
 

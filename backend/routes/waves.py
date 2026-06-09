@@ -226,6 +226,119 @@ def _validate_join_items(wave: dict, join_items: List[JoinItem]):
 
 
 # --------------------------------------------------------------------------
+# Recompute + lifecycle (module level so background workers can reuse them).
+# `activated` is a NON-BLOCKING LATCH: once a wave hits min_activation it stays
+# activated (payment opens) but keeps accepting joins until ideal_target/capacity
+# or its deadline. activated_at is stamped once and never cleared by cancellations.
+# --------------------------------------------------------------------------
+PAYMENT_WINDOW_HOURS = 48
+
+
+async def _broadcast(manager, wave_id: str, payload: dict):
+    try:
+        await manager.broadcast(f"wave:{wave_id}", payload)
+        await manager.broadcast("waves:feed", {**payload, "wave_id": wave_id})
+    except Exception:
+        pass
+
+
+async def _recompute_wave(db, manager, wave: dict) -> dict:
+    """Recompute committed units + auto state (open/almost_full/activated latch)."""
+    pipeline = [
+        {"$match": {"wave_id": wave["wave_id"], "status": {"$in": ACTIVE_PART_STATUSES}}},
+        {"$group": {"_id": None, "units": {"$sum": "$units"}, "people": {"$sum": 1}}},
+    ]
+    agg = await db.wave_participations.aggregate(pipeline).to_list(1)
+    units = int(agg[0]["units"]) if agg else 0
+    people = int(agg[0]["people"]) if agg else 0
+
+    updates: Dict[str, Any] = {"units_committed": units, "participants_count": people}
+    current = wave.get("state", "open")
+    if current not in TERMINAL_OR_MANUAL:
+        ideal = max(1, int(wave.get("ideal_target", 1)))
+        min_act = int(wave.get("min_activation", ideal))
+        if wave.get("activated_at") or units >= min_act:
+            updates["state"] = "activated"
+            if not wave.get("activated_at"):
+                updates["activated_at"] = _now()
+        elif units >= ALMOST_FULL_RATIO * ideal:
+            updates["state"] = "almost_full"
+        else:
+            updates["state"] = "open"
+
+    await db.waves.update_one({"wave_id": wave["wave_id"]}, {"$set": updates})
+    fresh = await db.waves.find_one({"wave_id": wave["wave_id"]}, {"_id": 0})
+    await _broadcast(manager, wave["wave_id"], {
+        "type": "wave_update",
+        "units_committed": fresh.get("units_committed", 0),
+        "participants_count": fresh.get("participants_count", 0),
+        "state": fresh.get("state"),
+        "progress_pct": round(min(100.0, fresh.get("units_committed", 0) / max(1, fresh.get("ideal_target", 1)) * 100), 1),
+    })
+    return fresh
+
+
+async def _release_participation(db, p: dict, new_status: str = "released"):
+    """Release a participation's reserved stock and mark it released/cancelled."""
+    inc_ops, array_filters = {}, []
+    for idx, it in enumerate(p.get("items", [])):
+        inc_ops[f"products.$[p{idx}].variants.$[v{idx}].reserved_qty"] = -it["qty"]
+        array_filters.append({f"p{idx}.product_id": it["product_id"]})
+        array_filters.append({f"v{idx}.variant_id": it["variant_id"]})
+    await db.wave_participations.update_one(
+        {"participation_id": p["participation_id"]},
+        {"$set": {"status": new_status, "released_at": _iso(_now())}},
+    )
+    if inc_ops:
+        await db.waves.update_one({"wave_id": p["wave_id"]}, {"$inc": inc_ops}, array_filters=array_filters)
+
+
+async def sweep_payment_windows(db, manager, hours: int = PAYMENT_WINDOW_HOURS) -> int:
+    """Release unpaid reservations on activated waves past their payment window,
+    freeing locked stock for other buyers / respawn rounds."""
+    cutoff = _now() - timedelta(hours=hours)
+    waves = await db.waves.find(
+        {"state": "activated", "activated_at": {"$ne": None, "$lt": cutoff}}, {"_id": 0}
+    ).to_list(500)
+    released = 0
+    for w in waves:
+        parts = await db.wave_participations.find(
+            {"wave_id": w["wave_id"], "status": {"$in": ["reserved", "authorized"]},
+             "payment_status": {"$ne": "paid"}}, {"_id": 0},
+        ).to_list(2000)
+        for p in parts:
+            await _release_participation(db, p, "released")
+            released += 1
+        if parts:
+            fresh = await db.waves.find_one({"wave_id": w["wave_id"]}, {"_id": 0})
+            await _recompute_wave(db, manager, fresh)
+    return released
+
+
+async def expire_overdue_waves(db, manager) -> int:
+    """Transition under-filled waves past their deadline to `expired` and release
+    their reservations. Waves that already met min_activation are left alone."""
+    now = _now()
+    waves = await db.waves.find(
+        {"state": {"$in": ["open", "almost_full"]}, "deadline": {"$ne": None, "$lt": now}}, {"_id": 0}
+    ).to_list(500)
+    expired = 0
+    for w in waves:
+        ideal = max(1, int(w.get("ideal_target", 1)))
+        if int(w.get("units_committed", 0)) >= int(w.get("min_activation", ideal)):
+            continue  # threshold met — let it activate, don't expire
+        parts = await db.wave_participations.find(
+            {"wave_id": w["wave_id"], "status": {"$in": ["reserved", "authorized"]}}, {"_id": 0},
+        ).to_list(2000)
+        for p in parts:
+            await _release_participation(db, p, "released")
+        await db.waves.update_one({"wave_id": w["wave_id"]}, {"$set": {"state": "expired"}})
+        await _broadcast(manager, w["wave_id"], {"type": "wave_update", "state": "expired"})
+        expired += 1
+    return expired
+
+
+# --------------------------------------------------------------------------
 # Router
 # --------------------------------------------------------------------------
 def build_router(deps: Dict[str, Any]) -> APIRouter:
@@ -253,37 +366,7 @@ def build_router(deps: Dict[str, Any]) -> APIRouter:
         await manager.broadcast("waves:feed", {**payload, "wave_id": wave_id})
 
     async def _recompute(wave: dict) -> dict:
-        """Recompute committed units + auto state (open/almost_full/activated)."""
-        pipeline = [
-            {"$match": {"wave_id": wave["wave_id"], "status": {"$in": ACTIVE_PART_STATUSES}}},
-            {"$group": {"_id": None, "units": {"$sum": "$units"}, "people": {"$sum": 1}}},
-        ]
-        agg = await db.wave_participations.aggregate(pipeline).to_list(1)
-        units = int(agg[0]["units"]) if agg else 0
-        people = int(agg[0]["people"]) if agg else 0
-
-        updates = {"units_committed": units, "participants_count": people}
-        current = wave.get("state", "open")
-        if current not in TERMINAL_OR_MANUAL and current != "activated":
-            ideal = max(1, int(wave.get("ideal_target", 1)))
-            if units >= int(wave.get("min_activation", ideal)):
-                updates["state"] = "activated"
-                updates["activated_at"] = _now()
-            elif units >= ALMOST_FULL_RATIO * ideal:
-                updates["state"] = "almost_full"
-            else:
-                updates["state"] = "open"
-
-        await db.waves.update_one({"wave_id": wave["wave_id"]}, {"$set": updates})
-        fresh = await db.waves.find_one({"wave_id": wave["wave_id"]}, {"_id": 0})
-        await _broadcast_wave(wave["wave_id"], {
-            "type": "wave_update",
-            "units_committed": fresh.get("units_committed", 0),
-            "participants_count": fresh.get("participants_count", 0),
-            "state": fresh.get("state"),
-            "progress_pct": round(min(100.0, fresh.get("units_committed", 0) / max(1, fresh.get("ideal_target", 1)) * 100), 1),
-        })
-        return fresh
+        return await _recompute_wave(db, manager, wave)
 
     # =================================================================
     # REGIONS
@@ -520,10 +603,17 @@ def build_router(deps: Dict[str, Any]) -> APIRouter:
         w = await db.waves.find_one({"wave_id": wave_id}, {"_id": 0})
         if not w:
             raise HTTPException(status_code=404, detail="Wave not found")
-        if w.get("state") not in ("open", "almost_full"):
+        if w.get("state") in TERMINAL_OR_MANUAL:
             raise HTTPException(status_code=400, detail="This Wave is no longer accepting participants")
         if not payload.items:
             raise HTTPException(status_code=400, detail="Select at least one product")
+
+        # Wave-level capacity: keep accepting joins (even once activated) until the
+        # ideal_target (capacity) is reached — activation is a non-blocking latch.
+        ideal = max(1, int(w.get("ideal_target", 1)))
+        committed = int(w.get("units_committed", 0))
+        if committed >= ideal:
+            raise HTTPException(status_code=400, detail="This Wave has reached capacity")
 
         # Fulfilment validation
         garage_name = None
@@ -541,6 +631,18 @@ def build_router(deps: Dict[str, Any]) -> APIRouter:
         # Derive a human fitting-slot label + validate stock (module helpers)
         fitting_label = _derive_fitting_label(w["category"], payload.fitting_slot_iso, payload.fitting_slot_label)
         items, subtotal, units, inc_ops, array_filters = _validate_join_items(w, payload.items)
+
+        if committed + units > ideal:
+            raise HTTPException(status_code=400, detail=f"Only {ideal - committed} unit(s) left in this Wave")
+
+        # Atomic-ish reservation: increment reserved_qty FIRST, then verify no
+        # variant went negative (concurrent-join race). Roll back on oversell.
+        await db.waves.update_one({"wave_id": wave_id}, {"$inc": inc_ops}, array_filters=array_filters)
+        post = await db.waves.find_one({"wave_id": wave_id}, {"_id": 0})
+        if any(_variant_available(v) < 0 for p in post["products"] for v in p["variants"]):
+            neg_inc = {k: -val for k, val in inc_ops.items()}
+            await db.waves.update_one({"wave_id": wave_id}, {"$inc": neg_inc}, array_filters=array_filters)
+            raise HTTPException(status_code=409, detail="That stock was just reserved by someone else — please try again")
 
         if payload.accept_terms:
             await db.terms_acceptances.insert_one({
@@ -568,7 +670,6 @@ def build_router(deps: Dict[str, Any]) -> APIRouter:
             "created_at": _iso(_now()),
         }
         await db.wave_participations.insert_one(dict(part))
-        await db.waves.update_one({"wave_id": wave_id}, {"$inc": inc_ops}, array_filters=array_filters)
         fresh = await db.waves.find_one({"wave_id": wave_id}, {"_id": 0})
         await _recompute(fresh)
         part.pop("_id", None)
@@ -744,8 +845,10 @@ async def complete_wave_and_respawn(db, manager, wave: dict) -> dict:
     if wave.get("respawned"):
         return {"respawned": False, "reason": "already_processed"}
     wid = wave["wave_id"]
+    # Only CAPTURED (paid) units count as sold — reserved/authorized-but-unpaid
+    # participations are released back to the leftover pool that respawns.
     parts = await db.wave_participations.find(
-        {"wave_id": wid, "status": {"$in": ACTIVE_PART_STATUSES}}, {"_id": 0}
+        {"wave_id": wid, "status": "captured"}, {"_id": 0}
     ).to_list(5000)
     sold: Dict[str, int] = {}
     for pt in parts:
