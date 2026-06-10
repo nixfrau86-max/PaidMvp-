@@ -845,8 +845,8 @@ async def complete_wave_and_respawn(db, manager, wave: dict) -> dict:
     if wave.get("respawned"):
         return {"respawned": False, "reason": "already_processed"}
     wid = wave["wave_id"]
-    # Only CAPTURED (paid) units count as sold — reserved/authorized-but-unpaid
-    # participations are released back to the leftover pool that respawns.
+    # Only CAPTURED (paid) units deplete real stock. Reserved/authorized-but-unpaid
+    # participations did NOT sell — their units roll back into the respawn pool.
     parts = await db.wave_participations.find(
         {"wave_id": wid, "status": "captured"}, {"_id": 0}
     ).to_list(5000)
@@ -854,6 +854,12 @@ async def complete_wave_and_respawn(db, manager, wave: dict) -> dict:
     for pt in parts:
         for it in pt.get("items", []):
             sold[it["variant_id"]] = sold.get(it["variant_id"], 0) + it["qty"]
+    # Demand signal: any active participation (reserved/authorized/captured) means the
+    # wave saw real interest — even if nobody completed payment. We respawn the leftover
+    # stock on demand, not only on captured sales.
+    engaged = await db.wave_participations.count_documents(
+        {"wave_id": wid, "status": {"$in": ACTIVE_PART_STATUSES}}
+    )
     prods = wave.get("products", [])
     for p in prods:
         for v in p.get("variants", []):
@@ -863,11 +869,19 @@ async def complete_wave_and_respawn(db, manager, wave: dict) -> dict:
     await db.waves.update_one({"wave_id": wid}, {"$set": {"products": prods, "respawned": True}})
     wave["products"] = prods
 
+    # Release stranded reservations (joined but never paid) on the now-completed wave.
+    await db.wave_participations.update_many(
+        {"wave_id": wid, "status": {"$in": ["reserved", "authorized"]}},
+        {"$set": {"status": "released", "released_at": _iso(_now())}},
+    )
+
     sold_total = sum(sold.values())
     remaining_products, total_remaining = _compute_remaining_products(wave)
-    # Only respawn after a wave that actually sold units (avoids dead-wave loops)
-    if sold_total <= 0 or total_remaining <= 0:
-        return {"respawned": False, "reason": "no_stock_or_no_sales", "sold": sold_total, "remaining": total_remaining}
+    # Respawn leftover stock whenever the wave saw genuine demand (joins/allocations
+    # OR sales) and stock remains. The demand check avoids cloning never-touched waves.
+    if engaged <= 0 or total_remaining <= 0:
+        return {"respawned": False, "reason": "no_demand_or_no_stock",
+                "engaged": engaged, "sold": sold_total, "remaining": total_remaining}
 
     doc = _build_respawn_doc(wave, remaining_products, total_remaining)
     when = _next_creation_time_london()

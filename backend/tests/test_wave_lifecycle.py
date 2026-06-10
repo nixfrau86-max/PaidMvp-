@@ -24,6 +24,14 @@ def _base():
 
 API = f"{_base()}/api"
 SUPPLIER = {"email": "supplier_test@collective.co", "password": "Supplier1234"}
+ADMIN = {"email": "founder@thecollectivesavers.co.uk", "password": "SaversCollective"}
+
+
+def _admin_session():
+    s = requests.Session()
+    r = s.post(f"{API}/auth/login", json=ADMIN, timeout=30)
+    assert r.status_code == 200, r.text
+    return s
 
 
 def _supplier_session():
@@ -138,3 +146,55 @@ class TestFillToCapacity:
         r = _join(b, w, 2)
         assert r.status_code == 400
         assert "1 unit" in r.json()["detail"]
+
+
+class TestRespawnOnDemand:
+    """Completed waves with leftover stock respawn whenever there was genuine demand
+    (reserved/allocated OR paid) — not only when units were captured/paid."""
+
+    def _make_wave(self, sup, inventory=4, ideal=4, minact=2):
+        payload = {
+            "category": "electronics", "region_id": _region_id(), "brand": "RESPAWN",
+            "title": f"TEST_RSPAWN_{uuid.uuid4().hex[:6]}", "description": "x",
+            "ideal_target": ideal, "min_activation": minact, "eta": "7 days",
+            "products": [{"model": "M", "variants": [
+                {"label": "X", "supplier_cost": 10.0, "retail_price": 30.0, "wave_price": 20.0, "inventory_qty": inventory},
+            ]}],
+        }
+        r = sup.post(f"{API}/supplier/waves", json=payload, timeout=30)
+        assert r.status_code == 200, r.text
+        return r.json()
+
+    def _join(self, wave, qty):
+        c = _new_consumer()
+        r = c.post(f"{API}/waves/{wave['wave_id']}/join", json={
+            "items": [{"product_id": wave["products"][0]["product_id"],
+                       "variant_id": wave["products"][0]["variants"][0]["variant_id"], "qty": qty}],
+            "delivery_address": "1 Test St", "accept_terms": True}, timeout=30)
+        assert r.status_code == 200, r.text
+        return c, r.json()["participation"]["participation_id"]
+
+    def test_respawn_when_stock_allocated_but_unpaid(self):
+        sup = _supplier_session()
+        admin = _admin_session()
+        w = self._make_wave(sup, inventory=4, ideal=4, minact=2)
+        cons, pid = self._join(w, 2)  # reserved/allocated, NOT paid
+        r = admin.patch(f"{API}/admin/regional-waves/{w['wave_id']}/state", json={"state": "completed"}, timeout=30)
+        assert r.status_code == 200, r.text
+        res = r.json().get("respawn_result")
+        assert res and res.get("respawned") is True, f"expected respawn on allocated demand: {res}"
+        assert res.get("units") == 4  # full leftover (nothing paid)
+        # stranded reservation released
+        orders = cons.get(f"{API}/me/wave-orders", timeout=30).json()
+        mine = [o for o in orders if o["participation_id"] == pid]
+        assert mine and mine[0]["status"] == "released"
+
+    def test_no_respawn_without_demand(self):
+        sup = _supplier_session()
+        admin = _admin_session()
+        w = self._make_wave(sup, inventory=4)
+        r = admin.patch(f"{API}/admin/regional-waves/{w['wave_id']}/state", json={"state": "completed"}, timeout=30)
+        assert r.status_code == 200, r.text
+        res = r.json().get("respawn_result")
+        assert res and res.get("respawned") is False
+        assert res.get("engaged") == 0

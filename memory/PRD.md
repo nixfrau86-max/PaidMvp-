@@ -20,6 +20,13 @@ Build a real-time demand aggregation platform that turns fragmented consumer int
 8. Admin role is restricted to `ADMIN_EMAILS` env allowlist.
 
 ## What's implemented (latest — 2026-06-09)
+### 🔁 Auto-respawn bugfix — respawn on demand, not only on paid sales (DONE)
+- **Bug (reported):** waves weren't regenerating even though "plenty of stock was available and allocated." Root cause: the earlier correctness fix (#6) made `complete_wave_and_respawn` require **captured (paid)** units to respawn — so waves where stock was **reserved/allocated but unpaid** returned `respawned:false` and never spun up a follow-on wave.
+- **Fix:** respawn now triggers on **genuine demand** — any active participation (reserved/authorized/captured) signals interest — while still counting only **paid (captured)** units as "sold" for the leftover math. Stranded reservations on the completed wave are **released**. Never-touched waves (zero demand) still don't respawn (avoids pointless clones). `complete_wave_and_respawn` in `routes/waves.py`.
+- **Note:** respawns created outside working hours are **scheduled** for the next working day 08:00 (Europe/London time-guard, existing requirement) and materialised by the 60s `process_due_scheduled_waves` worker — verified it produces a live `open` wave.
+- Tests: `tests/test_wave_lifecycle.py::TestRespawnOnDemand` (respawn-on-allocated-unpaid + no-respawn-without-demand). Regression **37 passed**.
+
+## What's implemented (latest — 2026-06-09)
 ### 💳 Phase 3 Stripe Pay-on-activation — VERIFIED END-TO-END (DONE)
 - **Root-cause fix:** `emergentintegrations` was pinned to `0.1.0`, where `StripeCheckout.get_checkout_status()` failed with `No such checkout.session` (create worked, status didn't) — payments could never settle. Upgraded to **0.2.0** (`requirements.txt`), which fixed status retrieval with the Emergent test key `STRIPE_API_KEY=sk_test_emergent`.
 - **Full E2E verified** via real UI + Stripe hosted checkout (test card 4242): Pay Now → `/wave-pay/:pid` → Stripe checkout (£165.50) → success page "PAID! You're locked in." → backend settled: participation `captured`/`paid`, stock moved reserved→sold (0/2), `payment_transactions` paid, and **fitting booking auto-confirmed** (garage + slot Thu 11 Jun 09:00, status `confirmed`).
