@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useCallback, useEffect, useState, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import Confetti from "react-confetti";
 import { toast } from "sonner";
@@ -23,7 +23,7 @@ export default function VPPDetail() {
   const [participants, setParticipants] = useState([]);
   const prevState = useRef(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     const { data } = await api.get(`/vpps/${id}`);
     setVpp(data);
     setParticipants(data.recent_participants || []);
@@ -34,9 +34,9 @@ export default function VPPDetail() {
       setTimeout(() => setShowConfetti(false), 4500);
     }
     prevState.current = data.state;
-  };
+  }, [id]);
 
-  useEffect(() => { load(); }, [id]);
+  useEffect(() => { load(); }, [id, load]);
 
   useEffect(() => {
     let ws;
@@ -150,7 +150,7 @@ export default function VPPDetail() {
             ) : (
               <div className="flex flex-wrap gap-2">
                 {participants.map((p, i) => (
-                  <div key={i} className="border-2 border-ink bg-[#F4F4F4] px-2 py-1 text-xs font-mono uppercase tracking-widest flex items-center gap-1.5">
+                  <div key={`${p.joined_at || ""}-${p.display_name || "anon"}-${i}`} className="border-2 border-ink bg-[#F4F4F4] px-2 py-1 text-xs font-mono uppercase tracking-widest flex items-center gap-1.5">
                     <span className="w-4 h-4 bg-[#FFD600] border border-ink flex items-center justify-center text-[9px] font-bold">
                       {p.display_name?.[0] || "?"}
                     </span>

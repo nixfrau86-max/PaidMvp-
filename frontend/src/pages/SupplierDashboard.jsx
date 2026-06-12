@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import Navbar from "../components/Navbar";
@@ -27,7 +27,7 @@ export default function SupplierDashboard() {
   const [tab, setTab] = useState("waves");
   const [dataLoading, setDataLoading] = useState(true);
 
-  const reload = async () => {
+  const reload = useCallback(async () => {
     try {
       const [s, w, o] = await Promise.all([
         api.get("/suppliers/me"),
@@ -43,13 +43,13 @@ export default function SupplierDashboard() {
       return;
     }
     setDataLoading(false);
-  };
+  }, [navigate]);
 
   useEffect(() => {
     if (loading) return;
     if (!user) { navigate("/"); return; }
     reload();
-  }, [user, loading, navigate]);
+  }, [user, loading, navigate, reload]);
 
   if (loading || dataLoading || !supplier) {
     return (

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import Navbar from "../components/Navbar";
@@ -25,7 +25,7 @@ export default function GarageDashboard() {
   const [editing, setEditing] = useState(false);
   const [tab, setTab] = useState("availability");
 
-  const reload = async () => {
+  const reload = useCallback(async () => {
     try {
       const [g, av, bk] = await Promise.all([
         api.get("/garages/me"),
@@ -38,13 +38,13 @@ export default function GarageDashboard() {
     } catch {
       navigate("/garage/onboarding");
     }
-  };
+  }, [navigate]);
 
   useEffect(() => {
     if (loading) return;
     if (!user) { navigate("/"); return; }
     reload();
-  }, [user, loading, navigate]);
+  }, [user, loading, navigate, reload]);
 
   if (loading || !garage || !availability) {
     return <div className="min-h-screen bg-[#FAFAFA]"><Navbar /><div className="max-w-7xl mx-auto px-4 py-10 font-mono uppercase text-sm tracking-widest">Loading…</div></div>;

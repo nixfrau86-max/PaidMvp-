@@ -231,6 +231,79 @@ def _validate_join_items(wave: dict, join_items: List[JoinItem]):
     return items, subtotal, units, inc_ops, array_filters
 
 
+async def _validate_fulfilment(db, wave: dict, payload) -> Optional[str]:
+    """Validate garage (tyres) or delivery address (other). Returns garage_name or None."""
+    if wave["category"] == "tyres":
+        if not payload.garage_id:
+            raise HTTPException(status_code=400, detail="Please select an approved fitting garage")
+        g = await db.garages.find_one({"garage_id": payload.garage_id}, {"_id": 0})
+        if not g or not g.get("is_verified") or not g.get("is_active", True):
+            raise HTTPException(status_code=400, detail="Selected garage is not available")
+        return g.get("business_name") or g.get("name")
+    if not (payload.delivery_address and payload.delivery_address.strip()):
+        raise HTTPException(status_code=400, detail="Please enter a delivery address")
+    return None
+
+
+async def _enforce_unit_limit(db, wave: dict, user: dict, units: int,
+                              get_unit_limits_config, resolve_unit_limit):
+    """Block a join that would exceed the user's per-category calendar-year cap."""
+    if not (get_unit_limits_config and resolve_unit_limit):
+        return
+    cfg = await get_unit_limits_config()
+    limit = resolve_unit_limit(cfg, user, wave["category"])
+    used = await _units_used_this_year(db, user["user_id"], wave["category"])
+    if used + units > limit:
+        cat = CATEGORY_LABELS.get(wave["category"], wave["category"])
+        remaining = max(0, limit - used)
+        raise HTTPException(
+            status_code=400,
+            detail=(f"Annual {cat} limit reached — up to {limit} units per calendar year. "
+                    f"You've committed {used} so far ({remaining} left). "
+                    f"Contact us if you need a higher limit."),
+        )
+
+
+async def _atomic_reserve(db, wave_id: str, inc_ops: dict, array_filters: list):
+    """Increment reserved_qty, verify no variant oversold, roll back + raise on a race."""
+    await db.waves.update_one({"wave_id": wave_id}, {"$inc": inc_ops}, array_filters=array_filters)
+    post = await db.waves.find_one({"wave_id": wave_id}, {"_id": 0})
+    if any(_variant_available(v) < 0 for p in post["products"] for v in p["variants"]):
+        neg_inc = {k: -val for k, val in inc_ops.items()}
+        await db.waves.update_one({"wave_id": wave_id}, {"$inc": neg_inc}, array_filters=array_filters)
+        raise HTTPException(status_code=409, detail="That stock was just reserved by someone else — please try again")
+
+
+async def _record_terms_acceptance(db, user: dict):
+    await db.terms_acceptances.insert_one({
+        "acceptance_id": f"acc_{uuid.uuid4().hex[:10]}",
+        "user_id": user["user_id"], "doc_id": "terms", "version": "1.0",
+        "is_current": True, "context": "wave_join", "accepted_at": _iso(_now()),
+    })
+
+
+def _build_participation(wave: dict, user: dict, payload, items, subtotal, units,
+                         garage_name, fitting_label) -> dict:
+    return {
+        "participation_id": f"wp_{uuid.uuid4().hex[:10]}",
+        "wave_id": wave["wave_id"],
+        "user_id": user["user_id"],
+        "category": wave["category"],
+        "items": items,
+        "units": units,
+        "subtotal": round(subtotal, 2),
+        "garage_id": payload.garage_id,
+        "garage_name": garage_name,
+        "fitting_slot_iso": payload.fitting_slot_iso,
+        "fitting_slot_label": fitting_label,
+        "delivery_address": payload.delivery_address,
+        "status": "reserved",
+        "reservation_expires_at": _iso(_now() + timedelta(minutes=RESERVATION_MINUTES)),
+        "payment_status": "pending",
+        "created_at": _iso(_now()),
+    }
+
+
 # --------------------------------------------------------------------------
 # Recompute + lifecycle (module level so background workers can reuse them).
 # `activated` is a NON-BLOCKING LATCH: once a wave hits min_activation it stays
@@ -636,18 +709,8 @@ def build_router(deps: Dict[str, Any]) -> APIRouter:
         if committed >= ideal:
             raise HTTPException(status_code=400, detail="This Wave has reached capacity")
 
-        # Fulfilment validation
-        garage_name = None
-        if w["category"] == "tyres":
-            if not payload.garage_id:
-                raise HTTPException(status_code=400, detail="Please select an approved fitting garage")
-            g = await db.garages.find_one({"garage_id": payload.garage_id}, {"_id": 0})
-            if not g or not g.get("is_verified") or not g.get("is_active", True):
-                raise HTTPException(status_code=400, detail="Selected garage is not available")
-            garage_name = g.get("business_name") or g.get("name")
-        else:
-            if not (payload.delivery_address and payload.delivery_address.strip()):
-                raise HTTPException(status_code=400, detail="Please enter a delivery address")
+        # Fulfilment validation (garage for tyres, delivery address otherwise)
+        garage_name = await _validate_fulfilment(db, w, payload)
 
         # Derive a human fitting-slot label + validate stock (module helpers)
         fitting_label = _derive_fitting_label(w["category"], payload.fitting_slot_iso, payload.fitting_slot_label)
@@ -656,56 +719,16 @@ def build_router(deps: Dict[str, Any]) -> APIRouter:
         if committed + units > ideal:
             raise HTTPException(status_code=400, detail=f"Only {ideal - committed} unit(s) left in this Wave")
 
-        # Per-user annual unit limit (calendar year), by category. Counts active
-        # commitments (reserved/authorized/captured). Admin per-user override wins.
-        if get_unit_limits_config and resolve_unit_limit:
-            cfg = await get_unit_limits_config()
-            limit = resolve_unit_limit(cfg, user, w["category"])
-            used = await _units_used_this_year(db, user["user_id"], w["category"])
-            if used + units > limit:
-                cat = CATEGORY_LABELS.get(w["category"], w["category"])
-                remaining = max(0, limit - used)
-                raise HTTPException(
-                    status_code=400,
-                    detail=(f"Annual {cat} limit reached — up to {limit} units per calendar year. "
-                            f"You've committed {used} so far ({remaining} left). "
-                            f"Contact us if you need a higher limit."),
-                )
+        # Per-user annual unit limit (calendar year), by category. Admin override wins.
+        await _enforce_unit_limit(db, w, user, units, get_unit_limits_config, resolve_unit_limit)
 
-        # Atomic-ish reservation: increment reserved_qty FIRST, then verify no
-        # variant went negative (concurrent-join race). Roll back on oversell.
-        await db.waves.update_one({"wave_id": wave_id}, {"$inc": inc_ops}, array_filters=array_filters)
-        post = await db.waves.find_one({"wave_id": wave_id}, {"_id": 0})
-        if any(_variant_available(v) < 0 for p in post["products"] for v in p["variants"]):
-            neg_inc = {k: -val for k, val in inc_ops.items()}
-            await db.waves.update_one({"wave_id": wave_id}, {"$inc": neg_inc}, array_filters=array_filters)
-            raise HTTPException(status_code=409, detail="That stock was just reserved by someone else — please try again")
+        # Atomic-ish reservation: reserve stock, rolling back on a concurrent-join race.
+        await _atomic_reserve(db, wave_id, inc_ops, array_filters)
 
         if payload.accept_terms:
-            await db.terms_acceptances.insert_one({
-                "acceptance_id": f"acc_{uuid.uuid4().hex[:10]}",
-                "user_id": user["user_id"], "doc_id": "terms", "version": "1.0",
-                "is_current": True, "context": "wave_join", "accepted_at": _iso(_now()),
-            })
+            await _record_terms_acceptance(db, user)
 
-        part = {
-            "participation_id": f"wp_{uuid.uuid4().hex[:10]}",
-            "wave_id": wave_id,
-            "user_id": user["user_id"],
-            "category": w["category"],
-            "items": items,
-            "units": units,
-            "subtotal": round(subtotal, 2),
-            "garage_id": payload.garage_id,
-            "garage_name": garage_name,
-            "fitting_slot_iso": payload.fitting_slot_iso,
-            "fitting_slot_label": fitting_label,
-            "delivery_address": payload.delivery_address,
-            "status": "reserved",
-            "reservation_expires_at": _iso(_now() + timedelta(minutes=RESERVATION_MINUTES)),
-            "payment_status": "pending",
-            "created_at": _iso(_now()),
-        }
+        part = _build_participation(w, user, payload, items, subtotal, units, garage_name, fitting_label)
         await db.wave_participations.insert_one(dict(part))
         fresh = await db.waves.find_one({"wave_id": wave_id}, {"_id": 0})
         await _recompute(fresh)
@@ -1042,7 +1065,7 @@ async def seed_garages(db) -> int:
             "contact_phone": g["phone"],
             "garage_type": "local_garage",
             "services": ["tyre_fitting", "balancing", "tpms"],
-            "address_line1": f"1 High Street",
+            "address_line1": "1 High Street",
             "city": g["city"],
             "postcode": g["postcode"],
             "is_active": True,
