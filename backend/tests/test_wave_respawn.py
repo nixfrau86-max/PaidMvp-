@@ -13,22 +13,24 @@ LON = ZoneInfo("Europe/London")
 
 def test_creation_time_working_day_before_4pm_is_now():
     assert _next_creation_time_london(datetime(2026, 6, 8, 10, 0, tzinfo=LON)) is None
-    assert _next_creation_time_london(datetime(2026, 6, 8, 7, 0, tzinfo=LON)) is None
+    # before the 08:30 window opens → today 08:30 (not immediate)
+    r = _next_creation_time_london(datetime(2026, 6, 8, 7, 0, tzinfo=LON))
+    assert r.day == 8 and (r.hour, r.minute) == (8, 30)
 
 
-def test_creation_time_past_4pm_rolls_to_next_working_day_8am():
-    r = _next_creation_time_london(datetime(2026, 6, 8, 16, 30, tzinfo=LON))  # Mon 4:30pm
-    assert r.weekday() == 1 and r.hour == 8 and r.minute == 0  # Tue 8am
+def test_creation_time_past_4pm_rolls_to_next_working_day_830am():
+    r = _next_creation_time_london(datetime(2026, 6, 8, 16, 30, tzinfo=LON))  # Mon 4:30pm (window closed)
+    assert r.weekday() == 1 and (r.hour, r.minute) == (8, 30)  # Tue 8:30am
 
 
 def test_creation_time_friday_evening_skips_weekend():
     r = _next_creation_time_london(datetime(2026, 6, 12, 17, 0, tzinfo=LON))  # Fri 5pm
-    assert r.weekday() == 0 and r.hour == 8  # Monday 8am
+    assert r.weekday() == 0 and (r.hour, r.minute) == (8, 30)  # Monday 8:30am
 
 
 def test_creation_time_weekend_schedules_monday():
     r = _next_creation_time_london(datetime(2026, 6, 13, 11, 0, tzinfo=LON))  # Sat
-    assert r.weekday() == 0 and r.hour == 8  # Monday 8am
+    assert r.weekday() == 0 and (r.hour, r.minute) == (8, 30)  # Monday 8:30am
 
 
 def test_remaining_products_only_unsold_stock():

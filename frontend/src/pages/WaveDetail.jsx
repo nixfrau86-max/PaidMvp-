@@ -5,7 +5,7 @@ import Navbar from "../components/Navbar";
 import { api, wsUrl } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { track } from "../lib/firebase";
-import { Lightning, ArrowRight, ShieldCheck, MapPin, Minus, Plus, CheckCircle } from "@phosphor-icons/react";
+import { Lightning, ArrowRight, ShieldCheck, MapPin, Minus, Plus, CheckCircle, ArrowsClockwise } from "@phosphor-icons/react";
 
 const STATE_LABEL = {
   open: "Open — accepting members",
@@ -313,6 +313,11 @@ export default function WaveDetail() {
               <div className="mt-2 font-mono text-[10px] uppercase tracking-widest text-[#3A3A3A]" data-testid="wave-state">
                 {STATE_LABEL[w.state] || w.state} · activates at {w.min_activation} units
               </div>
+              {w.carried_units > 0 && (
+                <div className="mt-3 flex items-center gap-2 border-2 border-ink bg-[#FFE600] px-3 py-2 font-mono text-[10px] font-bold uppercase tracking-widest" data-testid="wave-carried">
+                  <ArrowsClockwise weight="bold" size={14} /> {w.carried_units} units carried from previous wave
+                </div>
+              )}
 
               {variant && (
                 <div className="mt-5 border-t-2 border-ink pt-4">

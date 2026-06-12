@@ -178,6 +178,9 @@ function WaveCard({ w }) {
             <MapPin weight="fill" className="text-[#FF5400]" size={10} /> {w.region_name}
           </span>
           <span className="border-2 border-ink font-mono text-[10px] font-bold uppercase tracking-widest px-2 py-1" style={{ background: state.bg, color: state.text || "#0A0A0A" }}>{state.label}</span>
+          {w.carried_units > 0 && (
+            <span className="bg-[#FFE600] border-2 border-ink font-mono text-[10px] font-bold uppercase tracking-widest px-2 py-1" data-testid={`wave-carried-${w.wave_id}`}>+{w.carried_units} Carried</span>
+          )}
         </div>
         {band && (
           <div className="absolute bottom-2 right-2 bg-ink text-white font-mono text-[10px] font-bold uppercase tracking-widest px-2 py-1">Save {band}</div>

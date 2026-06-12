@@ -184,6 +184,7 @@ class TestRespawnOnDemand:
         res = r.json().get("respawn_result")
         assert res and res.get("respawned") is True, f"expected respawn on allocated demand: {res}"
         assert res.get("units") == 4  # full leftover (nothing paid)
+        assert res.get("carried_units") == 2, f"allocated-but-unpaid units must carry: {res}"
         # stranded reservation released
         orders = cons.get(f"{API}/me/wave-orders", timeout=30).json()
         mine = [o for o in orders if o["participation_id"] == pid]
@@ -255,3 +256,49 @@ class TestAnnualUnitLimits:
         assert "category_limits" in cfg and "default_limit" in cfg
         r = admin.put(f"{API}/admin/unit-limits", json={"category_limits": {"tyres": 12, "electronics": 5, "footwear": 3}, "default_limit": 3}, timeout=30)
         assert r.status_code == 200 and r.json()["category_limits"]["tyres"] == 12
+
+
+class TestRespawnWorkingWindow:
+    """Pure-function tests for the Mon–Fri 08:30–16:30 respawn window + 16:30 deadline."""
+
+    @staticmethod
+    def _waves():
+        import importlib
+        return importlib.import_module("routes.waves")
+
+    @staticmethod
+    def _london(y, mo, d, h, mi):
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        return datetime(y, mo, d, h, mi, tzinfo=ZoneInfo("Europe/London"))
+
+    def test_immediate_inside_window(self):
+        w = self._waves()
+        # Mon 2026-06-15 09:00 → inside window → create now (None)
+        assert w._next_creation_time_london(self._london(2026, 6, 15, 9, 0)) is None
+        # boundary: exactly 08:30 is inside; 16:29 inside
+        assert w._next_creation_time_london(self._london(2026, 6, 15, 8, 30)) is None
+        assert w._next_creation_time_london(self._london(2026, 6, 15, 16, 29)) is None
+
+    def test_before_window_same_day_0830(self):
+        w = self._waves()
+        nxt = w._next_creation_time_london(self._london(2026, 6, 15, 7, 0))  # Mon 07:00
+        assert (nxt.hour, nxt.minute) == (8, 30) and nxt.day == 15
+
+    def test_after_window_next_working_day(self):
+        w = self._waves()
+        nxt = w._next_creation_time_london(self._london(2026, 6, 15, 17, 0))  # Mon 17:00
+        assert (nxt.hour, nxt.minute) == (8, 30) and nxt.weekday() == 1  # Tue
+
+    def test_weekend_rolls_to_monday(self):
+        w = self._waves()
+        nxt = w._next_creation_time_london(self._london(2026, 6, 13, 12, 0))  # Sat
+        assert nxt.weekday() == 0 and (nxt.hour, nxt.minute) == (8, 30)  # Mon 08:30
+
+    def test_deadline_is_1630_same_day_utc(self):
+        w = self._waves()
+        # London 09:00 in June (BST, UTC+1) → 16:30 BST == 15:30 UTC
+        dl = w._deadline_for_creation_london(self._london(2026, 6, 15, 9, 0))
+        assert dl.tzinfo is not None
+        loc = dl.astimezone(__import__("zoneinfo").ZoneInfo("Europe/London"))
+        assert (loc.hour, loc.minute) == (16, 30) and loc.day == 15

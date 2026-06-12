@@ -31,6 +31,12 @@ ACTIVE_PART_STATUSES = ["reserved", "authorized", "captured"]
 ALMOST_FULL_RATIO = 0.8
 RESERVATION_MINUTES = 25
 
+# Respawn working window (Europe/London): Mon–Fri 08:30 → 16:30. Waves that
+# complete inside this window respawn immediately; otherwise the next working
+# day 08:30. Every respawned wave gets a same-day 16:30 deadline.
+WORK_START_H, WORK_START_M = 8, 30
+WORK_END_H, WORK_END_M = 16, 30
+
 # States the supplier/admin manage manually (never auto-overwritten by recompute)
 TERMINAL_OR_MANUAL = {"processing", "fulfilment", "completed", "expired"}
 
@@ -811,9 +817,10 @@ def build_router(deps: Dict[str, Any]) -> APIRouter:
 
 # --------------------------------------------------------------------------
 # Auto-respawn: when a wave COMPLETES with stock remaining, spin up a follow-on
-# wave for the leftover inventory until stock depletes. Time guard: create
-# immediately on a working day before 16:00 (London); otherwise schedule for the
-# next working day at 08:00.
+# wave for the leftover inventory until stock depletes. Working window
+# (Europe/London): Mon–Fri 08:30–16:30 — complete inside the window → create
+# immediately; otherwise schedule for the next working day 08:30. Every
+# respawned wave gets a same-day 16:30 deadline.
 # --------------------------------------------------------------------------
 def _london_now() -> datetime:
     try:
@@ -823,17 +830,34 @@ def _london_now() -> datetime:
         return datetime.now(timezone.utc)
 
 
-def _next_creation_time_london(now: Optional[datetime] = None) -> Optional[datetime]:
-    """Return None to create immediately, else the London datetime to create at.
+def _in_working_window(now: datetime) -> bool:
+    """True when `now` (London) is Mon–Fri between 08:30 and 16:30."""
+    if now.weekday() >= 5:  # Sat/Sun
+        return False
+    return (WORK_START_H, WORK_START_M) <= (now.hour, now.minute) < (WORK_END_H, WORK_END_M)
 
-    Rule: working day (Mon–Fri) before 16:00 → now. Otherwise next working day 08:00."""
+
+def _next_creation_time_london(now: Optional[datetime] = None) -> Optional[datetime]:
+    """Return None to create immediately (inside Mon–Fri 08:30–16:30), else the
+    London datetime of the next working-day at 08:30."""
     now = now or _london_now()
-    if now.weekday() < 5 and now.hour < 16:
+    if _in_working_window(now):
         return None
+    # Weekday but before the window opens → today 08:30.
+    if now.weekday() < 5 and (now.hour, now.minute) < (WORK_START_H, WORK_START_M):
+        return now.replace(hour=WORK_START_H, minute=WORK_START_M, second=0, microsecond=0)
+    # Otherwise (after 16:30 or weekend) → next working day 08:30.
     d = now + timedelta(days=1)
     while d.weekday() >= 5:  # skip Sat/Sun
         d = d + timedelta(days=1)
-    return d.replace(hour=8, minute=0, second=0, microsecond=0)
+    return d.replace(hour=WORK_START_H, minute=WORK_START_M, second=0, microsecond=0)
+
+
+def _deadline_for_creation_london(create_local: Optional[datetime] = None) -> datetime:
+    """16:30 Europe/London on the creation day, returned as a UTC datetime."""
+    create_local = create_local or _london_now()
+    dl_local = create_local.replace(hour=WORK_END_H, minute=WORK_END_M, second=0, microsecond=0)
+    return dl_local.astimezone(timezone.utc)
 
 
 def _compute_remaining_products(wave: dict):
@@ -856,7 +880,8 @@ def _compute_remaining_products(wave: dict):
     return new_products, total
 
 
-def _build_respawn_doc(wave: dict, remaining_products: List[dict], total_remaining: int) -> dict:
+def _build_respawn_doc(wave: dict, remaining_products: List[dict], total_remaining: int,
+                       carried_units: int = 0) -> dict:
     base_title = wave.get("origin_title") or wave["title"]
     rnd = int(wave.get("round", 1)) + 1
     return {
@@ -877,12 +902,16 @@ def _build_respawn_doc(wave: dict, remaining_products: List[dict], total_remaini
         "state": "open",
         "units_committed": 0,
         "participants_count": 0,
+        # Informational only — units allocated (reserved/authorized but unpaid) on
+        # the previous wave that carry into this round's stock. Does NOT count
+        # toward progress/min_activation (the bar starts at 0).
+        "carried_units": int(carried_units),
         "round": rnd,
         "origin_wave_id": wave.get("origin_wave_id", wave["wave_id"]),
         "parent_wave_id": wave["wave_id"],
         "created_at": _now(),
         "activated_at": None,
-        "deadline": _now() + timedelta(days=30),
+        "deadline": _deadline_for_creation_london(),
     }
 
 
@@ -906,6 +935,14 @@ async def complete_wave_and_respawn(db, manager, wave: dict) -> dict:
     engaged = await db.wave_participations.count_documents(
         {"wave_id": wid, "status": {"$in": ACTIVE_PART_STATUSES}}
     )
+    # Carried units = allocated-but-unpaid (reserved/authorized) units on the
+    # completed wave. These roll into the leftover stock of the new round and are
+    # surfaced as an informational "carried from previous wave" counter.
+    carried_agg = await db.wave_participations.aggregate([
+        {"$match": {"wave_id": wid, "status": {"$in": ["reserved", "authorized"]}}},
+        {"$group": {"_id": None, "units": {"$sum": "$units"}}},
+    ]).to_list(1)
+    carried_units = int(carried_agg[0]["units"]) if carried_agg else 0
     prods = wave.get("products", [])
     for p in prods:
         for v in p.get("variants", []):
@@ -929,13 +966,17 @@ async def complete_wave_and_respawn(db, manager, wave: dict) -> dict:
         return {"respawned": False, "reason": "no_demand_or_no_stock",
                 "engaged": engaged, "sold": sold_total, "remaining": total_remaining}
 
-    doc = _build_respawn_doc(wave, remaining_products, total_remaining)
+    doc = _build_respawn_doc(wave, remaining_products, total_remaining, carried_units)
     when = _next_creation_time_london()
     if when is None:
+        # Inside the working window → go live immediately, deadline today 16:30.
+        doc["created_at"] = _now()
+        doc["deadline"] = _deadline_for_creation_london(_london_now())
         await db.waves.insert_one(dict(doc))
         await db.suppliers.update_one({"supplier_id": doc["supplier_id"]}, {"$inc": {"waves_published": 1}})
         await manager.broadcast("waves:feed", {"type": "wave_created", "wave_id": doc["wave_id"], "title": doc["title"]})
-        return {"respawned": True, "scheduled": False, "new_wave_id": doc["wave_id"], "units": total_remaining}
+        return {"respawned": True, "scheduled": False, "new_wave_id": doc["wave_id"],
+                "units": total_remaining, "carried_units": carried_units}
 
     spec = dict(doc)
     spec["created_at"] = None
@@ -949,7 +990,8 @@ async def complete_wave_and_respawn(db, manager, wave: dict) -> dict:
         "parent_wave_id": wid,
         "created": False,
     })
-    return {"respawned": True, "scheduled": True, "create_at": when.isoformat(), "units": total_remaining}
+    return {"respawned": True, "scheduled": True, "create_at": when.isoformat(),
+            "units": total_remaining, "carried_units": carried_units}
 
 
 async def process_due_scheduled_waves(db, manager) -> int:
@@ -961,7 +1003,7 @@ async def process_due_scheduled_waves(db, manager) -> int:
         spec = dict(sw["spec"])
         spec["wave_id"] = spec.get("wave_id") or f"wave_{uuid.uuid4().hex[:10]}"
         spec["created_at"] = _now()
-        spec["deadline"] = _now() + timedelta(days=30)
+        spec["deadline"] = _deadline_for_creation_london(_london_now())
         spec["activated_at"] = None
         spec["state"] = "open"
         await db.waves.insert_one(dict(spec))

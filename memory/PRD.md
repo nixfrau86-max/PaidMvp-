@@ -20,7 +20,12 @@ Build a real-time demand aggregation platform that turns fragmented consumer int
 8. Admin role is restricted to `ADMIN_EMAILS` env allowlist.
 
 ## What's implemented (latest — 2026-06-12)
-### 📦 Per-user annual unit limits per category (DONE)
+### 🔁 Respawn carryover + working-window timing (DONE)
+- **Carried units (display):** When a wave completes and respawns, the platform now records `carried_units` = the units that were **allocated/reserved but never paid** on the completed wave. This number is stored on the new round's doc and surfaced as an informational badge — **"+N Carried"** on wave cards (`WaveBrowse.jsx`) and **"N units carried from previous wave"** on the wave detail (`WaveDetail.jsx`). The leftover stock already carries forward as available inventory; the **activation progress bar starts at 0** and carried units do **NOT** count toward `min_activation` (per user decision).
+- **New respawn working window (Europe/London):** Replaced the old "before 16:00 → now, else next-day 08:00" rule. Working window is now **Mon–Fri 08:30–16:30**. Complete **inside** the window → new wave goes **live immediately** with a **same-day 16:30 deadline**. Complete **before 08:30** → schedule today 08:30. Complete **after 16:30 / weekend** → schedule **next working day 08:30**. Every respawned wave (immediate or scheduled) gets a **16:30 deadline** on its creation day (`_in_working_window`, `_next_creation_time_london`, `_deadline_for_creation_london` in `routes/waves.py`).
+- Tests: `test_wave_lifecycle.py::TestRespawnWorkingWindow` (window + deadline helpers) + carried_units assertion in `TestRespawnOnDemand`; updated `test_wave_respawn.py` timing tests. Regression **44 passed**. UI verified (wave detail renders, badge gated on `carried_units > 0`).
+
+
 - **Caps (admin-editable, stored in `platform_config._id=unit_limits`):** tyres **12**, electronics **5**, footwear **3**, any other category default **3** — per **calendar year**.
 - **Counts** all active commitments (reserved/allocated + paid) in the current calendar year; released/cancelled/expired excluded.
 - **Enforcement** in `join_wave` (`routes/waves.py`): blocks with a clear message when `used + qty > limit`. New `_units_used_this_year` helper.
