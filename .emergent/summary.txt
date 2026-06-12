@@ -1,56 +1,38 @@
-<analysis>**original_problem_statement**: Pivot the platform to a Regional Product Waves© architecture, moving away from the automated tyre-only engine to supplier-created regional waves (Tyres, Electronics, Footwear). Implement Admin & Supplier wave management controls. Integrate fitting slot logistics (30-minute intervals). Implement automated wave respawning logic for unsold inventory. Implement Phase 3: Stripe Pay-on-activation flow (Join -> Wave Activates -> User Pays -> Slot Confirmed).
+<analysis>**original_problem_statement**: Pivot the platform to a Regional Product Waves© architecture. Implement Admin & Supplier wave management controls. Integrate fitting slot logistics. Implement automated wave respawning logic. Implement Phase 3: Stripe Pay-on-activation flow.
 PRODUCT REQUIREMENTS: 
 - Core Pivot: .
-- Payment Flow: Stripe Pay-on-activation. User joins wave -> Wave reaches minimum threshold -> Activates -> User receives payment link -> Captured payment confirms booking.
+- Payment Flow: Stripe Pay-on-activation. 
 - Fulfillment: Garages get real-time booking slots in 30-minute intervals.
 - Auto-Respawn: Completed waves automatically respawn a new wave for remaining stock.
+- Limits: Per-user annual unit limits categorized by product type, editable by admin.
 
 **User's preferred language**: English (INSTRUCT next agent to respond in the user's preferred language only)
 
-**what currently exists?**: A full-stack React + FastAPI + MongoDB app. The new Regional Product Waves© engine (Phase 1 and 2) is fully functional. Admin and Supplier controls are active. Garages have 30-min booking slots. Auto-respawn logic with timezone support is built. The backend for Stripe Pay-on-activation (Phase 3) is implemented. The previous aggressive ESLint build blocker was investigated and verified as resolved (the app compiles with warnings, not errors). 
+**what currently exists?**: A full-stack React + FastAPI + MongoDB app. The new Regional Product Waves© engine (Phases 1-3) is fully functional and hardened. Stripe Pay-on-activation works end-to-end. Auth has been secured using  cookies (stripping all frontend  tokens). Complex wave logic has been refactored, featuring atomic join operations, non-blocking activation capacity, and background sweeper/expiry workers. Auto-respawn logic handles active demand correctly. An admin-controlled, per-user annual unit limit feature by category is active and enforced.
 
 **Last working item**:
-- Last item agent was working: The agent investigated the previously reported ESLint blocking issue and confirmed that the frontend compiles successfully (rules are already downgraded in ). The agent then formulated a plan to finish Phase 3 Stripe Pay-on-activation Integration and used  to present the plan and seek the user's approval.
-- Status: USER VERIFICATION PENDING
-- Agent Testing Done: Y (Verified logs, configurations, and backend Stripe 200 OK responses).
-- Which testing method agent to use?: Frontend testing agent/screenshot tool
+- Last item agent was working: Implemented per-user annual unit limits per category (tyres: 12, electronics: 5, footwear/others: 3) based on a calendar year. Enforced this limit across frontend (WaveDetail, Admin panels) and backend (, configuration APIs), allowing admins to configure global defaults and per-user overrides.
+- Status: COMPLETED
+- Agent Testing Done: Y
+- Which testing method agent to use?: NA
 - User Testing Done: N
 
 **All Pending/In progress Issue list**:
-  - Issue 1: Insecure Data Storage / Auth Tokens in localStorage (P1)
-     - Attempted fixes: Flagged by user code review, deferred in previous iterations.
-     - Next debug checklist: Migrate JWT storage from  to  cookies across frontend and backend.
-     - Why fix this issue and what will be achieved with the fix? Fixes XSS vulnerabilities and enhances security.
-     - Status: NOT STARTED
+  - Issue 1: Resend Transactional Emails Integration (P0)
+     - Attempted fixes: Deferred, waiting on user key.
+     - Next debug checklist: Ask user for Resend API key to implement email notifications.
+     - Why fix this issue and what will be achieved with the fix? Required for automated platform communications (booking confirmations, wave activation notifications).
+     - Status: BLOCKED
      - Is recurring issue? N
-     - Should Test frontend/backend/both after fix? both
-     - Blocked on other issue: None
-  - Issue 2: High Backend/Frontend Complexity (P2)
-     - Attempted fixes: Agent deferred refactoring.
-     - Next debug checklist: Break down large functions like  (complexity 101) and React components like , , and  into smaller hooks/files.
-     - Why fix this issue and what will be achieved with the fix? Improves code maintainability and avoids future context overload.
-     - Status: NOT STARTED
-     - Is recurring issue? N
-     - Should Test frontend/backend/both after fix? both
-     - Blocked on other issue: None
+     - Should Test frontend/backend/both after fix? backend
+     - Blocked on other issue: User API key.
 
 **In progress Task List**:
-  - Task 1: Phase 3 Stripe Pay-on-activation Integration (P0)
-     - Where to resume: Wait for user to approve the proposed plan in the chat. Then, test the Pay now CTA from , ensure  and  work correctly, and verify the Stripe checkout session link works via UI.
-     - What will be achieved with this? Core revenue flow for the regional waves architecture.
-     - Status: IN PROGRESS (Awaiting user confirmation)
-     - Should Test frontend/backend/both after fix? frontend
-     - Blocked on something: User approval of the plan.
-  - Task 2: Resend Transactional Emails Integration (P0)
-     - Where to resume: Wait for user to provide the Resend API key.
-     - What will be achieved with this? Automated platform communications (booking confirmations, wave activation emails).
-     - Status: BLOCKED
-     - Should Test frontend/backend/both after fix? backend
-     - Blocked on something: User API key.
+  - None
 
 **Upcoming and Future Tasks**
 Upcoming Tasks:
-- P1: Phase 4 Premium UX & discovery (Stripe/Revolut-inspired UI, live counters, progress bars).
+- P1: Phase 4 Premium UX & discovery (Stripe/Revolut-inspired UI, live counters, progress bars, allowance badges on wave cards).
 - P1: Wire Live Twilio Credentials (currently DEV mode).
 Future Tasks:
 - P2: Implement Consumer iCal feed generation.
@@ -61,16 +43,18 @@ Future Tasks:
 - P2: Admin dashboard commission/revenue chart.
 
 **Completed work in this session**
-- Investigated ESLint frontend compilation issue and confirmed frontend correctly builds and runs without fatal blocking errors.
-- Verified Stripe backend payment routes () are returning 200 OK successfully.
-- (Carried over from previous session) Pivoted architecture to supplier-created Regional Product Waves© (DONE)
-- (Carried over from previous session) Added 30-min garage fitting slot selection to Tyre Wave flow (DONE)
-- (Carried over from previous session) Built Auto-Respawn engine for unsold wave inventory (DONE)
+- Migrated JWT storage from  to  cookies across frontend and backend.
+- Refactored  to break down massive functions and reduce cyclomatic complexity.
+- Fixed  leak in .
+- Overhauled core wave logic (fixed capacity-filling latches, atomic reservations, added sweeper/expiry background workers).
+- Upgraded  to v0.2.0 and successfully verified Phase 3 Stripe Pay-on-activation end-to-end.
+- Fixed wave auto-respawn logic to properly regenerate waves when units are allocated but unpaid.
+- Implemented and integrated Calendar Year Per-User Unit Limits with Admin configurability and user overrides.
 
 **Earlier issues found/mentioned but not fixed**
   - Issue 1: Missing React Hook Dependencies
-   - Debug checklist: Review React compiler/ESLint warnings and add missing dependencies in  and  across multiple files.
-   - Why to solve this issue and what will be achieved with this? Resolves stale closure bugs.
+   - Debug checklist: Review React compiler/ESLint warnings and add missing dependencies in  and  across multiple frontend files.
+   - Why to solve this issue and what will be achieved with this? Resolves potential stale closure bugs.
    - Should Test frontend/backend/both after fix: frontend
    - Is recurring issue? N
 
@@ -85,76 +69,75 @@ Future Tasks:
 **Key Technical Concepts**
 Frontend: React, Tailwind CSS, Shadcn UI
 Backend: FastAPI, MongoDB (Motor), WebSockets
-Architecture: Regional Waves, Pay-on-activation Stripe Checkout, Async Scheduling (Wave Respawn).
+Architecture: Regional Waves, Pay-on-activation Stripe Checkout, Async Scheduling (Wave Respawn), Background Sweeper Workers, HTTP-Only Cookie Session Auth.
 
 **key DB schema**
   - : 
   - : 
   - : 
   - : 
+  - : 
 
 **changes in tech stack**
-  - None
+  - Upgraded  from 0.1.0 to 0.2.0 in  to fix Stripe session retrieval endpoint.
+  - Auth entirely migrated to HTTP-Only cookies. Frontend completely stripped of  token parsing.
 
 **All files of reference**
-  -  (Core wave/respawn engine)
-  -  (Stripe integration backend)
-  -  (New user dashboard)
-  -  (Tyre/slot selection flow)
-  -  and  (Verified linting config)
+  -  (Contains rebuilt wave lifecycle, atomic joins, and unit limit enforcement)
+  -  (Hosts new background sweeping/expiry workers and auth overrides)
+  -  (Handles user limit overrides)
+  -  (Modified to show active unit caps and gate actions)
+  -  & 
+  -  (Created this session for wave boundary limits)
 
 **Areas that need refactoring**
-  -   is extremely massive (cyclomatic complexity 101, 500+ lines). 
-  - JWT token storage requires extraction from  to  cookies.
+  - Frontend components ( /  dependency arrays) as mentioned in the pending issues list.
 
 **key api endpoints**
   - , 
-  -  (Stripe checkout generation)
-  - 
+  -  (Stripe checkout)
   - , 
+  - 
 
 **Critical Info for New Agent**
-  - **LINTING BLOCKER RESOLVED:** The previous fork reported a strict ESLint compilation blocker. This is actually a false alarm; the rules are already downgraded to warnings in , and the frontend logs confirm it compiles. Proceed directly with Phase 3 UI functionality.
-  - **Stripe Architecture:** Option A (Pay-on-activation) is strictly followed. User joins without card -> Wave hits minimum target -> Activates -> Dashboard displays Pay Now -> Checkout session confirms booking.
-  - **Plan Sent:** The agent just used  to confirm the next execution plan. Your very first step must be to read the user's response and proceed accordingly.
+  - **Auth Pattern:** Auth tokens are passed strictly via HTTP-Only cookies. Do NOT attempt to read/write JWTs from .
+  - **Wave Lifecycle Update:** Waves no longer stop accepting users when  is reached. They act as a non-blocking latch and remain open until  capacity is filled. 
+  - **Stripe & Emergent Integrations:** Ensure  if touching payments. Stripe uses testing key  sourced from the pod environment variable. Do not override this key.
+  - **Unit Caps:** Users have annual calendar limits per category. Default config lives in the  collection, overrides in the  collection.
 
 **documents and test reports created in this job**
-  - 
-  - 
-  - 
-  - 
+  -  (Updated)
+  -  (Created)
 
 **Last 10 User Messages and any pending HUMAN messages** 
-  - Provided strict architecture/requirements for Regional Product Waves© pivot. (COMPLETED)
-  - Answered clarification questions: local garages prioritized, no DVLA plate lookup yet, delay Stripe Connect. (COMPLETED)
-  - Provided comprehensive Code Quality Report highlighting missing deps, high complexity, and bad keys. (PENDING FIXES)
-  - Found bug: Selected garage is not available and requested 30-min slot integration + email change to founder@. (COMPLETED)
-  - Feature Request: Show chosen garage + slot in My Waves, remove Wrench from checkout, add user profile edit. (COMPLETED)
-  - Confirmed Phase 3 Stripe integration is next. Added new requirement: Auto-respawn waves for remaining stock. (COMPLETED)
-  - Elected Option A: Pay-on-activation for the Stripe workflow. (COMPLETED - Backend done, UI pending)
-  - Current Handoff Summary mapping out blockers. (COMPLETED)
-  - User requested: Please use ask_human tool and confirm your plan now. (COMPLETED)
-  - *PENDING HUMAN MESSAGE:* The previous agent submitted an  prompt waiting for the user to confirm the plan. Await and act on the incoming user message.
+ - Instructed to fix pending auth/complexity issues. (COMPLETED)
+ - Requested to review wave logic. (COMPLETED)
+ - Instructed to fix all found wave logic architectural flaws. (COMPLETED)
+ - Requested to verify & close Phase 3 Stripe Pay-on-activation. (COMPLETED)
+ - Reported bug: wave not respawning when stock allocated but unpaid. (COMPLETED)
+ - Requested per-user annual unit limits per category. (COMPLETED)
+ - Answered clarification questions for unit limit design choices. (COMPLETED)
+ - *PENDING HUMAN MESSAGE:* None. Session was closed with the finish tool. Ask the user how they would like to proceed (e.g., start Phase 4 Premium UX, or provide Resend API keys).
 
 **Project Health Check:**
-  - Broken: None (The previously reported ESLint build error was verified to be a warning only).
-  - Mocked: Twilio SMS Auth (DEV mode).
+  - Broken: None
+  - Mocked: Twilio SMS Auth (DEV mode). Resend Email flow (Blocked on API key). 
 
 **3rd Party Integrations**
-  - Stripe (Payments) — requires User API Key (using test key  from environment)
-  - Twilio (SMS Auth) — requires User API Key (currently in dev mode)
-  - Resend (Emails) — requires User API Key (Pending user response)
+  - Stripe (Payments) — uses Emergent integrations via environment test key
+  - Twilio (SMS Auth) — requires User API Key (currently dev mode)
+  - Resend (Emails) — requires User API Key (Blocked/Pending user action)
   - Firebase (Analytics) — requires User Config
 
 **Testing status**
-  - Testing agent used after significant changes: YES
+  - Testing agent used after significant changes: NO (Agent self-tested meticulously via backend pytest execution, cURL workflows, and frontend screenshot verifications)
   - Troubleshoot agent used after agent stuck in loop: NO
-  - Test files created: , 
-  - Known regressions: None (UI compilation block resolved).
+  - Test files created: 
+  - Known regressions: None
 
 **Credentials to test flow:**
   - Admin Email:  
   - Password: 
 
 **What agent forgot to execute**
-  - The agent deferred the user's previous Code Quality Report recommendations: specifically, migrating  to  cookies (security vulnerability) and breaking down the  massive functions.</analysis>
+  - The missing React hook dependency cleanup (Issue 1 from Earlier issues) was deferred to focus on completing the complex backend architecture overhauls and testing.</analysis>
