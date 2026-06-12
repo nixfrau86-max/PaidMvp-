@@ -227,6 +227,7 @@ function UserDetailModal({ userId, onClose }) {
             <Row k="Tyre wave joins" v={data.stats?.tyre_participations ?? 0} />
             <Row k="Payment transactions" v={data.stats?.payment_transactions ?? 0} />
           </div>
+          <UnitLimitOverrides user={data} onSaved={(u) => setData((d) => ({ ...d, ...u }))} />
         </div>
       </div>
     </div>
@@ -238,6 +239,56 @@ function Row({ k, v }) {
     <div className="flex gap-3 items-baseline">
       <div className="font-mono text-[10px] uppercase tracking-widest text-[#3A3A3A] min-w-[160px]">{k}</div>
       <div className="font-mono text-[13px] break-all">{String(v)}</div>
+    </div>
+  );
+}
+
+
+const LIMIT_CATEGORIES = ["tyres", "electronics", "footwear"];
+
+function UnitLimitOverrides({ user, onSaved }) {
+  const [vals, setVals] = useState(() => {
+    const o = user.unit_limit_overrides || {};
+    return LIMIT_CATEGORIES.reduce((a, c) => ({ ...a, [c]: o[c] != null ? String(o[c]) : "" }), {});
+  });
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    const overrides = {};
+    for (const c of LIMIT_CATEGORIES) {
+      const raw = (vals[c] ?? "").trim();
+      if (raw !== "") {
+        const n = parseInt(raw, 10);
+        if (Number.isNaN(n) || n < 0) { toast.error(`Invalid ${c} limit`); return; }
+        overrides[c] = n;
+      }
+    }
+    setSaving(true);
+    try {
+      const { data } = await api.patch(`/admin/users/${user.user_id}`, { unit_limit_overrides: overrides });
+      toast.success("Unit limit overrides saved");
+      onSaved?.({ unit_limit_overrides: data.unit_limit_overrides || {} });
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Failed to save overrides");
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div className="border-t-2 border-ink pt-3 mt-3" data-testid="unit-limit-overrides">
+      <div className="font-mono text-[10px] font-bold uppercase tracking-widest mb-1">Annual Unit Limit Overrides</div>
+      <p className="font-mono text-[10px] text-[#3A3A3A] mb-2">Leave blank to use the platform default for that category.</p>
+      <div className="grid grid-cols-3 gap-2">
+        {LIMIT_CATEGORIES.map((c) => (
+          <label key={c} className="block">
+            <span className="font-mono text-[10px] uppercase tracking-widest text-[#3A3A3A]">{c}</span>
+            <input type="number" min="0" value={vals[c]} onChange={(e) => setVals((v) => ({ ...v, [c]: e.target.value }))}
+              placeholder="default" className="w-full border-2 border-ink p-2 font-mono text-sm mt-0.5" data-testid={`override-${c}`} />
+          </label>
+        ))}
+      </div>
+      <button onClick={save} disabled={saving} className="mt-3 bg-ink text-white border-2 border-ink font-bold uppercase tracking-widest px-4 py-2 text-[11px] shadow-brut-sm hover-brut disabled:opacity-50" data-testid="save-overrides-btn">
+        {saving ? "Saving…" : "Save Overrides"}
+      </button>
     </div>
   );
 }

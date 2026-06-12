@@ -338,6 +338,19 @@ async def expire_overdue_waves(db, manager) -> int:
     return expired
 
 
+async def _units_used_this_year(db, user_id: str, category: str) -> int:
+    """Sum of units the user has committed (reserved/authorized/captured) in this
+    category during the current CALENDAR year. Released/cancelled/expired excluded."""
+    year_start = _now().replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
+    parts = await db.wave_participations.find(
+        {"user_id": user_id, "category": category,
+         "status": {"$in": ACTIVE_PART_STATUSES},
+         "created_at": {"$gte": year_start}},
+        {"_id": 0, "units": 1},
+    ).to_list(5000)
+    return sum(int(p.get("units", 0)) for p in parts)
+
+
 # --------------------------------------------------------------------------
 # Router
 # --------------------------------------------------------------------------
@@ -347,6 +360,8 @@ def build_router(deps: Dict[str, Any]) -> APIRouter:
     get_current_user_optional = deps["get_current_user_optional"]
     require_role = deps["require_role"]
     manager = deps["manager"]
+    get_unit_limits_config = deps.get("get_unit_limits_config")
+    resolve_unit_limit = deps.get("resolve_unit_limit")
 
     router = APIRouter()
 
@@ -635,6 +650,22 @@ def build_router(deps: Dict[str, Any]) -> APIRouter:
         if committed + units > ideal:
             raise HTTPException(status_code=400, detail=f"Only {ideal - committed} unit(s) left in this Wave")
 
+        # Per-user annual unit limit (calendar year), by category. Counts active
+        # commitments (reserved/authorized/captured). Admin per-user override wins.
+        if get_unit_limits_config and resolve_unit_limit:
+            cfg = await get_unit_limits_config()
+            limit = resolve_unit_limit(cfg, user, w["category"])
+            used = await _units_used_this_year(db, user["user_id"], w["category"])
+            if used + units > limit:
+                cat = CATEGORY_LABELS.get(w["category"], w["category"])
+                remaining = max(0, limit - used)
+                raise HTTPException(
+                    status_code=400,
+                    detail=(f"Annual {cat} limit reached — up to {limit} units per calendar year. "
+                            f"You've committed {used} so far ({remaining} left). "
+                            f"Contact us if you need a higher limit."),
+                )
+
         # Atomic-ish reservation: increment reserved_qty FIRST, then verify no
         # variant went negative (concurrent-join race). Roll back on oversell.
         await db.waves.update_one({"wave_id": wave_id}, {"$inc": inc_ops}, array_filters=array_filters)
@@ -687,6 +718,21 @@ def build_router(deps: Dict[str, Any]) -> APIRouter:
                 continue
             out.append({**p, "wave": _public_wave(w)})
         return out
+
+    @router.get("/me/unit-allowance")
+    async def my_unit_allowance(category: str = Query(...), user: dict = Depends(get_current_user)):
+        """Remaining annual (calendar-year) unit allowance for the current user in a category."""
+        if category not in CATEGORIES:
+            raise HTTPException(status_code=400, detail="Unknown category")
+        cfg = await get_unit_limits_config() if get_unit_limits_config else {}
+        limit = resolve_unit_limit(cfg, user, category) if resolve_unit_limit else 0
+        used = await _units_used_this_year(db, user["user_id"], category)
+        has_override = category in ((user or {}).get("unit_limit_overrides") or {})
+        return {
+            "category": category, "limit": limit, "used": used,
+            "remaining": max(0, limit - used), "year": _now().year,
+            "override": has_override,
+        }
 
     @router.delete("/me/wave-orders/{participation_id}")
     async def cancel_my_order(participation_id: str, user: dict = Depends(get_current_user)):

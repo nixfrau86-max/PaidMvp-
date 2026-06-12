@@ -35,6 +35,7 @@ export default function WaveDetail() {
   const [address, setAddress] = useState("");
   const [acceptTerms, setAcceptTerms] = useState(false);
   const [joining, setJoining] = useState(false);
+  const [allowance, setAllowance] = useState(null);
 
   const reload = useCallback(async () => {
     try {
@@ -87,6 +88,26 @@ export default function WaveDetail() {
   const product = useMemo(() => (w?.products || []).find((p) => p.product_id === selProduct), [w, selProduct]);
   const variant = useMemo(() => (product?.variants || []).find((v) => v.variant_id === selVariant), [product, selVariant]);
 
+  const loadAllowance = useCallback(() => {
+    if (!w?.category || !user) { setAllowance(null); return; }
+    api.get(`/me/unit-allowance?category=${w.category}`)
+      .then(({ data }) => setAllowance(data))
+      .catch(() => setAllowance(null));
+  }, [w?.category, user]);
+
+  useEffect(() => { loadAllowance(); }, [loadAllowance]);
+
+  // Keep qty within both the variant stock AND the remaining annual allowance.
+  const maxQty = useMemo(() => {
+    const stock = variant?.available ?? 1;
+    const rem = allowance ? allowance.remaining : stock;
+    return Math.max(0, Math.min(stock, rem));
+  }, [variant, allowance]);
+
+  useEffect(() => {
+    if (maxQty >= 1 && qty > maxQty) setQty(maxQty);
+  }, [maxQty, qty]);
+
   const join = async () => {
     if (!user) {
       toast.info("Sign in to join this Wave");
@@ -115,6 +136,7 @@ export default function WaveDetail() {
       track("wave_join", { wave_id: id, category: w.category, units: qty });
       toast.success(`Reserved ${qty} unit${qty > 1 ? "s" : ""} — secured for ${data.reservation_minutes} min. Card captured only on activation.`);
       reload();
+      loadAllowance();
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Could not join wave");
     } finally { setJoining(false); }
@@ -200,9 +222,16 @@ export default function WaveDetail() {
                   <div className="inline-flex items-center border-2 border-ink">
                     <button onClick={() => setQty((n) => Math.max(1, n - 1))} className="px-3 py-2 border-r-2 border-ink hover:bg-[#F4F4F4]" data-testid="qty-minus"><Minus weight="bold" size={12} /></button>
                     <span className="px-4 font-display text-xl tabular-nums" data-testid="qty-value">{qty}</span>
-                    <button onClick={() => setQty((n) => Math.min(variant.available, n + 1))} className="px-3 py-2 border-l-2 border-ink hover:bg-[#F4F4F4]" data-testid="qty-plus"><Plus weight="bold" size={12} /></button>
+                    <button onClick={() => setQty((n) => Math.min(maxQty || 1, n + 1))} className="px-3 py-2 border-l-2 border-ink hover:bg-[#F4F4F4]" data-testid="qty-plus"><Plus weight="bold" size={12} /></button>
                   </div>
                   <div className="font-mono text-[11px] uppercase tracking-widest ml-auto">Subtotal £{(variant.wave_price * qty).toFixed(2)}</div>
+                </div>
+              )}
+              {variant && allowance && (
+                <div className="mt-3 font-mono text-[10px] uppercase tracking-widest text-[#3A3A3A]" data-testid="annual-allowance">
+                  Annual allowance · <span className="text-ink font-bold">{allowance.remaining}</span> of {allowance.limit} {w.category} units left in {allowance.year}
+                  {allowance.override && <span className="text-[#00C853]"> · custom limit</span>}
+                  {allowance.remaining <= 0 && <span className="text-[#FF5400]"> · limit reached for this year</span>}
                 </div>
               )}
             </div>
@@ -303,8 +332,8 @@ export default function WaveDetail() {
                       I agree to the <Link to="/terms" className="underline" target="_blank">Terms</Link> and <Link to="/privacy" className="underline" target="_blank">Privacy Policy</Link>. My inventory is reserved now; payment is captured only when the Wave activates.
                     </span>
                   </label>
-                  <button onClick={join} disabled={!variant || joining || !acceptTerms || (w.category === "tyres" && (!garageId || !selectedSlot))} className="mt-3 w-full bg-[#FF5400] text-white border-2 border-ink font-bold uppercase tracking-widest px-5 py-4 text-sm shadow-brut hover-brut inline-flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed" data-testid="join-wave-btn">
-                    {joining ? "Reserving…" : <>Join Wave <ArrowRight weight="bold" /></>}
+                  <button onClick={join} disabled={!variant || joining || !acceptTerms || (allowance && allowance.remaining <= 0) || (w.category === "tyres" && (!garageId || !selectedSlot))} className="mt-3 w-full bg-[#FF5400] text-white border-2 border-ink font-bold uppercase tracking-widest px-5 py-4 text-sm shadow-brut hover-brut inline-flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed" data-testid="join-wave-btn">
+                    {joining ? "Reserving…" : (allowance && allowance.remaining <= 0) ? <>Annual limit reached</> : <>Join Wave <ArrowRight weight="bold" /></>}
                   </button>
                 </>
               ) : (

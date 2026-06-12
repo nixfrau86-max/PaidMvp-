@@ -19,6 +19,17 @@ Build a real-time demand aggregation platform that turns fragmented consumer int
 7. Payment methods (admin-configurable fees + recommended flag + on/off): Open Banking (+£1, recommended), Apple Pay (+£3), Google Pay (+£3), Card (+£3), Bank Transfer (+£1.50). Wallet rails route through Stripe; OB/Bank Transfer mocked until TrueLayer/Faster Payments are wired.
 8. Admin role is restricted to `ADMIN_EMAILS` env allowlist.
 
+## What's implemented (latest — 2026-06-12)
+### 📦 Per-user annual unit limits per category (DONE)
+- **Caps (admin-editable, stored in `platform_config._id=unit_limits`):** tyres **12**, electronics **5**, footwear **3**, any other category default **3** — per **calendar year**.
+- **Counts** all active commitments (reserved/allocated + paid) in the current calendar year; released/cancelled/expired excluded.
+- **Enforcement** in `join_wave` (`routes/waves.py`): blocks with a clear message when `used + qty > limit`. New `_units_used_this_year` helper.
+- **Per-user override** ("unless requested by user"): admin sets a per-category limit on the user doc via `PATCH /admin/users/{id}` (`unit_limit_overrides`); override wins over the category default. UI in Users → user detail modal (`unit-limit-overrides`).
+- **Allowance API:** `GET /api/me/unit-allowance?category=` → `{limit, used, remaining, year, override}`.
+- **Admin config API:** `GET/PUT /api/admin/unit-limits`. UI: "Annual Unit Limits" card in the admin Fees tab (`unit-limits-card`).
+- **Consumer UX (`WaveDetail.jsx`):** shows "Annual allowance · X of Y units left in {year}", caps the qty stepper at `min(stock, remaining)`, and disables Join with "Annual limit reached" when exhausted.
+- Tests: `TestAnnualUnitLimits` (enforcement + override + allowance + admin config). Regression **39 passed**. UI verified via screenshots (allowance line, admin caps card, per-user override editor).
+
 ## What's implemented (latest — 2026-06-09)
 ### 🔁 Auto-respawn bugfix — respawn on demand, not only on paid sales (DONE)
 - **Bug (reported):** waves weren't regenerating even though "plenty of stock was available and allocated." Root cause: the earlier correctness fix (#6) made `complete_wave_and_respawn` require **captured (paid)** units to respawn — so waves where stock was **reserved/allocated but unpaid** returned `respawned:false` and never spun up a follow-on wave.

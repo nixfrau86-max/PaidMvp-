@@ -198,3 +198,60 @@ class TestRespawnOnDemand:
         res = r.json().get("respawn_result")
         assert res and res.get("respawned") is False
         assert res.get("engaged") == 0
+
+
+class TestAnnualUnitLimits:
+    """Per-user calendar-year unit caps, enforcement, allowance endpoint, admin override."""
+
+    def _wave(self, sup, inventory=50, ideal=30):
+        payload = {
+            "category": "electronics", "region_id": _region_id(), "brand": "LIMIT",
+            "title": f"TEST_UL_{uuid.uuid4().hex[:6]}", "description": "x",
+            "ideal_target": ideal, "min_activation": 2, "eta": "7 days",
+            "products": [{"model": "M", "variants": [
+                {"label": "X", "supplier_cost": 10.0, "retail_price": 30.0, "wave_price": 20.0, "inventory_qty": inventory}]}],
+        }
+        r = sup.post(f"{API}/supplier/waves", json=payload, timeout=30)
+        assert r.status_code == 200, r.text
+        return r.json()
+
+    def _join(self, cons, wave, qty):
+        return cons.post(f"{API}/waves/{wave['wave_id']}/join", json={
+            "items": [{"product_id": wave["products"][0]["product_id"],
+                       "variant_id": wave["products"][0]["variants"][0]["variant_id"], "qty": qty}],
+            "delivery_address": "1 Rd", "accept_terms": True}, timeout=30)
+
+    def test_electronics_cap_and_override(self):
+        sup = _supplier_session(); admin = _admin_session()
+        # ensure platform default electronics limit = 5
+        admin.put(f"{API}/admin/unit-limits", json={"category_limits": {"tyres": 12, "electronics": 5, "footwear": 3}, "default_limit": 3}, timeout=30)
+        w = self._wave(sup)
+        cons = _new_consumer()
+        uid = cons.get(f"{API}/auth/me", timeout=30).json()["user_id"]
+
+        a = cons.get(f"{API}/me/unit-allowance?category=electronics", timeout=30).json()
+        assert a["limit"] == 5 and a["used"] == 0 and a["remaining"] == 5
+
+        assert self._join(cons, w, 4).status_code == 200
+        a = cons.get(f"{API}/me/unit-allowance?category=electronics", timeout=30).json()
+        assert a["used"] == 4 and a["remaining"] == 1
+
+        r = self._join(cons, w, 2)  # 4+2 > 5
+        assert r.status_code == 400 and "limit" in r.json()["detail"].lower()
+
+        # admin grants override
+        r = admin.patch(f"{API}/admin/users/{uid}", json={"unit_limit_overrides": {"electronics": 10}}, timeout=30)
+        assert r.status_code == 200 and r.json()["unit_limit_overrides"]["electronics"] == 10
+
+        assert self._join(cons, w, 2).status_code == 200  # now allowed
+        a = cons.get(f"{API}/me/unit-allowance?category=electronics", timeout=30).json()
+        assert a["override"] is True and a["limit"] == 10 and a["used"] == 6
+
+        sup.delete(f"{API}/supplier/waves/{w['wave_id']}", timeout=30)
+
+    def test_admin_unit_limits_config(self):
+        admin = _admin_session()
+        cfg = admin.get(f"{API}/admin/unit-limits", timeout=30).json()
+        assert "category_limits" in cfg and "default_limit" in cfg
+        r = admin.put(f"{API}/admin/unit-limits", json={"category_limits": {"tyres": 12, "electronics": 5, "footwear": 3}, "default_limit": 3}, timeout=30)
+        assert r.status_code == 200 and r.json()["category_limits"]["tyres"] == 12

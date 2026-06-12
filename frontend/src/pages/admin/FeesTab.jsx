@@ -178,6 +178,75 @@ export default function FeesTab() {
           </button>
         </div>
       </div>
+
+      <UnitLimitsCard />
+    </div>
+  );
+}
+
+const UL_CATEGORIES = ["tyres", "electronics", "footwear"];
+
+function UnitLimitsCard() {
+  const [cfg, setCfg] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    api.get("/admin/unit-limits").then(({ data }) => {
+      const cl = data.category_limits || {};
+      setCfg({
+        category_limits: UL_CATEGORIES.reduce((a, c) => ({ ...a, [c]: String(cl[c] ?? "") }), {}),
+        default_limit: String(data.default_limit ?? ""),
+      });
+    }).catch(() => toast.error("Failed to load unit limits"));
+  }, []);
+
+  const save = async () => {
+    const category_limits = {};
+    for (const c of UL_CATEGORIES) {
+      const n = parseInt(cfg.category_limits[c], 10);
+      if (Number.isNaN(n) || n < 0) { toast.error(`Invalid ${c} limit`); return; }
+      category_limits[c] = n;
+    }
+    const def = parseInt(cfg.default_limit, 10);
+    if (Number.isNaN(def) || def < 0) { toast.error("Invalid default limit"); return; }
+    setSaving(true);
+    try {
+      await api.put("/admin/unit-limits", { category_limits, default_limit: def });
+      toast.success("Annual unit limits saved");
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Failed to save limits");
+    } finally { setSaving(false); }
+  };
+
+  if (!cfg) return null;
+  return (
+    <div className="border-2 border-ink bg-white shadow-brut p-6" data-testid="unit-limits-card">
+      <h2 className="font-display text-3xl uppercase tracking-tighter leading-none">Annual Unit Limits</h2>
+      <p className="font-mono text-[11px] text-[#3A3A3A] mt-2 mb-4 max-w-2xl">
+        Max units a single user can buy per category each calendar year. Per-user overrides
+        (set in the Users tab) take precedence. Counts reserved + paid commitments.
+      </p>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {UL_CATEGORIES.map((c) => (
+          <Field key={c} label={c}>
+            <input type="number" min="0" value={cfg.category_limits[c]}
+              onChange={(e) => setCfg((p) => ({ ...p, category_limits: { ...p.category_limits, [c]: e.target.value } }))}
+              className="w-full border-2 border-ink p-2.5 font-mono text-sm" data-testid={`unit-limit-${c}`} />
+          </Field>
+        ))}
+        <Field label="Other (default)">
+          <input type="number" min="0" value={cfg.default_limit}
+            onChange={(e) => setCfg((p) => ({ ...p, default_limit: e.target.value }))}
+            className="w-full border-2 border-ink p-2.5 font-mono text-sm" data-testid="unit-limit-default" />
+        </Field>
+      </div>
+      <div className="mt-6 flex justify-end">
+        <button onClick={save} disabled={saving}
+          className="bg-[#FF5400] text-white border-2 border-ink font-bold uppercase tracking-wider px-5 py-3 text-xs shadow-brut hover-brut inline-flex items-center gap-2 disabled:opacity-60"
+          data-testid="unit-limits-save-btn">
+          <Sliders weight="bold" /> {saving ? "Saving…" : "Save Unit Limits"}
+        </button>
+      </div>
     </div>
   );
 }

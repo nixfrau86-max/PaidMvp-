@@ -18,6 +18,7 @@ class AdminUserUpdateRequest(BaseModel):
     role: Optional[str] = None
     status: Optional[Literal["active", "suspended", "deleted"]] = None
     suspended_reason: Optional[str] = None
+    unit_limit_overrides: Optional[Dict[str, int]] = None
 
 
 def _serialize_user(u: dict) -> dict:
@@ -115,6 +116,16 @@ def build_router(deps: Dict[str, Any]) -> APIRouter:
             elif payload.status == "active":
                 updates["suspended_reason"] = None
                 updates["suspended_at"] = None
+
+        if payload.unit_limit_overrides is not None:
+            cleaned: Dict[str, int] = {}
+            for k, v in payload.unit_limit_overrides.items():
+                if v is None:
+                    continue
+                if int(v) < 0:
+                    raise HTTPException(status_code=400, detail="Override limit must be >= 0")
+                cleaned[k] = int(v)
+            updates["unit_limit_overrides"] = cleaned
 
         if not updates:
             raise HTTPException(status_code=400, detail="Nothing to update")

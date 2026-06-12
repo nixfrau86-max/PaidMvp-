@@ -480,6 +480,37 @@ def compute_service_fee(wave_price: float, config: Dict[str, Any]) -> float:
     return round(float(config.get("service_fee_value", 0.0)), 2)
 
 
+# Per-user annual unit limits (calendar year), by product category.
+# Admin-editable via /api/admin/unit-limits; per-user override on the user doc.
+DEFAULT_UNIT_LIMITS: Dict[str, Any] = {
+    "category_limits": {"tyres": 12, "electronics": 5, "footwear": 3},
+    "default_limit": 3,  # any category without an explicit limit
+}
+
+
+async def get_unit_limits_config() -> Dict[str, Any]:
+    doc = await db.platform_config.find_one({"_id": "unit_limits"})
+    if not doc:
+        await db.platform_config.insert_one({"_id": "unit_limits", **DEFAULT_UNIT_LIMITS})
+        return {"category_limits": dict(DEFAULT_UNIT_LIMITS["category_limits"]),
+                "default_limit": DEFAULT_UNIT_LIMITS["default_limit"]}
+    doc.pop("_id", None)
+    doc.setdefault("category_limits", dict(DEFAULT_UNIT_LIMITS["category_limits"]))
+    doc.setdefault("default_limit", DEFAULT_UNIT_LIMITS["default_limit"])
+    return doc
+
+
+def resolve_unit_limit(config: Dict[str, Any], user: dict, category: str) -> int:
+    """Per-user override wins; else category default; else the global default_limit."""
+    overrides = (user or {}).get("unit_limit_overrides") or {}
+    if category in overrides and overrides[category] is not None:
+        return int(overrides[category])
+    cat_limits = config.get("category_limits", {})
+    if category in cat_limits:
+        return int(cat_limits[category])
+    return int(config.get("default_limit", 3))
+
+
 def build_checkout_breakdown(vpp: dict, method_id: str, config: Dict[str, Any]) -> Dict[str, Any]:
     """Returns {retail_price, wave_price, service_fee, payment_fee, final_total, total_savings, commission}."""
     retail = float(vpp["retail_price"])
@@ -2316,6 +2347,37 @@ async def admin_update_fees(payload: FeeConfigUpdate, user: dict = Depends(get_c
     return await get_fee_config()
 
 
+@api_router.get("/admin/unit-limits")
+async def admin_get_unit_limits(user: dict = Depends(get_current_user)):
+    await require_role(user, ["admin"])
+    return await get_unit_limits_config()
+
+
+class UnitLimitsUpdate(BaseModel):
+    category_limits: Optional[Dict[str, int]] = None
+    default_limit: Optional[int] = None
+
+
+@api_router.put("/admin/unit-limits")
+async def admin_update_unit_limits(payload: UnitLimitsUpdate, user: dict = Depends(get_current_user)):
+    await require_role(user, ["admin"])
+    updates: Dict[str, Any] = {}
+    if payload.category_limits is not None:
+        cleaned: Dict[str, int] = {}
+        for k, v in payload.category_limits.items():
+            if int(v) < 0:
+                raise HTTPException(status_code=400, detail="Limits must be >= 0")
+            cleaned[k] = int(v)
+        updates["category_limits"] = cleaned
+    if payload.default_limit is not None:
+        if int(payload.default_limit) < 0:
+            raise HTTPException(status_code=400, detail="default_limit must be >= 0")
+        updates["default_limit"] = int(payload.default_limit)
+    if updates:
+        await db.platform_config.update_one({"_id": "unit_limits"}, {"$set": updates}, upsert=True)
+    return await get_unit_limits_config()
+
+
 # =====================================================================
 # TYRE PRODUCT GROUP WAVES — Auto Wave Engine (MVP infrastructure)
 # =====================================================================
@@ -3140,6 +3202,8 @@ _route_deps = {
     'manager': manager,
     'get_fee_config': get_fee_config,
     'compute_service_fee': compute_service_fee,
+    'get_unit_limits_config': get_unit_limits_config,
+    'resolve_unit_limit': resolve_unit_limit,
 }
 api_router.include_router(_build_admin_users_router(_route_deps))
 api_router.include_router(_build_terms_router(_route_deps))
