@@ -282,6 +282,23 @@ async def _record_terms_acceptance(db, user: dict):
     })
 
 
+def _merge_items(existing_items: List[dict], new_items: List[dict]):
+    """Combine line items by variant_id (summing qty). Returns (items, subtotal, units)."""
+    by_variant: Dict[str, dict] = {}
+    order: List[str] = []
+    for it in list(existing_items) + list(new_items):
+        vid = it["variant_id"]
+        if vid in by_variant:
+            by_variant[vid]["qty"] += it["qty"]
+        else:
+            by_variant[vid] = dict(it)
+            order.append(vid)
+    items = [by_variant[vid] for vid in order]
+    subtotal = sum(it["wave_price"] * it["qty"] for it in items)
+    units = sum(it["qty"] for it in items)
+    return items, round(subtotal, 2), units
+
+
 def _build_participation(wave: dict, user: dict, payload, items, subtotal, units,
                          garage_name, fitting_label) -> dict:
     return {
@@ -728,12 +745,42 @@ def build_router(deps: Dict[str, Any]) -> APIRouter:
         if payload.accept_terms:
             await _record_terms_acceptance(db, user)
 
-        part = _build_participation(w, user, payload, items, subtotal, units, garage_name, fitting_label)
-        await db.wave_participations.insert_one(dict(part))
+        # Combine repeat joins into ONE payable order: if the user already has an
+        # active UNPAID participation on this wave, merge the new items into it
+        # (summing quantities) and refresh the fitting/delivery to the latest choice.
+        existing = await db.wave_participations.find_one(
+            {"wave_id": wave_id, "user_id": user["user_id"],
+             "status": {"$in": ["reserved", "authorized"]},
+             "payment_status": {"$ne": "paid"}},
+            {"_id": 0},
+        )
+        if existing:
+            m_items, m_subtotal, m_units = _merge_items(existing.get("items", []), items)
+            update = {
+                "items": m_items, "units": m_units, "subtotal": m_subtotal,
+                "garage_id": payload.garage_id, "garage_name": garage_name,
+                "fitting_slot_iso": payload.fitting_slot_iso, "fitting_slot_label": fitting_label,
+                "delivery_address": payload.delivery_address,
+                "reservation_expires_at": _iso(_now() + timedelta(minutes=RESERVATION_MINUTES)),
+                "updated_at": _iso(_now()),
+            }
+            await db.wave_participations.update_one(
+                {"participation_id": existing["participation_id"]},
+                {"$set": update, "$unset": {"payment_session_id": "", "breakdown": "", "payment_method": ""}},
+            )
+            part = {k: v for k, v in {**existing, **update}.items()
+                    if k not in ("payment_session_id", "breakdown", "payment_method")}
+            merged = True
+        else:
+            part = _build_participation(w, user, payload, items, subtotal, units, garage_name, fitting_label)
+            await db.wave_participations.insert_one(dict(part))
+            merged = False
+
         fresh = await db.waves.find_one({"wave_id": wave_id}, {"_id": 0})
         await _recompute(fresh)
         part.pop("_id", None)
-        return {"success": True, "participation": part, "reservation_minutes": RESERVATION_MINUTES}
+        return {"success": True, "participation": part, "merged": merged,
+                "reservation_minutes": RESERVATION_MINUTES}
 
     @router.get("/me/wave-orders")
     async def my_wave_orders(user: dict = Depends(get_current_user)):

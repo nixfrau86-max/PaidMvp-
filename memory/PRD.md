@@ -20,7 +20,14 @@ Build a real-time demand aggregation platform that turns fragmented consumer int
 8. Admin role is restricted to `ADMIN_EMAILS` env allowlist.
 
 ## What's implemented (latest — 2026-06-12)
-### 🧹 Code-quality review fixes (DONE)
+### 🧾 Combine repeat joins into ONE payable order (DONE)
+- **Behaviour:** When a user joins the **same wave** again while they still have an **unpaid** order on it, the new items now **merge into that existing order** instead of creating a second one. Same product/variant → quantities **add up** (2 + 3 = 5 in one line); different variants → added as separate line items in the **same** order. Unit limits & wave capacity apply to the combined total (unchanged).
+- **Paid orders never merge:** if the user's prior order on that wave is already **paid/captured**, a repeat join starts a **fresh** order (can't merge into a settled payment).
+- **Fitting/delivery:** since it's one order, the **latest** garage + fitting slot (tyres) or delivery address replaces the earlier choice. Any stale in-progress payment session/breakdown on the order is cleared so the next checkout recomputes the combined total.
+- **Impl:** `routes/waves.py` — new `_merge_items()` helper + merge branch in `join_wave` (looks up an active `reserved/authorized`, `payment_status != paid` participation for the user+wave). `/join` now returns a `merged` flag. Frontend `WaveDetail.jsx` shows "Added N units to your existing order…" on a merged join.
+- Tests: `test_wave_lifecycle.py::TestMergeRepeatJoins` (same-variant sum, different-variant line items, paid-order-doesn't-merge via the mock payment flow). Regression **47 passed**.
+
+
 Applied a code-review report; **verified findings against the project's own linters** (the report's stricter third-party analyzer over-counted):
 - **React hook deps:** report claimed 59 — the project's own ESLint `react-hooks/exhaustive-deps` (same rule CRACO enforces) flagged **3 genuine** ones. Fixed by wrapping fetch fns in `useCallback`: `GarageDashboard.jsx` (`reload`), `SupplierDashboard.jsx` (`reload`), `VPPDetail.jsx` (`load`). Build now compiles with **0 exhaustive-deps warnings**. The other 56 were false positives (transitive vars like `api`, `data`, `err`).
 - **Undefined variables:** report claimed 5 — **pyflakes finds 0**. False positives. (Also fixed a pyflakes f-string-without-placeholder nit in `waves.py` seed.)

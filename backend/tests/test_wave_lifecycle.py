@@ -299,3 +299,83 @@ class TestRespawnWorkingWindow:
         assert dl.tzinfo is not None
         loc = dl.astimezone(ZoneInfo("Europe/London"))
         assert (loc.hour, loc.minute) == (16, 30) and loc.day == 15
+
+
+
+class TestMergeRepeatJoins:
+    """Repeat joins on the same wave merge into ONE unpaid payable order."""
+
+    def _wave(self, sup, variants=None, ideal=20, minact=2, inventory=50):
+        variants = variants or [
+            {"label": "X", "supplier_cost": 10.0, "retail_price": 30.0, "wave_price": 20.0, "inventory_qty": inventory},
+        ]
+        payload = {
+            "category": "electronics", "region_id": _region_id(), "brand": "MERGE",
+            "title": f"TEST_MERGE_{uuid.uuid4().hex[:6]}", "description": "x",
+            "ideal_target": ideal, "min_activation": minact, "eta": "7 days",
+            "products": [{"model": "M", "variants": variants}],
+        }
+        r = sup.post(f"{API}/supplier/waves", json=payload, timeout=30)
+        assert r.status_code == 200, r.text
+        return r.json()
+
+    def _join(self, cons, wave, variant_idx, qty):
+        v = wave["products"][0]["variants"][variant_idx]
+        return cons.post(f"{API}/waves/{wave['wave_id']}/join", json={
+            "items": [{"product_id": wave["products"][0]["product_id"], "variant_id": v["variant_id"], "qty": qty}],
+            "delivery_address": "1 Rd", "accept_terms": True}, timeout=30)
+
+    def _orders_for(self, cons, wave_id):
+        orders = cons.get(f"{API}/me/wave-orders", timeout=30).json()
+        return [o for o in orders if o["wave_id"] == wave_id]
+
+    def test_same_variant_repeat_join_sums_into_one_order(self):
+        sup = _supplier_session(); w = self._wave(sup)
+        cons = _new_consumer()
+        r1 = self._join(cons, w, 0, 2); assert r1.status_code == 200, r1.text
+        assert r1.json()["merged"] is False
+        r2 = self._join(cons, w, 0, 3); assert r2.status_code == 200, r2.text
+        assert r2.json()["merged"] is True
+        mine = self._orders_for(cons, w["wave_id"])
+        assert len(mine) == 1, f"expected ONE merged order, got {len(mine)}"
+        o = mine[0]
+        assert o["units"] == 5
+        assert len(o["items"]) == 1 and o["items"][0]["qty"] == 5
+        assert abs(o["subtotal"] - 100.0) < 0.01  # 5 * 20
+        sup.delete(f"{API}/supplier/waves/{w['wave_id']}", timeout=30)
+
+    def test_different_variant_adds_line_item_same_order(self):
+        sup = _supplier_session()
+        w = self._wave(sup, variants=[
+            {"label": "A", "supplier_cost": 10.0, "retail_price": 30.0, "wave_price": 20.0, "inventory_qty": 50},
+            {"label": "B", "supplier_cost": 12.0, "retail_price": 40.0, "wave_price": 25.0, "inventory_qty": 50},
+        ])
+        cons = _new_consumer()
+        assert self._join(cons, w, 0, 1).status_code == 200
+        assert self._join(cons, w, 1, 2).status_code == 200
+        mine = self._orders_for(cons, w["wave_id"])
+        assert len(mine) == 1
+        o = mine[0]
+        assert o["units"] == 3 and len(o["items"]) == 2
+        assert abs(o["subtotal"] - (20.0 + 50.0)) < 0.01  # 1*20 + 2*25
+        sup.delete(f"{API}/supplier/waves/{w['wave_id']}", timeout=30)
+
+    def test_paid_order_does_not_merge_new_join_starts_fresh(self):
+        sup = _supplier_session()
+        w = self._wave(sup, ideal=10, minact=2)
+        cons = _new_consumer()
+        r = self._join(cons, w, 0, 2); assert r.status_code == 200, r.text  # activates wave
+        pid = r.json()["participation"]["participation_id"]
+        q = cons.get(f"{API}/wave-checkout/{pid}/quote", timeout=30).json()
+        method = next((m["id"] for m in q.get("methods", []) if m["id"] not in ("card", "apple_pay", "google_pay")), None)
+        assert method, f"no mock method available: {q}"
+        co = cons.post(f"{API}/wave-checkout/{pid}", json={"origin_url": "https://x.co", "payment_method": method}, timeout=30)
+        assert co.status_code == 200, co.text
+        sid = co.json()["session_id"]
+        mc = cons.post(f"{API}/wave-checkout/mock-confirm/{sid}", timeout=30)
+        assert mc.status_code == 200, mc.text
+        r2 = self._join(cons, w, 0, 1); assert r2.status_code == 200, r2.text
+        assert r2.json()["merged"] is False, "join after a PAID order must start a fresh order"
+        mine = self._orders_for(cons, w["wave_id"])
+        assert len(mine) == 2, f"expected paid + new = 2 orders, got {len(mine)}: {[o['status'] for o in mine]}"
+        sup.delete(f"{API}/supplier/waves/{w['wave_id']}", timeout=30)

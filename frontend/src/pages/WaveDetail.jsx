@@ -134,7 +134,11 @@ export default function WaveDetail() {
       }
       const { data } = await api.post(`/waves/${id}/join`, payload);
       track("wave_join", { wave_id: id, category: w.category, units: qty });
-      toast.success(`Reserved ${qty} unit${qty > 1 ? "s" : ""} — secured for ${data.reservation_minutes} min. Card captured only on activation.`);
+      if (data.merged) {
+        toast.success(`Added ${qty} unit${qty > 1 ? "s" : ""} to your existing order on this Wave — one combined payment on activation.`);
+      } else {
+        toast.success(`Reserved ${qty} unit${qty > 1 ? "s" : ""} — secured for ${data.reservation_minutes} min. Card captured only on activation.`);
+      }
       reload();
       loadAllowance();
     } catch (e) {
