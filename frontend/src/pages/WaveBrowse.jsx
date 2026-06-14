@@ -9,6 +9,7 @@ const CATEGORY_GRADIENT = {
   tyres: "linear-gradient(135deg,#1e293b 0%,#0f172a 55%,#FF5400 180%)",
   electronics: "linear-gradient(135deg,#1e3a8a 0%,#0f172a 55%,#0ea5e9 190%)",
   footwear: "linear-gradient(135deg,#4c1d95 0%,#1e1b4b 55%,#FF5400 200%)",
+  default: "linear-gradient(135deg,#334155 0%,#0f172a 55%,#FF5400 200%)",
 };
 
 const STATE_STYLE = {
@@ -183,7 +184,7 @@ function WaveCard({ w }) {
         data-testid={`wave-card-${w.wave_id}`}
       >
         {/* Image / gradient header */}
-        <div className="relative aspect-[16/10] overflow-hidden rounded-xl isolate" style={{ background: CATEGORY_GRADIENT[w.category] || CATEGORY_GRADIENT.tyres }}>
+        <div className="relative aspect-[16/10] overflow-hidden rounded-xl isolate" style={{ background: CATEGORY_GRADIENT[w.category] || CATEGORY_GRADIENT.default }}>
           {w.image_url && (
             <img src={w.image_url} alt={w.title} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
           )}

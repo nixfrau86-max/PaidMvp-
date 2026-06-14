@@ -19,6 +19,19 @@ Build a real-time demand aggregation platform that turns fragmented consumer int
 7. Payment methods (admin-configurable fees + recommended flag + on/off): Open Banking (+£1, recommended), Apple Pay (+£3), Google Pay (+£3), Card (+£3), Bank Transfer (+£1.50). Wallet rails route through Stripe; OB/Bank Transfer mocked until TrueLayer/Faster Payments are wired.
 8. Admin role is restricted to `ADMIN_EMAILS` env allowlist.
 
+## What's implemented (latest — 2026-06-14)
+### 🎨 Phase 4 — Premium UX & Discovery (Stripe/Revolut-inspired) (DONE)
+Pivoted the two consumer-facing pages — **Wave Browse** (`/waves`, `WaveBrowse.jsx`) and **Wave Detail** (`/wave/:id`, `WaveDetail.jsx`) — from the hard-brutalist look to a **premium fintech "soft-utility"** aesthetic (per `/app/design_guidelines.json`):
+- **Type:** Outfit (headings) + Manrope (body/data) added to `index.css` (`.font-outfit`, `.font-manrope`); replaced JetBrains Mono / Cabinet Grotesk on these pages.
+- **Surfaces:** slate-50 app bg, white `rounded-2xl/3xl` cards, delicate `border-slate-100/200`, soft diffused shadows (`shadow-[0_4px_20px…]` resting / `…_12px_40px…` elevation). Removed `shadow-brut` / 0-radius on these pages. Brand `#FF5400` restricted to CTAs + progress fills + accents.
+- **Motion:** `framer-motion` (added) — wave-card hover lift (`whileHover y:-4`), spring-animated progress-bar fills (`width 0→pct`), sticky-rail pulse-on-WS-update; live pulse dots on stat pills + the rail header.
+- **Browse:** clean hero with live stat pills (`stat-live-waves`, `stat-members`), rounded filter bar, responsive card grid — each card has gradient/image header w/ slate gradient overlay, region pill, rounded-full state badge (emerald/amber/orange/sky/indigo/slate by state), `+N` carried badge, "Save X%" band, live units progress.
+- **Detail:** rounded hero, Step 1 variant tiles (orange selected ring + RRP strike + stock), qty stepper, annual-allowance pill, Step 2 garage select + grouped 30-min slot picker / delivery textarea, and a **sticky right rail** with the big live unit counter, % , spring progress bar, carried-units note, collective price + "You save £X" pill, terms + Join CTA + reassurance.
+- **Robustness:** generic gradient fallback for arbitrary category slugs; defensive `(w.products||[])`.
+- **Housekeeping:** purged 16 `TEST_*` artefact waves (+14 participations) polluting the live browse.
+- **Testing:** `iteration_11.json` — **100% on all 8 frontend acceptance scenarios** (browse render/filters/nav, electronics step1+join, tyres step1/2 + join-button guard, live progress rail). No functional regressions; all preserved `data-testid` contracts resolve. Auth still httpOnly-cookie only.
+- Deferred review nits (non-blocking): WS reconnect/back-off on the browse feed; slot-picker pagination for high-volume garages.
+
 ## What's implemented (latest — 2026-06-12)
 ### 🏷️ Expanded categories + custom "Other (specify)" (DONE)
 - **Wave categories expanded** from 3 → 11 canonical ids (`tyres, electronics, footwear, clothing, home_appliances, home_garden, automotive, beauty, sports, toys, consumer_goods`) in `routes/waves.py` (`CATEGORIES` / `CATEGORY_LABELS`). `GET /api/wave-categories` now returns the full list; the Create-Wave dropdown (`SupplierWaves.jsx`) reflects it.

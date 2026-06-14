@@ -195,7 +195,7 @@ export default function WaveDetail() {
               <div className="text-xs font-bold uppercase tracking-wider text-[#FF5400] mb-1">Step 1</div>
               <h2 className="font-outfit text-2xl font-semibold tracking-tight mb-5">Choose your product</h2>
 
-              {w.products.length > 1 && (
+              {(w.products || []).length > 1 && (
                 <div className="flex flex-wrap gap-2 mb-5">
                   {w.products.map((p) => (
                     <button key={p.product_id} onClick={() => { setSelProduct(p.product_id); setSelVariant(""); }}
