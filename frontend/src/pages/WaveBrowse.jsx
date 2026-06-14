@@ -1,22 +1,23 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { motion } from "framer-motion";
 import Navbar from "../components/Navbar";
 import { api, wsUrl } from "../lib/api";
-import { MagnifyingGlass, ArrowRight, Lightning, Users, MapPin } from "@phosphor-icons/react";
+import { MagnifyingGlass, ArrowRight, Lightning, Users, MapPin, ArrowsClockwise } from "@phosphor-icons/react";
 
 const CATEGORY_GRADIENT = {
-  tyres: "linear-gradient(135deg,#0A0A0A 0%,#2b2b2b 60%,#FF5400 140%)",
-  electronics: "linear-gradient(135deg,#0021A5 0%,#101a4d 60%,#00C853 160%)",
-  footwear: "linear-gradient(135deg,#3A0A4A 0%,#1b1b1b 60%,#FFD600 170%)",
+  tyres: "linear-gradient(135deg,#1e293b 0%,#0f172a 55%,#FF5400 180%)",
+  electronics: "linear-gradient(135deg,#1e3a8a 0%,#0f172a 55%,#0ea5e9 190%)",
+  footwear: "linear-gradient(135deg,#4c1d95 0%,#1e1b4b 55%,#FF5400 200%)",
 };
 
-const STATE_BADGE = {
-  open: { label: "Open", bg: "#00C853" },
-  almost_full: { label: "Almost Full", bg: "#FFD600" },
-  activated: { label: "Activated", bg: "#0021A5", text: "#fff" },
-  processing: { label: "Processing", bg: "#FF5400", text: "#fff" },
-  fulfilment: { label: "Fulfilment", bg: "#0021A5", text: "#fff" },
-  completed: { label: "Completed", bg: "#525252", text: "#fff" },
+const STATE_STYLE = {
+  open: { label: "Open", cls: "bg-emerald-50 text-emerald-600 border-emerald-100" },
+  almost_full: { label: "Almost Full", cls: "bg-amber-50 text-amber-600 border-amber-100" },
+  activated: { label: "Activated", cls: "bg-[#FFF2EC] text-[#FF5400] border-[#FF5400]/20" },
+  processing: { label: "Processing", cls: "bg-sky-50 text-sky-600 border-sky-100" },
+  fulfilment: { label: "Fulfilment", cls: "bg-indigo-50 text-indigo-600 border-indigo-100" },
+  completed: { label: "Completed", cls: "bg-slate-100 text-slate-500 border-slate-200" },
 };
 
 function savingsBand(wave) {
@@ -31,6 +32,9 @@ function savingsBand(wave) {
   const hi = Math.ceil(Math.max(...pcts));
   return lo === hi ? `${lo}%` : `${lo}–${hi}%`;
 }
+
+const selectCls =
+  "w-full appearance-none rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-900 outline-none transition-colors focus:border-[#FF5400] focus:ring-2 focus:ring-[#FF5400]/15";
 
 export default function WaveBrowse() {
   const [waves, setWaves] = useState([]);
@@ -71,7 +75,6 @@ export default function WaveBrowse() {
     return () => clearTimeout(t);
   }, [reload]);
 
-  // Live feed: patch counters/state in place
   useEffect(() => {
     const ws = new WebSocket(wsUrl("/api/ws/waves"));
     ws.onmessage = (e) => {
@@ -92,63 +95,72 @@ export default function WaveBrowse() {
   const totalMembers = waves.reduce((a, w) => a + (w.participants_count || 0), 0);
 
   return (
-    <div className="min-h-screen bg-[#FAFAFA]">
+    <div className="min-h-screen bg-slate-50 font-manrope text-slate-900">
       <Navbar />
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-12">
+        {/* Hero */}
         <div className="mb-10">
-          <div className="text-[10px] font-bold uppercase tracking-[0.3em] font-mono text-[#FF5400] mb-3">
+          <div className="text-[11px] font-bold uppercase tracking-[0.25em] text-[#FF5400] mb-4 font-manrope">
             Regional Product Waves<sup className="ml-0.5">©</sup>
           </div>
-          <h1 className="font-display text-4xl sm:text-6xl uppercase tracking-tighter leading-[0.9] max-w-3xl">
-            One region. One product.<br /><span className="text-[#FF5400]">One collective price.</span>
+          <h1 className="font-outfit font-bold text-4xl sm:text-5xl lg:text-6xl tracking-tight leading-[1.02] max-w-3xl text-slate-900">
+            One region. One product.<br />
+            <span className="text-[#FF5400]">One collective price.</span>
           </h1>
-          <p className="mt-5 text-base sm:text-lg text-[#3A3A3A] max-w-2xl">
+          <p className="mt-5 text-base sm:text-lg text-slate-500 max-w-2xl leading-relaxed">
             Join an active Wave near you — momentum unlocks supplier pricing the high street can&apos;t match.
           </p>
-          <div className="mt-6 inline-flex flex-wrap gap-3 items-center font-mono text-[11px] uppercase tracking-widest">
-            <div className="border-2 border-ink bg-white px-3 py-2 shadow-brut-sm flex items-center gap-2" data-testid="stat-live-waves">
-              <Lightning weight="fill" className="text-[#FF5400]" /> {waves.length} Live Waves
+          <div className="mt-7 flex flex-wrap gap-3 items-center">
+            <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-[0_4px_20px_rgb(0,0,0,0.03)]" data-testid="stat-live-waves">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full rounded-full bg-[#FF5400] opacity-60 animate-ping" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-[#FF5400]" />
+              </span>
+              <Lightning weight="fill" className="text-[#FF5400]" size={15} />
+              <span className="tabular-nums">{waves.length}</span> Live Waves
             </div>
-            <div className="border-2 border-ink bg-white px-3 py-2 shadow-brut-sm flex items-center gap-2" data-testid="stat-members">
-              <Users weight="fill" /> {totalMembers.toLocaleString()} Members Joined
+            <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-[0_4px_20px_rgb(0,0,0,0.03)]" data-testid="stat-members">
+              <Users weight="fill" className="text-slate-400" size={15} />
+              <span className="tabular-nums">{totalMembers.toLocaleString()}</span> Members Joined
             </div>
           </div>
         </div>
 
         {/* Filters */}
-        <div className="border-2 border-ink bg-white shadow-brut p-5 sm:p-6 grid sm:grid-cols-[1fr_1fr_1.2fr_auto] gap-3 items-end" data-testid="wave-filters">
+        <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-[0_4px_20px_rgb(0,0,0,0.04)] grid sm:grid-cols-[1fr_1fr_1.3fr_auto] gap-4 items-end" data-testid="wave-filters">
           <label className="block">
-            <div className="text-[10px] font-bold uppercase tracking-widest font-mono mb-1.5">Category</div>
-            <select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full border-2 border-ink px-3 py-3 font-mono text-sm bg-white" data-testid="filter-category">
+            <div className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Category</div>
+            <select value={category} onChange={(e) => setCategory(e.target.value)} className={selectCls} data-testid="filter-category">
               <option value="">All categories</option>
               {categories.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
             </select>
           </label>
           <label className="block">
-            <div className="text-[10px] font-bold uppercase tracking-widest font-mono mb-1.5">Region</div>
-            <select value={regionId} onChange={(e) => setRegionId(e.target.value)} className="w-full border-2 border-ink px-3 py-3 font-mono text-sm bg-white" data-testid="filter-region">
+            <div className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Region</div>
+            <select value={regionId} onChange={(e) => setRegionId(e.target.value)} className={selectCls} data-testid="filter-region">
               <option value="">All regions</option>
               {regions.map((r) => <option key={r.region_id} value={r.region_id}>{r.name}</option>)}
             </select>
           </label>
           <label className="block">
-            <div className="text-[10px] font-bold uppercase tracking-widest font-mono mb-1.5 flex items-center gap-2">
-              <MagnifyingGlass weight="bold" size={12} /> Search product or size
+            <div className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Search</div>
+            <div className="relative">
+              <MagnifyingGlass weight="bold" size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Continental, OLED, 225/65 R18…" className={`${selectCls} pl-10`} data-testid="wave-search-input" />
             </div>
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Continental, OLED, 225/65 R18…" className="w-full border-2 border-ink px-3 py-3 font-mono text-base" data-testid="wave-search-input" />
           </label>
-          <button onClick={() => { setCategory(""); setRegionId(""); setQ(""); }} className="border-2 border-ink bg-white px-4 py-3 font-bold uppercase tracking-widest text-[11px] font-mono shadow-brut-sm hover-brut" data-testid="wave-reset-btn">
+          <button onClick={() => { setCategory(""); setRegionId(""); setQ(""); }} className="rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50" data-testid="wave-reset-btn">
             Reset
           </button>
         </div>
 
         {/* Grid */}
-        <div className="mt-8 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5" data-testid="wave-grid">
-          {loading && <div className="font-mono uppercase tracking-widest text-sm col-span-full">Loading waves…</div>}
+        <div className="mt-8 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6" data-testid="wave-grid">
+          {loading && <div className="text-sm font-medium text-slate-400 col-span-full">Loading waves…</div>}
           {!loading && waves.length === 0 && (
-            <div className="col-span-full border-2 border-ink bg-white shadow-brut p-10 text-center">
-              <div className="font-display text-2xl uppercase mb-2">No waves match.</div>
-              <p className="text-sm text-[#3A3A3A] font-mono">Try a different region, category or reset filters.</p>
+            <div className="col-span-full rounded-2xl border border-slate-100 bg-white p-12 text-center shadow-[0_4px_20px_rgb(0,0,0,0.03)]">
+              <div className="font-outfit font-semibold text-2xl mb-2 text-slate-900">No waves match.</div>
+              <p className="text-sm text-slate-500">Try a different region, category or reset your filters.</p>
             </div>
           )}
           {waves.map((w) => <WaveCard key={w.wave_id} w={w} />)}
@@ -159,50 +171,65 @@ export default function WaveBrowse() {
 }
 
 function WaveCard({ w }) {
-  const pct = w.progress_pct || 0;
+  const pct = Math.min(100, w.progress_pct || 0);
   const band = savingsBand(w);
-  const state = STATE_BADGE[w.state] || STATE_BADGE.open;
+  const state = STATE_STYLE[w.state] || STATE_STYLE.open;
   const variantCount = (w.products || []).reduce((a, p) => a + (p.variants || []).length, 0);
   return (
-    <Link to={`/wave/${w.wave_id}`} className="group block border-2 border-ink bg-white shadow-brut hover-brut overflow-hidden" data-testid={`wave-card-${w.wave_id}`}>
-      <div className="relative h-44 border-b-2 border-ink overflow-hidden" style={{ background: CATEGORY_GRADIENT[w.category] || CATEGORY_GRADIENT.tyres }}>
-        {w.image_url ? (
-          <img src={w.image_url} alt={w.title} className="w-full h-full object-cover opacity-90 group-hover:scale-105 transition-transform duration-500" />
-        ) : (
-          <div className="absolute inset-0 flex items-end p-4">
-            <span className="font-display text-white/90 text-3xl uppercase tracking-tighter leading-none">{w.brand}</span>
+    <motion.div whileHover={{ y: -4 }} transition={{ type: "spring", stiffness: 300, damping: 24 }}>
+      <Link
+        to={`/wave/${w.wave_id}`}
+        className="group flex h-full flex-col rounded-2xl border border-slate-100 bg-white p-4 shadow-[0_4px_20px_rgb(0,0,0,0.03)] transition-shadow duration-300 hover:shadow-[0_16px_44px_rgb(0,0,0,0.10)]"
+        data-testid={`wave-card-${w.wave_id}`}
+      >
+        {/* Image / gradient header */}
+        <div className="relative aspect-[16/10] overflow-hidden rounded-xl isolate" style={{ background: CATEGORY_GRADIENT[w.category] || CATEGORY_GRADIENT.tyres }}>
+          {w.image_url && (
+            <img src={w.image_url} alt={w.title} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-slate-900/20 to-transparent" />
+          <div className="absolute inset-0 flex flex-col justify-between p-3.5">
+            <div className="flex flex-wrap items-start gap-2">
+              <span className="inline-flex items-center gap-1 rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-semibold text-slate-700 backdrop-blur">
+                <MapPin weight="fill" className="text-[#FF5400]" size={11} /> {w.region_name}
+              </span>
+              {w.carried_units > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-400 px-2.5 py-1 text-[11px] font-bold text-slate-900" data-testid={`wave-carried-${w.wave_id}`}>
+                  <ArrowsClockwise weight="bold" size={11} /> +{w.carried_units}
+                </span>
+              )}
+            </div>
+            <div className="font-outfit text-2xl font-bold uppercase tracking-tight text-white/95 leading-none">{w.brand}</div>
           </div>
-        )}
-        <div className="absolute top-2 left-2 flex flex-wrap gap-2">
-          <span className="bg-white border-2 border-ink font-mono text-[10px] font-bold uppercase tracking-widest px-2 py-1 inline-flex items-center gap-1">
-            <MapPin weight="fill" className="text-[#FF5400]" size={10} /> {w.region_name}
-          </span>
-          <span className="border-2 border-ink font-mono text-[10px] font-bold uppercase tracking-widest px-2 py-1" style={{ background: state.bg, color: state.text || "#0A0A0A" }}>{state.label}</span>
-          {w.carried_units > 0 && (
-            <span className="bg-[#FFE600] border-2 border-ink font-mono text-[10px] font-bold uppercase tracking-widest px-2 py-1" data-testid={`wave-carried-${w.wave_id}`}>+{w.carried_units} Carried</span>
+          {band && (
+            <div className="absolute bottom-3.5 right-3.5 rounded-full bg-[#FF5400] px-3 py-1 text-[11px] font-bold text-white shadow-sm">Save {band}</div>
           )}
         </div>
-        {band && (
-          <div className="absolute bottom-2 right-2 bg-ink text-white font-mono text-[10px] font-bold uppercase tracking-widest px-2 py-1">Save {band}</div>
-        )}
-      </div>
-      <div className="p-4">
-        <div className="font-mono text-[10px] font-bold uppercase tracking-widest text-[#FF5400] mb-1">{w.category_label} · {w.brand}</div>
-        <div className="font-display text-xl sm:text-2xl uppercase leading-tight tracking-tight">{w.title}</div>
-        <div className="mt-4">
-          <div className="flex items-baseline justify-between font-mono text-[10px] font-bold uppercase tracking-widest mb-1.5">
-            <span>{w.units_committed || 0}/{w.ideal_target} Units</span>
-            <span className="text-[#3A3A3A]">{pct.toFixed(0)}%</span>
+
+        {/* Body */}
+        <div className="flex flex-1 flex-col pt-4">
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 truncate">{w.category_label} · {w.brand}</div>
+            <span className={`inline-flex shrink-0 items-center rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${state.cls}`}>{state.label}</span>
           </div>
-          <div className="w-full h-2 border-2 border-ink bg-[#F4F4F4] overflow-hidden">
-            <div className="h-full bg-[#FF5400] transition-all duration-700" style={{ width: `${Math.min(100, pct)}%` }} />
+          <div className="font-outfit text-xl font-semibold tracking-tight text-slate-900 leading-snug mt-1.5">{w.title}</div>
+
+          {/* Progress */}
+          <div className="mt-auto pt-5">
+            <div className="flex items-baseline justify-between text-xs font-semibold mb-2">
+              <span className="text-slate-700 tabular-nums">{w.units_committed || 0}<span className="text-slate-400">/{w.ideal_target}</span> units</span>
+              <span className="text-[#FF5400] tabular-nums">{pct.toFixed(0)}%</span>
+            </div>
+            <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
+              <motion.div className="h-full rounded-full bg-[#FF5400]" initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ type: "spring", bounce: 0, duration: 1 }} />
+            </div>
+            <div className="mt-3.5 flex items-center justify-between text-xs font-semibold">
+              <span className="text-slate-400">{variantCount} option{variantCount === 1 ? "" : "s"}</span>
+              <span className="inline-flex items-center gap-1 text-[#FF5400] transition-transform group-hover:translate-x-0.5">View Wave <ArrowRight weight="bold" size={13} /></span>
+            </div>
           </div>
         </div>
-        <div className="mt-4 flex items-center justify-between text-[10px] font-mono font-bold uppercase tracking-widest">
-          <span>{variantCount} Options</span>
-          <span className="inline-flex items-center gap-1 text-[#FF5400]">View Wave <ArrowRight weight="bold" size={12} /></span>
-        </div>
-      </div>
-    </Link>
+      </Link>
+    </motion.div>
   );
 }

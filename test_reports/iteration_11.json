@@ -1,0 +1,37 @@
+{
+  "summary": "Frontend-only verification of the Phase 4 premium-fintech redesign of /waves (WaveBrowse) and /wave/:id (WaveDetail). All preserved data-testids resolve, all interactive flows (filters, variant selection, qty stepper, electronics delivery+terms+join, tyres garage+slot+terms guard, sticky live-progress rail) work end-to-end. NO functional regressions observed.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verified_flows": {
+    "wave_browse_render": "PASS — /waves loads with redesigned hero. stat-live-waves shows '2 Live Waves' (matches DB), stat-members shows '0 Members Joined'. Filter bar (filter-category, filter-region, wave-search-input, wave-reset-btn) renders. wave-grid renders 2 cards: wave-card-wave_2edd9fa1ac (Rugby CONTINENTAL Tyres · 0/4 units · Save 7–25% · OPEN) and wave-card-wave_b1140b2501 (Midlands LG OLED TV Wave · 0/30 units · Save 20–21% · OPEN). Framer-motion progress bars, state badges, brand gradient header, MapPin region pill, savings band all render.",
+    "wave_browse_filters": "PASS — Selecting filter-category='electronics' narrows grid 2→1. Reset (wave-reset-btn) restores 2. Typing 'OLED' in wave-search-input narrows 2→1. Reset restores.",
+    "wave_card_navigation": "PASS — Clicking wave-card-wave_b1140b2501 navigates to /wave/wave_b1140b2501; clicking wave-card-wave_2edd9fa1ac navigates to /wave/wave_2edd9fa1ac.",
+    "electronics_wave_step1": "PASS — select-panel renders, 2 variant-tile-* tiles render with wave_price + retail line-through. Selecting a variant reveals qty-row with qty-minus/qty-value/qty-plus. qty stepper increments 1→2 and decrements back. annual-allowance shows for logged-in consumer: 'Annual allowance · 5 of 5 electronics units left in 2026'.",
+    "electronics_wave_join": "PASS — Filled delivery-address, ticked accept-terms-checkbox, clicked join-wave-btn. wave-units in the sticky rail updated from 0 → 1 (live WS-driven counter pulse). join-wave-btn correctly disabled before terms checkbox tick. (Sonner success toast displayed but had auto-dismissed before re-query at 4.5s; backend persistence confirmed via unit-counter update.) Sticky rail 'Your Collective Price' block + 'You save £X' badge render when a variant is selected.",
+    "tyres_wave_step1_2": "PASS — 33 variant-tile-* tiles render (variant prices + 'X left' stock). Selecting a variant enables Step 2. garage-select shows 5 options. Selecting 'Rugby Wheel & Tyre · CV21 2AA' revealed slot-picker with 142 selectable slots across 12 days (slot-day-YYYY-MM-DD groupings). Picking slot-2026-06-16T09:00... showed selected-slot badge 'Tue 16 Jun 09:00'.",
+    "tyres_wave_join_btn_guard": "PASS — join-wave-btn correctly DISABLED in each missing-pre-req state: (a) no variant, (b) variant only, (c) variant+terms but no garage, (d) variant+terms+garage but no slot. Becomes ENABLED only when variant + garage + slot + accept-terms-checkbox are all set.",
+    "live_progress_rail": "PASS — wave-units, wave-state ('Open — accepting members · activates at 20 units' / 'activates at 4 units' for tyres), framer-motion progress bar, Live Wave Progress pulse-dot all render. wave-carried badge correctly ABSENT on both open waves (carried_units = 0)."
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "WaveBrowse.jsx (line 79-93): WebSocket is established with no auth and no reconnect/back-off logic. If the WS endpoint drops (sleep, network blip) the live counter stays stale until full reload. Consider exponential-backoff reconnect or visibilitychange handler.",
+    "WaveBrowse.jsx CATEGORY_GRADIENT only defines tyres/electronics/footwear; any other category id (clothing, home_appliances, automotive, beauty, sports, toys, consumer_goods, custom slugs) falls back to the tyres gradient. Easy to extend, but worth flagging now that the supplier flow can create arbitrary category slugs (iteration_10 noted custom 'qa_pet_supplies_*').",
+    "WaveDetail.jsx slot picker uses overflow-auto max-h-72 with 142 slot buttons — usable but ergonomically heavy. Consider day-collapsing or 'show more days' pagination on large garages.",
+    "WaveDetail.jsx (line 100-104) maxQty = min(variant.available, allowance.remaining). When allowance is null (e.g., guest view) maxQty defaults to stock — fine. But when allowance.remaining is 0 the qty buttons still render (qty-plus is no-op via Math.min). The Join button text correctly switches to 'Annual limit reached' and is disabled, so functionally safe; just minor dead-UI polish.",
+    "Both pages assume `w.products` is always an array (line 198 'w.products.length > 1'). If a wave is mistakenly created with no products array the page would crash on '.length'. Defensive `(w.products || [])` would harden it.",
+    "Sonner toast for the join success was visually emitted but had auto-dismissed by the time the test re-queried (~4s). Consider a longer-duration toast for the first reservation success since it carries the lockout-window message (`reservation_minutes`)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped per request)", "frontend": "100% on all 8 acceptance scenarios"},
+  "test_credentials": "member_demo@collective.co / Member1234 — works (login via intent-consumer → tab-email → email-email/email-password → email-submit).",
+  "seed_data_creation": "Joined 1 unit on the Midlands LG OLED TV Wave (wave_b1140b2501) as member_demo. This is an unpaid reservation; Stripe not exercised per instructions. units_committed went 0 → 1. Re-running this test against the same wave should merge into the existing unpaid order per the documented behaviour. No other artefacts created; no waves created/deleted.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Login intent for member is data-testid='intent-consumer' (NOT 'intent-member'). On WaveBrowse, the two seeded waves are wave_2edd9fa1ac (tyres, Rugby Wheel & Tyre garage CV21 2AA has plenty of slots) and wave_b1140b2501 (electronics, 2 variants). For tyres the slot id format is `slot-{iso-datetime}` and is grouped under `slot-day-{YYYY-MM-DD}` containers; both share the `slot-` prefix so a `[data-testid^=slot-]` selector must filter out slot-day-/slot-picker/selected-slot. Member's electronics annual allowance is 5/5 in 2026 (was 5/5 before my test; after the +1 reservation it will show 4/5 on the next visit until the reservation expires/cancels).",
+  "rca_of_the_issue": "n/a — pure visual-redesign verification, no bugs found. The redesign preserved all data-testid contracts and the underlying join/reserve API integration, garage+slot picker, WS live updates, and consumer auth (httpOnly cookie via withCredentials) all continue to function."
+}

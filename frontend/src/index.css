@@ -1,6 +1,7 @@
 @import url('https://fonts.cdnfonts.com/css/cabinet-grotesk');
 @import url('https://fonts.cdnfonts.com/css/satoshi');
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -57,6 +58,10 @@ html, body {
 
 .font-body { font-family: 'Satoshi', system-ui, sans-serif; }
 .font-mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+
+/* Premium fintech type (Phase 4 — Wave discovery + detail) */
+.font-outfit { font-family: 'Outfit', system-ui, -apple-system, sans-serif; }
+.font-manrope { font-family: 'Manrope', system-ui, -apple-system, sans-serif; }
 
 /* Brutalist shadow & utilities */
 .shadow-brut { box-shadow: 4px 4px 0 0 var(--ink); }
