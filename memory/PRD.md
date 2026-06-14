@@ -20,6 +20,16 @@ Build a real-time demand aggregation platform that turns fragmented consumer int
 8. Admin role is restricted to `ADMIN_EMAILS` env allowlist.
 
 ## What's implemented (latest — 2026-06-14)
+### 🖼️ Supplier Wave product images (upload + URL) (DONE)
+Suppliers can now attach a **product image** in the "+ Create Wave" and Edit Wave flows; it renders on the live wave cards (`/waves`) and the Wave Detail hero (`/wave/:id`).
+- **Object storage** wired via Emergent storage API (`backend/storage.py`: `init_storage`/`put_object`/`get_object`, keyed by `EMERGENT_LLM_KEY`, app prefix `collective-savers`).
+- **Backend** (`routes/waves.py`): `POST /api/supplier/wave-image` (supplier-auth, multipart `file`; validates jpg/png/gif/webp + ≤5MB; stores object + `db.files` ref; returns `{image_url:"/api/wave-images/…"}`). `GET /api/wave-images/{path:path}` serves the image **publicly** (no auth, immutable cache headers). `create_wave`/`update_wave` persist `image_url`; `_public_wave` surfaces it.
+- **Frontend** (`SupplierWaves.jsx` WaveForm): image section with **file upload OR URL paste**, live preview, and Remove control — sends `image_url` on create + edit. `WaveBrowse.jsx`/`WaveDetail.jsx` render `<img src={w.image_url}>` (relative `/api/...` path resolves against the app origin). Testids: `wave-image-section/-file/-upload-label/-url/-clear/-preview`, plus added `form-title`/`form-eta`.
+- **CORS fix** (`server.py`): when `CORS_ORIGINS="*"`, now uses `allow_origin_regex=".*"` so credentialed (cookie) requests reflect a specific origin instead of an invalid literal `*` (note: the preview ingress still injects `*`, so the effect is for custom-domain deploys).
+- **Testing** (`iteration_12.json`): **100% backend (7/7 pytest, `tests/test_wave_image_upload.py`)** + **100% frontend** (file upload, URL paste, preview, clear, card + hero render, public serve, validation). Also authoritatively confirmed `/waves` renders cards in a real browser — the earlier "Loading waves…" was a local screenshot-tool artifact, not a bug.
+- Deferred review nits (low severity): magic-byte image validation (Pillow), per-variant input testids.
+
+## What's implemented (latest — 2026-06-14)
 ### 🎨 Phase 4 — Premium UX & Discovery (Stripe/Revolut-inspired) (DONE)
 Pivoted the two consumer-facing pages — **Wave Browse** (`/waves`, `WaveBrowse.jsx`) and **Wave Detail** (`/wave/:id`, `WaveDetail.jsx`) — from the hard-brutalist look to a **premium fintech "soft-utility"** aesthetic (per `/app/design_guidelines.json`):
 - **Type:** Outfit (headings) + Manrope (body/data) added to `index.css` (`.font-outfit`, `.font-manrope`); replaced JetBrains Mono / Cabinet Grotesk on these pages.

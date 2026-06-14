@@ -278,10 +278,10 @@ function WaveForm({ regions, categories, editing, onClose, onSaved }) {
               </select>
             </Field>
             <Field label="Brand"><input value={form.brand} onChange={upd("brand")} className="inp" placeholder="Continental" data-testid="form-brand" /></Field>
-            <Field label="Title (optional — auto-generated)"><input value={form.title} onChange={upd("title")} className="inp" placeholder="auto: Region Brand Category Wave" /></Field>
+            <Field label="Title (optional — auto-generated)"><input value={form.title} onChange={upd("title")} className="inp" placeholder="auto: Region Brand Category Wave" data-testid="form-title" /></Field>
             <Field label="Ideal target (units)"><input type="number" min="1" value={form.ideal_target} onChange={upd("ideal_target")} className="inp" data-testid="form-ideal" /></Field>
             <Field label="Min activation (units)"><input type="number" min="1" value={form.min_activation} onChange={upd("min_activation")} className="inp" data-testid="form-minact" /></Field>
-            <Field label="Fulfilment ETA"><input value={form.eta} onChange={upd("eta")} className="inp" placeholder="Dispatched within 7 days of activation" /></Field>
+            <Field label="Fulfilment ETA"><input value={form.eta} onChange={upd("eta")} className="inp" placeholder="Dispatched within 7 days of activation" data-testid="form-eta" /></Field>
             {!isEdit && <Field label="Open for (days)"><input type="number" min="1" value={form.deadline_days} onChange={upd("deadline_days")} className="inp" /></Field>}
             <Field label="Description" full><textarea value={form.description} onChange={upd("description")} rows={2} className="inp" /></Field>
             <Field label="Product image (shown on the live wave card)" full>
