@@ -1,0 +1,34 @@
+{
+  "summary": "Frontend-only verification (browser, supplier_test@collective.co) of the new expanded categories + 'Other (specify)' flows in SupplierOnboarding and SupplierWaves WaveForm. All 3 acceptance scenarios PASS.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/supplier/waves WaveForm Category select", "issues": ["GET /api/wave-categories returns a category {id:'other', label:'Other'} which the front-end then appends with its own hard-coded value '__other__' ('Other (specify)…'). Result: the dropdown shows TWO 'Other'-style entries. A supplier who picks the plain 'Other' option will create a wave with category_label 'Other' (no free-text input shown). Recommend: either drop the backend 'other' entry from /api/wave-categories or filter it out client-side so only the '__other__' free-text variant is visible."]}
+    ]
+  },
+  "verified_flows": {
+    "supplier_onboarding_other_flow": "PASS — /supplier/onboarding opens in edit mode (button label 'SAVE PROFILE'). All expected tiles render: tyres, automotive, electronics, footwear, clothing, home appliances, home (Home & Garden), consumer goods, services, other. Ticking apply-cat-other reveals apply-cat-other-text. Typed 'Pet Supplies QA', clicked apply-submit -> toast 'Profile updated'. Re-loaded page: apply-cat-other still checked AND apply-cat-other-text pre-filled with 'Pet Supplies QA' (persisted via /api/suppliers/me with categories array containing the custom string).",
+    "supplier_wave_create_other_flow": "PASS — /supplier/waves -> create-wave-btn opens modal. form-category dropdown contains tyres, electronics, footwear, clothing, home_appliances, home_garden, automotive, beauty, sports, toys, consumer_goods, other AND the special value __other__ ('Other (specify)…'). Selecting __other__ revealed form-category-custom input. Filled region (Coventry), brand 'QA Brand', ideal 20, min 10, product model + variant (Default/10/20/15/100), category 'QA Pet Supplies …'. Submit -> toast 'Wave created'. Table now shows row 'COVENTRY QA BRAND QA PET SUPPLIES … WAVE' with category label exactly equal to the typed custom string.",
+    "supplier_wave_create_clothing_flow": "PASS — opened the form again, selected 'Clothing' (value 'clothing'), filled region/brand/targets/product, submit -> toast 'Wave created'. Row 'COVENTRY QA APPAREL CO CLOTHING WAVE' appears with category label 'Clothing'."
+  },
+  "category_dropdown_options_observed": ["tyres", "electronics", "footwear", "clothing", "home_appliances", "home_garden (Home & Garden)", "automotive", "beauty (Beauty & Personal Care)", "sports (Sports & Outdoors)", "toys (Toys & Games)", "consumer_goods", "other", "__other__ (Other (specify)…)"],
+  "test_report_links": [],
+  "action_items": [
+    "(Low-priority polish) Decide whether the backend wave-categories list should keep the plain 'Other' entry now that the WaveForm offers its own '__other__' free-text variant. Today both render in the same Category select, which is mildly confusing UX. Easiest fix: either remove 'other' from CATEGORIES in /app/backend/routes/waves.py OR filter it out in SupplierWaves.jsx before mapping <option>s. This is a polish item, not a blocker — both scenarios above already work."
+  ],
+  "critical_code_review_comments": [
+    "SupplierOnboarding.jsx: KNOWN_CATEGORY_IDS includes 'Other' itself, so if a supplier had previously saved the literal string 'Other' (with no custom value) the load logic would treat it as a known tile rather than a custom value. Not exercised in this test, but worth a defensive trim.",
+    "SupplierWaves.jsx WaveForm: form initial state is `category: editing?.category || 'tyres'`. If the editing wave has a custom category (e.g. 'qa_pet_supplies_7982') and the dropdown does not include it, the <select> falls back to the first option. Editing such a wave through the UI would silently overwrite category_label on save. Currently mitigated because the Category select is `disabled` in edit mode, but the underlying state still carries a stale id — keep an eye on it if you ever enable category edits.",
+    "SupplierWaves.jsx slugifier `lbl.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')` is reasonable; backend should still de-duplicate against existing category ids to avoid collisions."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped per request)", "frontend": "100% on the 3 acceptance scenarios"},
+  "test_credentials": "supplier_test@collective.co / Supplier1234 — works",
+  "seed_data_creation": "Created 2 QA waves (QA Brand 'Pet Supplies' custom + QA Apparel Co 'Clothing') under supplier_test in Coventry; both DELETED at end of run via remove-wave-* buttons. Toggled apply-cat-other off and re-saved profile so supplier categories returned to Tyres + Electronics ('Profile updated' toast confirmed).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Login: /login -> [data-testid=intent-supplier] -> [data-testid=tab-email] -> fill email-email + email-password -> click email-submit. WaveForm category select exposes both backend `other` and hardcoded `__other__`; only `__other__` reveals form-category-custom. To create a wave you must also fill at least one product-model-0 and variant-row-0-0 (label is required for the variant to be sent).",
+  "rca_of_the_issue": "n/a — this run was a feature-verification pass, no bugs reproduced. The only behavioural quirk worth flagging is the dual 'Other' entries in the wave-category dropdown (root cause: backend CATEGORIES list contains an explicit 'other' entry while the client also injects its own '__other__' value)."
+}

@@ -378,4 +378,40 @@ class TestMergeRepeatJoins:
         assert r2.json()["merged"] is False, "join after a PAID order must start a fresh order"
         mine = self._orders_for(cons, w["wave_id"])
         assert len(mine) == 2, f"expected paid + new = 2 orders, got {len(mine)}: {[o['status'] for o in mine]}"
+
+
+class TestExpandedCategories:
+    """Expanded canonical categories + custom 'Other' category for wave creation."""
+
+    def test_wave_categories_expanded(self):
+        cats = requests.get(f"{API}/wave-categories", timeout=30).json()
+        ids = {c["id"] for c in cats}
+        assert {"tyres", "electronics", "footwear", "clothing", "home_appliances"}.issubset(ids)
+
+    def test_create_custom_category_wave_and_join(self):
+        sup = _supplier_session()
+        payload = {
+            "category": "pet_supplies", "category_label": "Pet Supplies",
+            "region_id": _region_id(), "brand": "PETCO",
+            "title": f"TEST_CAT_{uuid.uuid4().hex[:6]}", "description": "x",
+            "ideal_target": 10, "min_activation": 2, "eta": "7 days",
+            "products": [{"model": "M", "variants": [
+                {"label": "X", "supplier_cost": 5.0, "retail_price": 15.0, "wave_price": 10.0, "inventory_qty": 20}]}],
+        }
+        r = sup.post(f"{API}/supplier/waves", json=payload, timeout=30)
+        assert r.status_code == 200, r.text
+        w = r.json()
+        assert w["category"] == "pet_supplies" and w["category_label"] == "Pet Supplies"
+
+        # Custom (non-tyre) category → join needs a delivery address, no garage.
+        cons = _new_consumer()
+        # allowance endpoint must not 400 on an unknown category (falls back to default)
+        a = cons.get(f"{API}/me/unit-allowance?category=pet_supplies", timeout=30).json()
+        assert a["limit"] >= 1 and a["used"] == 0
+        jr = cons.post(f"{API}/waves/{w['wave_id']}/join", json={
+            "items": [{"product_id": w["products"][0]["product_id"],
+                       "variant_id": w["products"][0]["variants"][0]["variant_id"], "qty": 1}],
+            "delivery_address": "1 Test Rd", "accept_terms": True}, timeout=30)
+        assert jr.status_code == 200, jr.text
+        sup.delete(f"{API}/supplier/waves/{w['wave_id']}", timeout=30)
         sup.delete(f"{API}/supplier/waves/{w['wave_id']}", timeout=30)

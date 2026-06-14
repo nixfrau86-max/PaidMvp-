@@ -9,14 +9,19 @@ import {
 } from "@phosphor-icons/react";
 
 const CATEGORY_OPTIONS = [
-  { id: "Tyres",          label: "Tyres",            sub: "Unlocks Auto Wave Engine + Product Groups" },
-  { id: "Automotive",     label: "Automotive Parts", sub: "Brake pads, oils, filters, accessories" },
-  { id: "Electronics",    label: "Electronics",      sub: "Consumer electronics, peripherals, audio" },
-  { id: "Home",           label: "Home & Garden",    sub: "Appliances, furniture, garden goods" },
-  { id: "Consumer Goods", label: "Consumer Goods",   sub: "FMCG, personal care, household" },
-  { id: "Services",       label: "Services",         sub: "Installation, warranty, maintenance" },
-  { id: "Other",          label: "Other",            sub: "Anything else — tell us in description" },
+  { id: "Tyres",            label: "Tyres",            sub: "Unlocks Auto Wave Engine + Product Groups" },
+  { id: "Automotive",       label: "Automotive Parts", sub: "Brake pads, oils, filters, accessories" },
+  { id: "Electronics",      label: "Electronics",      sub: "Consumer electronics, peripherals, audio" },
+  { id: "Footwear",         label: "Footwear",         sub: "Shoes, boots, trainers, sandals" },
+  { id: "Clothing",         label: "Clothing",         sub: "Apparel, workwear, fashion" },
+  { id: "Home Appliances",  label: "Home Appliances",  sub: "White goods, kitchen, small appliances" },
+  { id: "Home",             label: "Home & Garden",    sub: "Furniture, garden goods, DIY" },
+  { id: "Consumer Goods",   label: "Consumer Goods",   sub: "FMCG, personal care, household" },
+  { id: "Services",         label: "Services",         sub: "Installation, warranty, maintenance" },
+  { id: "Other",            label: "Other (specify)",  sub: "Not listed? Tick & tell us your category" },
 ];
+
+const KNOWN_CATEGORY_IDS = CATEGORY_OPTIONS.map((c) => c.id);
 
 export default function SupplierOnboarding() {
   const navigate = useNavigate();
@@ -24,6 +29,7 @@ export default function SupplierOnboarding() {
   const [supplier, setSupplier] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [acceptTerms, setAcceptTerms] = useState(false);
+  const [otherText, setOtherText] = useState("");
   const [form, setForm] = useState({
     business_name: "",
     contact_email: "",
@@ -47,13 +53,18 @@ export default function SupplierOnboarding() {
       try {
         const { data } = await api.get("/suppliers/me");
         setSupplier(data);
-        // Existing supplier — pre-fill so they can edit categories (and other fields)
+        // Existing supplier — pre-fill so they can edit categories (and other fields).
+        // Any stored category not in our known list is restored into the "Other" field.
+        const stored = data.categories && data.categories.length
+          ? data.categories
+          : (data.category ? [data.category] : []);
+        const known = stored.filter((c) => KNOWN_CATEGORY_IDS.includes(c));
+        const custom = stored.find((c) => !KNOWN_CATEGORY_IDS.includes(c));
+        if (custom) { setOtherText(custom); if (!known.includes("Other")) known.push("Other"); }
         setForm({
           business_name: data.business_name || "",
           contact_email: data.contact_email || user.email || "",
-          categories: data.categories && data.categories.length
-            ? data.categories
-            : (data.category ? [data.category] : []),
+          categories: Array.from(new Set(known)),
           description: data.description || "",
           logo_url: data.logo_url || "",
         });
@@ -70,6 +81,13 @@ export default function SupplierOnboarding() {
       toast.error("Please tick at least one product category");
       return;
     }
+    // Resolve the "Other (specify)" tile into the typed custom category.
+    let finalCategories = [...form.categories];
+    if (finalCategories.includes("Other")) {
+      const t = otherText.trim();
+      if (!t) { toast.error("Please specify your 'Other' product category"); return; }
+      finalCategories = finalCategories.filter((c) => c !== "Other").concat(t);
+    }
     if (!supplier && !acceptTerms) {
       toast.error("Please accept the Supplier Terms & Privacy Policy");
       return;
@@ -81,8 +99,8 @@ export default function SupplierOnboarding() {
         contact_email: form.contact_email,
         description: form.description,
         logo_url: form.logo_url,
-        category: form.categories[0],   // back-compat primary
-        categories: form.categories,
+        category: finalCategories[0],   // back-compat primary
+        categories: finalCategories,
       };
       let data;
       if (supplier) {
@@ -217,6 +235,15 @@ export default function SupplierOnboarding() {
                   );
                 })}
               </div>
+              {form.categories.includes("Other") && (
+                <input
+                  value={otherText}
+                  onChange={(e) => setOtherText(e.target.value)}
+                  className="w-full border-2 border-ink p-3 font-mono text-sm mt-2"
+                  placeholder="Specify your category — e.g. Pet Supplies, Furniture, Stationery…"
+                  data-testid="apply-cat-other-text"
+                />
+              )}
               <div className="mt-2 text-[10px] font-mono uppercase tracking-widest text-[#3A3A3A]">
                 Non-tyre suppliers won&apos;t see the Tyre Product Groups section.
               </div>

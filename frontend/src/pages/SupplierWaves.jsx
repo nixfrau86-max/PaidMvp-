@@ -154,6 +154,7 @@ function WaveForm({ regions, categories, editing, onClose, onSaved }) {
   const isEdit = Boolean(editing);
   const [form, setForm] = useState(() => ({
     category: editing?.category || "tyres",
+    customCategory: "",
     region_id: editing?.region_id || "",
     brand: editing?.brand || "",
     title: editing?.title || "",
@@ -206,8 +207,16 @@ function WaveForm({ regions, categories, editing, onClose, onSaved }) {
         });
         toast.success("Wave updated");
       } else {
+        let categoryId = form.category;
+        let categoryLabel;
+        if (form.category === "__other__") {
+          const lbl = (form.customCategory || "").trim();
+          if (!lbl) { toast.error("Type your product category"); setSaving(false); return; }
+          categoryId = lbl.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+          categoryLabel = lbl;
+        }
         await api.post("/supplier/waves", {
-          category: form.category, region_id: form.region_id, brand: form.brand, title: form.title || undefined,
+          category: categoryId, category_label: categoryLabel, region_id: form.region_id, brand: form.brand, title: form.title || undefined,
           description: form.description, eta: form.eta, ideal_target: Number(form.ideal_target),
           min_activation: Number(form.min_activation), deadline_days: Number(form.deadline_days), products,
         });
@@ -231,7 +240,17 @@ function WaveForm({ regions, categories, editing, onClose, onSaved }) {
             <Field label="Category">
               <select disabled={isEdit} value={form.category} onChange={upd("category")} className="inp" data-testid="form-category">
                 {categories.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+                <option value="__other__">Other (specify)…</option>
               </select>
+              {!isEdit && form.category === "__other__" && (
+                <input
+                  value={form.customCategory}
+                  onChange={upd("customCategory")}
+                  className="inp mt-2"
+                  placeholder="e.g. Home Appliances, Pet Supplies…"
+                  data-testid="form-category-custom"
+                />
+              )}
             </Field>
             <Field label="Region">
               <select disabled={isEdit} value={form.region_id} onChange={upd("region_id")} className="inp" data-testid="form-region">

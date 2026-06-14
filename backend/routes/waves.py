@@ -15,7 +15,7 @@ Mounted via build_router(deps) DI pattern (see routes/admin_users.py).
 """
 import uuid
 from datetime import datetime, timezone, timedelta
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -24,8 +24,15 @@ from pydantic import BaseModel, Field
 # --------------------------------------------------------------------------
 # Constants
 # --------------------------------------------------------------------------
-CATEGORIES = ["tyres", "electronics", "footwear"]
-CATEGORY_LABELS = {"tyres": "Tyres", "electronics": "Electronics", "footwear": "Footwear"}
+CATEGORIES = ["tyres", "electronics", "footwear", "clothing", "home_appliances",
+              "home_garden", "automotive", "beauty", "sports", "toys", "consumer_goods", "other"]
+CATEGORY_LABELS = {
+    "tyres": "Tyres", "electronics": "Electronics", "footwear": "Footwear",
+    "clothing": "Clothing", "home_appliances": "Home Appliances",
+    "home_garden": "Home & Garden", "automotive": "Automotive",
+    "beauty": "Beauty & Personal Care", "sports": "Sports & Outdoors",
+    "toys": "Toys & Games", "consumer_goods": "Consumer Goods", "other": "Other",
+}
 
 ACTIVE_PART_STATUSES = ["reserved", "authorized", "captured"]
 ALMOST_FULL_RATIO = 0.8
@@ -70,7 +77,8 @@ class ProductInput(BaseModel):
 
 
 class WaveCreateRequest(BaseModel):
-    category: Literal["tyres", "electronics", "footwear"]
+    category: str                    # canonical id (see CATEGORIES) or a custom slug for "Other"
+    category_label: Optional[str] = None  # human label (required for custom categories)
     region_id: str
     brand: str
     title: Optional[str] = None      # auto-generated if omitted
@@ -164,7 +172,7 @@ def _public_wave(w: dict, full: bool = False) -> dict:
         d.pop("supplier_id", None)
     ideal = max(1, int(d.get("ideal_target", 1)))
     d["progress_pct"] = round(min(100.0, _wave_units(w) / ideal * 100), 1)
-    d["category_label"] = CATEGORY_LABELS.get(d.get("category"), d.get("category"))
+    d["category_label"] = d.get("category_label") or CATEGORY_LABELS.get(d.get("category"), d.get("category"))
     return d
 
 
@@ -536,11 +544,18 @@ def build_router(deps: Dict[str, Any]) -> APIRouter:
             raise HTTPException(status_code=400, detail="Invalid or inactive region")
         if payload.min_activation > payload.ideal_target:
             raise HTTPException(status_code=400, detail="Minimum activation cannot exceed the ideal target")
-        title = (payload.title or "").strip() or f"{region['name']} {payload.brand} {CATEGORY_LABELS[payload.category]} Wave"
+        # Category: canonical id, or a custom slug (for "Other — specify"). Derive a
+        # human label; everything except `tyres` ships to a delivery address.
+        category = (payload.category or "").strip().lower()
+        if not category:
+            raise HTTPException(status_code=400, detail="Please choose a product category")
+        category_label = (payload.category_label or "").strip() or CATEGORY_LABELS.get(category, category.replace("_", " ").title())
+        title = (payload.title or "").strip() or f"{region['name']} {payload.brand} {category_label} Wave"
         wave = {
             "wave_id": f"wave_{uuid.uuid4().hex[:10]}",
             "supplier_id": supplier["supplier_id"],
-            "category": payload.category,
+            "category": category,
+            "category_label": category_label,
             "region_id": region["region_id"],
             "region_name": region["name"],
             "brand": payload.brand.strip(),
@@ -798,8 +813,10 @@ def build_router(deps: Dict[str, Any]) -> APIRouter:
     @router.get("/me/unit-allowance")
     async def my_unit_allowance(category: str = Query(...), user: dict = Depends(get_current_user)):
         """Remaining annual (calendar-year) unit allowance for the current user in a category."""
-        if category not in CATEGORIES:
-            raise HTTPException(status_code=400, detail="Unknown category")
+        category = (category or "").strip().lower()
+        if not category:
+            raise HTTPException(status_code=400, detail="Category is required")
+        # Custom categories fall back to the global default limit via resolve_unit_limit.
         cfg = await get_unit_limits_config() if get_unit_limits_config else {}
         limit = resolve_unit_limit(cfg, user, category) if resolve_unit_limit else 0
         used = await _units_used_this_year(db, user["user_id"], category)
