@@ -445,6 +445,31 @@ async def expire_overdue_waves(db, manager) -> int:
     return expired
 
 
+async def auto_complete_due_waves(db, manager) -> int:
+    """Auto-complete ACTIVATED waves once their deadline passes, then respawn any
+    leftover stock — for ALL categories. Symmetric with expire_overdue_waves
+    (which expires under-filled open waves). An activated wave has, by definition,
+    met its minimum, so on deadline it is finalised: captured units are recorded
+    as sold, stranded reservations are carried into a fresh follow-on round.
+
+    This is what makes the auto-respawn engine actually automatic (no admin action
+    required) and consistent across every product category.
+    """
+    now = _now()
+    waves = await db.waves.find(
+        {"state": "activated", "respawned": {"$ne": True}, "deadline": {"$ne": None, "$lt": now}},
+        {"_id": 0},
+    ).to_list(500)
+    completed = 0
+    for w in waves:
+        await db.waves.update_one({"wave_id": w["wave_id"]}, {"$set": {"state": "completed"}})
+        await _broadcast(manager, w["wave_id"], {"type": "wave_update", "state": "completed"})
+        fresh = await db.waves.find_one({"wave_id": w["wave_id"]}, {"_id": 0})
+        await complete_wave_and_respawn(db, manager, fresh)
+        completed += 1
+    return completed
+
+
 async def _units_used_this_year(db, user_id: str, category: str) -> int:
     """Sum of units the user has committed (reserved/authorized/captured) in this
     category during the current CALENDAR year. Released/cancelled/expired excluded."""

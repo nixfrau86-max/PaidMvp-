@@ -3508,7 +3508,7 @@ async def startup():
 
     # Background worker: respawn scheduling + reservation/payment sweep + deadline expiry
     async def _scheduled_waves_loop():
-        from routes.waves import process_due_scheduled_waves, sweep_payment_windows, expire_overdue_waves
+        from routes.waves import process_due_scheduled_waves, sweep_payment_windows, expire_overdue_waves, auto_complete_due_waves
         while True:
             try:
                 n = await process_due_scheduled_waves(db, manager)
@@ -3520,6 +3520,9 @@ async def startup():
                 e = await expire_overdue_waves(db, manager)
                 if e:
                     logger.info(f"Expired {e} overdue under-filled wave(s)")
+                c = await auto_complete_due_waves(db, manager)
+                if c:
+                    logger.info(f"Auto-completed {c} due wave(s) and respawned leftover stock")
             except Exception as e:
                 logger.warning(f"scheduled-waves worker error: {e}")
             await asyncio.sleep(60)

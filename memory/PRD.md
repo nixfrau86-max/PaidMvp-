@@ -20,6 +20,13 @@ Build a real-time demand aggregation platform that turns fragmented consumer int
 8. Admin role is restricted to `ADMIN_EMAILS` env allowlist.
 
 ## What's implemented (latest — 2026-06-14)
+### ♻️ Auto wave engine expanded to all categories (automatic completion → respawn) (DONE)
+The auto-respawn engine was already category-agnostic, but it only fired when an **admin manually** set a wave to `completed` — so respawn never happened on its own, for any category. Added an automatic-completion worker so the engine is now hands-off across **every product category** (manual admin completion still works too).
+- **New worker** `auto_complete_due_waves(db, manager)` (`routes/waves.py`), symmetric with `expire_overdue_waves`: any **`activated`** wave whose **`deadline`** has passed (and not yet respawned) auto-transitions to `completed`, then runs `complete_wave_and_respawn` — captured units recorded as sold, stranded reservations carried into a fresh `· Round N` follow-on for the leftover stock (live if inside the Mon–Fri 08:30–16:30 London window, otherwise scheduled). Wired into the 60s startup loop in `server.py` (alongside the scheduled-respawn, payment-sweep and expiry workers).
+- Behaviour is identical for tyres, electronics, footwear, and arbitrary "Other (specify)" custom slugs — the worker keys off `state`/`deadline`, never the category.
+- **Tests** (`tests/test_wave_auto_complete.py`, 4): auto-complete+respawn for electronics, footwear and a custom `pet_supplies` slug (carried units + Round 2 + leftover target asserted, live-or-scheduled), plus a negative test (open/under-filled and future-deadline waves are left untouched). Full wave regression **60 passed**.
+
+## What's implemented (latest — 2026-06-14)
 ### 🖼️ Supplier Wave product images (upload + URL) (DONE)
 Suppliers can now attach a **product image** in the "+ Create Wave" and Edit Wave flows; it renders on the live wave cards (`/waves`) and the Wave Detail hero (`/wave/:id`).
 - **Object storage** wired via Emergent storage API (`backend/storage.py`: `init_storage`/`put_object`/`get_object`, keyed by `EMERGENT_LLM_KEY`, app prefix `collective-savers`).
