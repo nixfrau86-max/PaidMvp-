@@ -1,146 +1,116 @@
 {
-  "theme_and_archetype": {
-    "domain": "Collective Buying Platform",
-    "theme": "Light Theme",
-    "archetype": "Archetype 4 (Swiss & High-Contrast) + Energetic Accents",
-    "mood_and_vibe": "Energetic, collective movement, momentum, gathering, structured but bold."
+  "project_name": "The Collective Savers",
+  "phase": "Phase 4 - Premium UX & Discovery",
+  "theme": "light",
+  "archetype": "4 (Swiss & High-Contrast) adapted for Premium Fintech Soft-Utility",
+  "global_design_rules": {
+    "aesthetic": "Stripe/Revolut-inspired premium fintech. Pristine, trustworthy, and precise. Moving away from 0-radius brutalism to soft depth, nested radii, and optical clarity.",
+    "border_radius": "Main containers: rounded-2xl or rounded-3xl. Inner elements: rounded-lg or rounded-xl. Badges: rounded-full.",
+    "shadows": "Soft, diffused ambient shadows. Eliminate harsh offset shadows. Use shadow-[0_4px_20px_rgb(0,0,0,0.03)] for resting and shadow-[0_8px_30px_rgb(0,0,0,0.06)] for hover/elevation.",
+    "borders": "1px delicate borders using border-slate-100 or border-slate-200 to define edges without heaviness."
   },
   "typography": {
-    "fonts": {
-      "heading": "Cabinet Grotesk",
-      "body": "Satoshi",
-      "mono": "JetBrains Mono"
+    "strategy": "Geometric precision meets human readability. Replacing hard brutalist type with premium tech fonts.",
+    "headings": {
+      "font_family": "Outfit",
+      "weights": ["500", "600", "700"],
+      "tracking": "tracking-tight",
+      "forbidden": ["JetBrains Mono", "Cabinet Grotesk", "Inter"]
     },
-    "rules": {
-      "h1": "text-5xl sm:text-6xl+ font-black tracking-tighter leading-none uppercase",
-      "h2": "text-4xl sm:text-5xl font-extrabold tracking-tight leading-none uppercase",
-      "h3": "text-2xl sm:text-3xl font-bold tracking-tight",
-      "body": "text-base sm:text-lg font-medium leading-relaxed tracking-normal",
-      "labels_and_overlines": "text-xs font-bold uppercase tracking-[0.2em]",
-      "banned_fonts": ["Inter", "Space Grotesk", "Roboto", "Open Sans"]
+    "body": {
+      "font_family": "Manrope",
+      "weights": ["400", "500"]
+    },
+    "numbers_and_data": {
+      "font_family": "Manrope",
+      "features": "tabular-nums"
     }
   },
   "colors": {
-    "background": {
-      "primary": "#FFFFFF",
-      "secondary": "#F4F4F4",
-      "elevated": "#FAFAFA"
+    "backgrounds": {
+      "app": "bg-slate-50",
+      "card": "bg-white",
+      "raised": "bg-white"
     },
     "text": {
-      "primary": "#0A0A0A",
-      "secondary": "#525252",
-      "inverse": "#FFFFFF"
+      "primary": "text-slate-900",
+      "secondary": "text-slate-500",
+      "tertiary": "text-slate-400"
     },
-    "brand_accents": {
-      "blaze_orange": "#FF5400",
-      "klein_blue": "#0021A5",
-      "warning_yellow": "#FFD600",
-      "success_green": "#00C853"
+    "brand_accent": {
+      "primary": "bg-[#FF5400]",
+      "text": "text-[#FF5400]",
+      "hover": "hover:bg-[#E64A00]",
+      "subtle": "bg-[#FFF2EC]"
     },
-    "vpp_states": {
-      "seed_active": {
-        "bg": "#F4F4F4",
-        "border": "#0A0A0A",
-        "text": "#0A0A0A"
-      },
-      "almost_powered": {
-        "bg": "#FFD600",
-        "border": "#0A0A0A",
-        "text": "#0A0A0A"
-      },
-      "powered": {
-        "bg": "#0021A5",
-        "border": "#0A0A0A",
-        "text": "#FFFFFF"
-      },
-      "locked": {
-        "bg": "#FF5400",
-        "border": "#0A0A0A",
-        "text": "#FFFFFF"
-      },
-      "executing": {
-        "bg": "linear-gradient(45deg, #FF5400 25%, #FF7333 25%, #FF7333 50%, #FF5400 50%, #FF5400 75%, #FF7333 75%, #FF7333 100%)",
-        "border": "#0A0A0A",
-        "text": "#FFFFFF"
-      },
-      "completed": {
-        "bg": "#00C853",
-        "border": "#0A0A0A",
-        "text": "#0A0A0A"
+    "functional": {
+      "success": "bg-emerald-500",
+      "success_text": "text-emerald-600",
+      "success_subtle": "bg-emerald-50",
+      "border": "border-slate-200"
+    }
+  },
+  "components": {
+    "WaveCard": {
+      "container": "bg-white rounded-2xl border border-slate-100 shadow-[0_4px_20px_rgb(0,0,0,0.03)] p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_12px_40px_rgb(0,0,0,0.08)] flex flex-col h-full",
+      "image_header": "rounded-xl overflow-hidden relative aspect-video isolate mb-4",
+      "image_overlay": "absolute inset-0 bg-gradient-to-t from-slate-900/80 via-slate-900/20 to-transparent",
+      "live_progress_bar": {
+        "wrapper": "mt-auto pt-4",
+        "track": "h-2 w-full bg-slate-100 rounded-full overflow-hidden",
+        "fill": "h-full bg-[#FF5400] rounded-full relative"
       }
     },
-    "ui_elements": {
-      "borders": "#0A0A0A",
-      "dividers": "#E5E5E5"
-    }
-  },
-  "layout_and_spacing": {
-    "general": {
-      "generous_padding": true,
-      "container_max_width": "max-w-7xl",
-      "border_radius": "rounded-none",
-      "stroke_width": "border-2"
+    "Badges": {
+      "base": "inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold uppercase tracking-wider gap-1",
+      "state_live": "bg-[#FFF2EC] text-[#FF5400] border border-[#FF5400]/20",
+      "state_success": "bg-emerald-50 text-emerald-600 border border-emerald-100",
+      "region": "bg-slate-100 text-slate-700 border border-slate-200"
     },
-    "grids": {
-      "marketing": "grid-cols-1 md:grid-cols-12 gap-6 md:gap-8",
-      "dashboards": "grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6",
-      "vpp_cards": "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+    "LiveCounter": {
+      "container": "flex items-center gap-2 text-sm font-medium text-slate-700",
+      "dot": "w-2 h-2 rounded-full bg-[#FF5400] animate-pulse shadow-[0_0_8px_rgba(255,84,0,0.6)]"
     },
-    "components": {
-      "cards": "border-2 border-[#0A0A0A] bg-white p-6 md:p-8 shadow-[4px_4px_0px_#0A0A0A] hover:-translate-y-1 hover:shadow-[6px_6px_0px_#0A0A0A] transition-all",
-      "buttons_primary": "bg-[#FF5400] text-white border-2 border-[#0A0A0A] font-bold uppercase tracking-wider py-4 px-8 shadow-[4px_4px_0px_#0A0A0A] hover:bg-[#FF7333] hover:translate-y-0.5 hover:shadow-[2px_2px_0px_#0A0A0A] transition-all",
-      "buttons_secondary": "bg-white text-[#0A0A0A] border-2 border-[#0A0A0A] font-bold uppercase tracking-wider py-4 px-8 shadow-[4px_4px_0px_#0A0A0A] hover:bg-[#F4F4F4] transition-all"
+    "Buttons": {
+      "primary": "bg-[#FF5400] text-white rounded-xl px-6 py-3 font-semibold hover:bg-[#E64A00] transition-colors shadow-sm shadow-[#FF5400]/20 inline-flex items-center justify-center gap-2",
+      "secondary": "bg-white text-slate-700 border border-slate-200 rounded-xl px-6 py-3 font-medium hover:bg-slate-50 transition-colors inline-flex items-center justify-center gap-2"
+    },
+    "StickyRightRail": {
+      "container": "sticky top-8 bg-white rounded-3xl border border-slate-100 shadow-[0_12px_40px_rgb(0,0,0,0.06)] p-8 flex flex-col gap-6"
     }
-  },
-  "ui_components": {
-    "navigation": "Sticky nav with solid white bg, sharp 2px bottom border. Large typography for links.",
-    "vpp_card": "Uses bento-style segmentation inside. Shows product image top, then deep divider, then live stats (current/threshold). State badge must be highly visible.",
-    "progress_bar": "Thick 2px borders, sharply rectangular. Fill color corresponds to VPP state.",
-    "alerts_toasts": "Brutalist blocky toasts (Sonner). High contrast, black borders.",
-    "icons": "Use @phosphor-icons/react (Duotone or Bold) for high contrast and modern structural feel."
   },
   "motion_and_interactions": {
-    "hover_states": "Hard translations (no soft floating). Use sharp drop-shadow shifting (e.g. shadow goes from 4px to 2px, box translates down 2px).",
-    "vpp_powered_celebration": "When hitting POWERED threshold, trigger Confetti or scale-bounce animation. Color flash from yellow to Klein Blue.",
-    "marquee": "Use react-fast-marquee with large uppercase outline text for 'POWER THE PARTY • LOCK THE PRICE' across section breaks.",
-    "loading": "ASCII or blocky terminal loaders for a slightly raw, technical feel."
+    "strategy": "Smooth, purposeful micro-interactions.",
+    "progress_bars": "Use framer-motion for progress fills: initial={{ width: 0 }} animate={{ width: `${percentage}%` }} transition={{ type: 'spring', bounce: 0, duration: 1 }}",
+    "live_counters": "Use AnimatePresence to slide up/down numbers on change to show real-time momentum.",
+    "hover_states": "Cards lift slightly (-translate-y-1) and cast a deeper, softer shadow."
   },
-  "image_urls": {
-    "hero_background": {
-      "url": "https://static.prod-images.emergentagent.com/jobs/67e8fb00-1df5-4bd4-bb6c-b7cbff953d1b/images/5845498f9d244d8dea4a3f88b5bf738342fc574a220fdf8130936ae316163296.png",
-      "description": "Abstract 3D rendering of dynamic energy streams and particles merging into a solid shape, representing collective power.",
-      "category": "hero",
-      "usage": "Use in the main landing page hero section, either as background with overlay or as a prominent side visual."
+  "image_urls": [
+    {
+      "url": "https://images.unsplash.com/photo-1571335746824-742511d49bce?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA3MDB8MHwxfHNlYXJjaHwxfHxwcmVtaXVtJTIwY2FyJTIwdHlyZXN8ZW58MHx8fHwxNzgxNDUwNTIzfDA&ixlib=rb-4.1.0&q=85",
+      "category": "Wave Cover - Tyres",
+      "description": "Premium four vehicle tires stacked"
     },
-    "community_energy": {
-      "url": "https://images.unsplash.com/photo-1501386761578-eac5c94b800a?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1Mjh8MHwxfHNlYXJjaHwxfHxjcm93ZCUyMGVuZXJneSUyMGNoZWVyaW5nfGVufDB8fHx8MTc3OTYxNTc5M3ww&ixlib=rb-4.1.0&q=85",
-      "description": "Excited crowd cheering, conveying momentum and collective action.",
-      "category": "marketing",
-      "usage": "Use in 'How it Works' or 'Join the Party' sections to emphasize community power."
+    {
+      "url": "https://images.unsplash.com/photo-1601411101851-ea0e07766235?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA3MDB8MHwxfHNlYXJjaHwzfHxwcmVtaXVtJTIwY2FyJTIwdHlyZXN8ZW58MHx8fHwxNzgxNDUwNTIzfDA&ixlib=rb-4.1.0&q=85",
+      "category": "Wave Cover - Tyres Detail",
+      "description": "Black and silver car wheel close up"
     },
-    "product_tires": {
-      "url": "https://images.unsplash.com/photo-1601411101851-ea0e07766235?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAxODF8MHwxfHNlYXJjaHwyfHxjYXIlMjB0aXJlJTIwaXNvbGF0ZWR8ZW58MHx8fHwxNzc5NjE1NzkzfDA&ixlib=rb-4.1.0&q=85",
-      "description": "Black and silver car wheel",
-      "category": "product_demo",
-      "usage": "Use as a thumbnail for a sample 'Tyres' VPP."
-    },
-    "product_earphones": {
-      "url": "https://images.unsplash.com/photo-1606220588913-b3aacb4d2f46?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NTZ8MHwxfHNlYXJjaHwxfHx3aXJlbGVzcyUyMGVhcnBob25lcyUyMHNsZWVrfGVufDB8fHx8MTc3OTYxNTc5M3ww&ixlib=rb-4.1.0&q=85",
-      "description": "Sleek wireless earbuds",
-      "category": "product_demo",
-      "usage": "Use as a thumbnail for a sample 'Earphones' VPP."
+    {
+      "url": "https://images.unsplash.com/photo-1530893609608-32a9af3aa95c?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1ODh8MHwxfHNlYXJjaHwyfHxtb2Rlcm4lMjB0ZWNoJTIwbGlmZXN0eWxlfGVufDB8fHx8MTc4MTQ1MDUyM3ww&ixlib=rb-4.1.0&q=85",
+      "category": "Wave Cover - Tech",
+      "description": "Modern MacBook Pro on desk"
     }
-  },
+  ],
   "instructions_to_main_agent": [
-    "Strictly adhere to the font pairing: Cabinet Grotesk for Headings and Satoshi for Body. DO NOT use Inter or Space Grotesk.",
-    "Implement the brutalist/Swiss shadow style (solid black offsets like shadow-[4px_4px_0px_#0A0A0A]) on all cards and main buttons to reinforce the energetic, heavy, and locked-in feel.",
-    "Ensure the VPP states (SEED, ACTIVE, ALMOST POWERED, POWERED, LOCKED, EXECUTING, COMPLETED) use the precise color mapping provided.",
-    "Do not use generic Shadcn cards out of the box. Heavily customize them to use `rounded-none`, thick borders (`border-2 border-[#0A0A0A]`), and solid shadows.",
-    "Use data-testid attributes (kebab-case, role-based) on all interactive elements.",
-    "For the Landing page hero, do not use a standard gradient. Use the generated abstract 3D image url or a bold typographic kinetic marquee to set the 'movement' tone.",
-    "Payment routing / checkout components should feature high contrast and clearly display the payment method discount.",
-    "In dashboards, prioritize pure data clarity over visual flair (Control Room Grid). Use tight spacing (`p-4` or `p-6`) compared to the marketing pages.",
-    "NEVER use placeholder domains for images (e.g. via.placeholder.com). ONLY use the image URLs provided in this file.",
-    "Integrate Phosphor Icons (@phosphor-icons/react) instead of standard Lucide icons where possible for a bolder look."
+    "1. Replace all JetBrains Mono and Cabinet Grotesk fonts with Outfit (Headings) and Manrope (Body) via standard Tailwind classes.",
+    "2. Remove all hard shadow-brut classes and 0-radius borders. Apply rounded-2xl and soft drop shadows as defined in the components section.",
+    "3. Use framer-motion to animate the live wave progress bars and counters on WaveBrowse.jsx and WaveDetail.jsx.",
+    "4. Refine the color palette to use Slate (slate-50 to slate-900) for backgrounds and text, with the brand #FF5400 orange restricted strictly to primary CTAs and progress fills (do not use for general text).",
+    "5. Ensure the Sticky Right Rail on WaveDetail.jsx prominently features the live unit counter and savings band in a pristine, high-trust card format.",
+    "6. Include data-testid attributes (e.g., data-testid='wave-card', data-testid='join-wave-cta') on all interactive elements.",
+    "7. Do NOT use pure black or fully transparent backgrounds over hero images. Use explicit gradients like bg-gradient-to-t from-slate-900/80 to-transparent.",
+    "8. Use Phosphor Icons (@phosphor-icons/react) with duotone or regular weights for a premium feel (e.g. MapPin, ChartBar, CheckCircle).",
+    "9. Build WaveBrowse.jsx and WaveDetail.jsx adhering strictly to the 'React 19 + Tailwind + Shadcn UI' constraint. Avoid raw HTML inputs; heavily customize Shadcn for form elements if needed."
   ]
 }
