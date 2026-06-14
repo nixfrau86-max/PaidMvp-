@@ -172,6 +172,7 @@ export default function WaveDetail() {
             {/* Hero card */}
             <div className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-[0_4px_20px_rgb(0,0,0,0.04)]">
               <div className="relative h-48 sm:h-56 isolate flex items-end p-6" style={{ background: "linear-gradient(135deg,#1e293b 0%,#0f172a 55%,#FF5400 190%)" }}>
+                {w.image_url && <img src={w.image_url} alt={w.title} className="absolute inset-0 h-full w-full object-cover" />}
                 <div className="absolute inset-0 bg-gradient-to-t from-slate-900/70 via-transparent to-transparent" />
                 <div className="absolute top-4 left-4 flex flex-wrap gap-2">
                   <span className="inline-flex items-center gap-1 rounded-full bg-white/95 px-3 py-1 text-xs font-semibold text-slate-700 backdrop-blur">

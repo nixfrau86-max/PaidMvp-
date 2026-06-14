@@ -159,6 +159,7 @@ function WaveForm({ regions, categories, editing, onClose, onSaved }) {
     brand: editing?.brand || "",
     title: editing?.title || "",
     description: editing?.description || "",
+    image_url: editing?.image_url || "",
     eta: editing?.eta || "",
     ideal_target: editing?.ideal_target ?? 50,
     min_activation: editing?.min_activation ?? 40,
@@ -168,7 +169,25 @@ function WaveForm({ regions, categories, editing, onClose, onSaved }) {
       : [emptyProduct()],
   }));
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const upd = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const onPickImage = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { toast.error("Image too large — max 5MB"); return; }
+    const fd = new FormData();
+    fd.append("file", file);
+    setUploading(true);
+    try {
+      const { data } = await api.post("/supplier/wave-image", fd, { headers: { "Content-Type": "multipart/form-data" } });
+      setForm((f) => ({ ...f, image_url: data.image_url }));
+      toast.success("Image uploaded");
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Upload failed");
+    } finally { setUploading(false); }
+  };
 
   const updProduct = (pi, k, val) => setForm((f) => { const products = [...f.products]; products[pi] = { ...products[pi], [k]: val }; return { ...f, products }; });
   const updVariant = (pi, vi, k, val) => setForm((f) => { const products = [...f.products]; const variants = [...products[pi].variants]; variants[vi] = { ...variants[vi], [k]: val }; products[pi] = { ...products[pi], variants }; return { ...f, products }; });
@@ -202,7 +221,7 @@ function WaveForm({ regions, categories, editing, onClose, onSaved }) {
     try {
       if (isEdit) {
         await api.patch(`/supplier/waves/${editing.wave_id}`, {
-          brand: form.brand, title: form.title, description: form.description, eta: form.eta,
+          brand: form.brand, title: form.title, description: form.description, image_url: form.image_url, eta: form.eta,
           ideal_target: Number(form.ideal_target), min_activation: Number(form.min_activation), products,
         });
         toast.success("Wave updated");
@@ -217,7 +236,7 @@ function WaveForm({ regions, categories, editing, onClose, onSaved }) {
         }
         await api.post("/supplier/waves", {
           category: categoryId, category_label: categoryLabel, region_id: form.region_id, brand: form.brand, title: form.title || undefined,
-          description: form.description, eta: form.eta, ideal_target: Number(form.ideal_target),
+          description: form.description, image_url: form.image_url, eta: form.eta, ideal_target: Number(form.ideal_target),
           min_activation: Number(form.min_activation), deadline_days: Number(form.deadline_days), products,
         });
         toast.success("Wave created");
@@ -265,6 +284,28 @@ function WaveForm({ regions, categories, editing, onClose, onSaved }) {
             <Field label="Fulfilment ETA"><input value={form.eta} onChange={upd("eta")} className="inp" placeholder="Dispatched within 7 days of activation" /></Field>
             {!isEdit && <Field label="Open for (days)"><input type="number" min="1" value={form.deadline_days} onChange={upd("deadline_days")} className="inp" /></Field>}
             <Field label="Description" full><textarea value={form.description} onChange={upd("description")} rows={2} className="inp" /></Field>
+            <Field label="Product image (shown on the live wave card)" full>
+              <div className="flex flex-col sm:flex-row gap-3 items-start" data-testid="wave-image-section">
+                <div className="w-28 h-28 shrink-0 border-2 border-ink bg-[#FAFAFA] overflow-hidden flex items-center justify-center" data-testid="wave-image-preview">
+                  {form.image_url ? (
+                    <img src={form.image_url} alt="Wave preview" className="w-full h-full object-cover" />
+                  ) : (
+                    <Package weight="duotone" size={28} className="text-[#3A3A3A]" />
+                  )}
+                </div>
+                <div className="flex-1 w-full space-y-2">
+                  <label className={`inline-flex items-center gap-2 bg-white border-2 border-ink px-3 py-2 text-[10px] font-bold uppercase tracking-widest shadow-brut-sm hover-brut cursor-pointer ${uploading ? "opacity-60 pointer-events-none" : ""}`} data-testid="wave-image-upload-label">
+                    <Plus weight="bold" size={10} /> {uploading ? "Uploading…" : "Upload image"}
+                    <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" onChange={onPickImage} className="hidden" data-testid="wave-image-file" />
+                  </label>
+                  <div className="text-[9px] font-mono uppercase tracking-widest text-[#3A3A3A]">JPG / PNG / GIF / WEBP · max 5MB · or paste a URL below</div>
+                  <input value={form.image_url} onChange={upd("image_url")} className="inp" placeholder="https://…/product.jpg" data-testid="wave-image-url" />
+                  {form.image_url && (
+                    <button type="button" onClick={() => setForm((f) => ({ ...f, image_url: "" }))} className="text-[10px] font-bold uppercase tracking-widest text-[#FF5400] inline-flex items-center gap-1" data-testid="wave-image-clear"><X weight="bold" size={10} /> Remove image</button>
+                  )}
+                </div>
+              </div>
+            </Field>
           </div>
 
           <div className="border-t-2 border-ink pt-4">

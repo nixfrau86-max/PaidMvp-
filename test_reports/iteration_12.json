@@ -1,0 +1,43 @@
+{
+  "summary": "Full backend + frontend verification of the supplier Wave Image upload feature (file + URL) and live render on /waves and /wave/:id. Sanity check authoritatively confirms /waves is NOT stuck on 'Loading waves…' — wave-grid renders both seeded cards in a real browser (stat-live-waves='2'). All 7 backend tests pass; all critical frontend image-section flows verified.",
+  "sanity_check_waves_page": {
+    "verdict": "PASS — /waves renders cards in a real browser. No 'Loading waves…' stall.",
+    "details": "Headless Chromium GET https://.../waves → wave-grid present → 2 wave-card-* elements rendered (wave_2edd9fa1ac Rugby CONTINENTAL Tyres Wave · Round 2 OPEN; wave_b1140b2501 Midlands LG OLED TV Wave OPEN 1/30 units). stat-live-waves shows '2 Live Waves'. Network: GET /api/waves → 200, GET /api/regions → 200 (x2). Only console errors observed were two 401s from /api/auth/me probes (expected for logged-out). No CORS errors, no pending requests, no JS pageerrors. The main agent's local-tool 'Loading waves…' observation was a local-tool/browser artefact, NOT a real frontend bug."
+  },
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verified_flows": {
+    "backend_upload_endpoint": "PASS — POST /api/supplier/wave-image (multipart 'file') with valid PNG returns 200 + {image_url:'/api/wave-images/collective-savers/wave-images/{supplier_id}/{uuid}.png'}. Rejects unauth (401/403). Rejects '.txt' with 400 'Unsupported image type'. Rejects >5MB body with 400 'Image too large — max 5MB'.",
+    "backend_public_serve": "PASS — GET /api/wave-images/{path} returns 200, content-type 'image/png', exact byte-count match, NO auth required (cookieless session).",
+    "create_wave_persists_image_url": "PASS — POST /api/supplier/waves with image_url persists & echoes the field. GET /api/waves (public list) and GET /api/waves/{wave_id} both surface image_url.",
+    "frontend_url_paste_preview": "PASS — Pasting an external URL into [data-testid=wave-image-url] (e.g. unsplash photo) renders an <img> inside [data-testid=wave-image-preview] with src=the pasted URL. [data-testid=wave-image-clear] appears (conditional on image_url being set) and clicking it clears both the URL input and the preview img.",
+    "frontend_file_upload_preview": "PASS — Selecting a PNG via [data-testid=wave-image-file] uploads via POST /api/supplier/wave-image; preview img src becomes '/api/wave-images/collective-savers/wave-images/sup_xxx/{uuid}.png'; [data-testid=wave-image-url] field is populated with the same path; clear button appears.",
+    "card_and_detail_render": "PASS (verified end-to-end via API+listing): created a TEST wave with image_url='/api/wave-images/…' → listing endpoint /api/waves returns image_url on the card payload → detail endpoint /api/waves/{id} returns image_url on the hero payload → public GET of that path returns 200 image/png. WaveBrowse.jsx and WaveDetail.jsx are verified to render <img src={w.image_url}> from that payload (URL-paste branch live-tested in browser — same render path)."
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_wave_image_upload.py",
+    "/app/test_reports/pytest/iteration12_wave_image.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "SupplierWaves.jsx variant input rows (lines 328-332) lack data-testid on the 5 per-variant inputs (label, supplier_cost, retail_price, wave_price, inventory_qty). Only the row wrapper has data-testid=variant-row-{pi}-{vi}. Tests have to fall back to nth-child indexing — add data-testid=variant-label-{pi}-{vi} / variant-cost-{pi}-{vi} / variant-retail-{pi}-{vi} / variant-wave-{pi}-{vi} / variant-inventory-{pi}-{vi} for stable selectors.",
+    "SupplierWaves.jsx Title (optional) and ETA inputs (lines 281, 284) lack data-testid (only form-brand/form-ideal/form-minact/form-category/form-region/form-category-custom exist). Add data-testid=form-title and data-testid=form-eta.",
+    "Backend routes/waves.py upload_wave_image (line 545): extension is taken from the *filename* rather than the magic bytes. A 'foo.png' file containing arbitrary bytes will pass validation. Low severity (the public serve sets the stored content_type from MIME_TYPES, not user-supplied) but consider Pillow.Image.open() to verify it really is an image and to reject SVG/EXE-renamed files.",
+    "Backend storage.py: init_storage() caches _storage_key in module state with no lock — concurrent first-callers may both POST to /init. Minor.",
+    "Cache-Control on /api/wave-images/{path} is 'public, max-age=31536000, immutable' (good) — but image_url is currently a *path* (string) reused on every wave update; if a supplier replaces the image with a new upload the old URL is still referenced in any cached card. Not a regression here, just be aware that 'edit image' requires emitting a *new* path each time (the code does — uses uuid4)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_wave_image_upload.py (created)"
+  ],
+  "success_rate": {"backend": "100% (7/7 pytest)", "frontend": "100% on image-section flows + sanity render"},
+  "test_credentials": "supplier_test@collective.co / Supplier1234 — login works via /api/auth/login (email+password). Frontend login: intent-supplier → tab-email → email-email/email-password → email-submit.",
+  "seed_data_creation": "None left behind. A TEST wave ('TEST_IMG_Wave_iter12', wave_40468d0e8d) was created via the API to verify card/detail surfacing and IMMEDIATELY DELETED via DELETE /api/supplier/waves/{id}. Three test image objects (~73 bytes each) remain in object storage at /api/wave-images/collective-savers/wave-images/sup_098d680534/* — they are orphaned and harmless; storage cleanup is not exposed via the API.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Wave Image flow is fully working end-to-end. Form testids: form-category, form-region, form-brand, form-ideal, form-minact, form-category-custom, wave-image-section, wave-image-file, wave-image-upload-label, wave-image-url, wave-image-clear (conditional), wave-image-preview (div — img is *inside* it, not on the testid element). Variant inputs lack testids — use page.locator('[data-testid=variant-row-{pi}-{vi}] input').nth(N) (0=label,1=cost,2=retail,3=wave,4=inventory). Title and ETA inputs also lack testids. Supplier login: POST /api/auth/login {email,password} (httpOnly cookie). Public image GET /api/wave-images/{path} requires NO auth and returns immutable cache headers.",
+  "rca_of_the_issue": "Main agent reported /waves stuck on 'Loading waves…' in their local screenshot tool. ROOT CAUSE: not a real bug — the page renders correctly in a real Chromium browser against the public ingress URL (verified twice). Likely the local tool was hitting a stale/cached preview, racing the initial fetch, or running before the React effect resolved. Backend GET /api/waves returns 200 with 2 waves in <50ms; no CORS errors observed (the ingress Access-Control-Allow-Origin:* + Allow-Credentials:true combination did NOT trigger a CORS block in headless Chromium for this GET because the response is read normally without credentials on the public list)."
+}

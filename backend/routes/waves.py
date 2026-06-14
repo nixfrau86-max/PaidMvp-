@@ -14,11 +14,14 @@ Wave states: open -> almost_full -> activated -> processing -> fulfilment -> com
 Mounted via build_router(deps) DI pattern (see routes/admin_users.py).
 """
 import uuid
+import asyncio
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Response
 from pydantic import BaseModel, Field
+
+import storage
 
 
 # --------------------------------------------------------------------------
@@ -532,6 +535,53 @@ def build_router(deps: Dict[str, Any]) -> APIRouter:
     @router.get("/wave-categories")
     async def wave_categories():
         return [{"id": c, "label": CATEGORY_LABELS[c]} for c in CATEGORIES]
+
+    # =================================================================
+    # WAVE IMAGES — supplier upload + public serve
+    # =================================================================
+    @router.post("/supplier/wave-image")
+    async def upload_wave_image(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+        supplier = await _require_supplier(user)
+        ext = (file.filename or "").rsplit(".", 1)[-1].lower() if "." in (file.filename or "") else ""
+        if ext not in storage.MIME_TYPES:
+            raise HTTPException(status_code=400, detail="Unsupported image type — use JPG, PNG, GIF or WEBP")
+        data = await file.read()
+        if len(data) > 5 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="Image too large — max 5MB")
+        content_type = storage.MIME_TYPES[ext]
+        path = f"{storage.APP_NAME}/wave-images/{supplier['supplier_id']}/{uuid.uuid4().hex}.{ext}"
+        try:
+            result = await asyncio.to_thread(storage.put_object, path, data, content_type)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=502, detail="Image upload failed — please try again") from e
+        stored_path = result.get("path", path)
+        await db.files.insert_one({
+            "id": uuid.uuid4().hex,
+            "storage_path": stored_path,
+            "original_filename": file.filename,
+            "content_type": content_type,
+            "size": result.get("size", len(data)),
+            "supplier_id": supplier["supplier_id"],
+            "is_deleted": False,
+            "created_at": _iso(_now()),
+        })
+        return {"image_url": f"/api/wave-images/{stored_path}"}
+
+    @router.get("/wave-images/{path:path}")
+    async def serve_wave_image(path: str):
+        record = await db.files.find_one({"storage_path": path, "is_deleted": False}, {"_id": 0})
+        if not record:
+            raise HTTPException(status_code=404, detail="Image not found")
+        try:
+            data, content_type = await asyncio.to_thread(storage.get_object, path)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=404, detail="Image not found") from e
+        return Response(
+            content=data,
+            media_type=record.get("content_type") or content_type,
+            headers={"Cache-Control": "public, max-age=31536000, immutable"},
+        )
+
 
     # =================================================================
     # SUPPLIER — Wave CRUD
