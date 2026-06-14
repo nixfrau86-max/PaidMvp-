@@ -25,7 +25,7 @@ from pydantic import BaseModel, Field
 # Constants
 # --------------------------------------------------------------------------
 CATEGORIES = ["tyres", "electronics", "footwear", "clothing", "home_appliances",
-              "home_garden", "automotive", "beauty", "sports", "toys", "consumer_goods", "other"]
+              "home_garden", "automotive", "beauty", "sports", "toys", "consumer_goods"]
 CATEGORY_LABELS = {
     "tyres": "Tyres", "electronics": "Electronics", "footwear": "Footwear",
     "clothing": "Clothing", "home_appliances": "Home Appliances",

@@ -20,7 +20,13 @@ Build a real-time demand aggregation platform that turns fragmented consumer int
 8. Admin role is restricted to `ADMIN_EMAILS` env allowlist.
 
 ## What's implemented (latest — 2026-06-12)
-### 🧾 Combine repeat joins into ONE payable order (DONE)
+### 🏷️ Expanded categories + custom "Other (specify)" (DONE)
+- **Wave categories expanded** from 3 → 11 canonical ids (`tyres, electronics, footwear, clothing, home_appliances, home_garden, automotive, beauty, sports, toys, consumer_goods`) in `routes/waves.py` (`CATEGORIES` / `CATEGORY_LABELS`). `GET /api/wave-categories` now returns the full list; the Create-Wave dropdown (`SupplierWaves.jsx`) reflects it.
+- **Custom category on wave creation:** the Create-Wave form adds an **"Other (specify)…"** option that reveals a free-text input (`form-category-custom`). On submit the label is slugified and sent as `{category, category_label}`. `WaveCreateRequest.category` is now `str` (+ optional `category_label`); `create_wave` derives & stores `category_label`; `_public_wave` surfaces it. Non-tyre categories ship to a delivery address (unchanged); custom categories fall back to the global default unit limit (`GET /api/me/unit-allowance` made tolerant of unknown categories).
+- **Supplier onboarding "Other (specify)":** `SupplierOnboarding.jsx` category tiles expanded (added Footwear, Clothing, Home Appliances); ticking **Other (specify)** reveals a free-text field (`apply-cat-other-text`) whose value is stored in the supplier's `categories`. Existing custom values are restored into the field on edit.
+- Tests: `test_wave_lifecycle.py::TestExpandedCategories` (expanded list + custom-category wave create/join + allowance fallback). Backend **49 passed**. Frontend verified by testing agent — all 3 supplier flows PASS (onboarding Other, create-wave Other, create-wave Clothing). Removed a redundant duplicate "Other" dropdown entry flagged by the testing agent.
+
+
 - **Behaviour:** When a user joins the **same wave** again while they still have an **unpaid** order on it, the new items now **merge into that existing order** instead of creating a second one. Same product/variant → quantities **add up** (2 + 3 = 5 in one line); different variants → added as separate line items in the **same** order. Unit limits & wave capacity apply to the combined total (unchanged).
 - **Paid orders never merge:** if the user's prior order on that wave is already **paid/captured**, a repeat join starts a **fresh** order (can't merge into a settled payment).
 - **Fitting/delivery:** since it's one order, the **latest** garage + fitting slot (tyres) or delivery address replaces the earlier choice. Any stale in-progress payment session/breakdown on the order is cleared so the next checkout recomputes the combined total.
