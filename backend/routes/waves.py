@@ -727,7 +727,9 @@ def build_router(deps: Dict[str, Any]) -> APIRouter:
 
     @router.get("/supplier/waves/{wave_id}/order-summary")
     async def supplier_order_summary(wave_id: str, user: dict = Depends(get_current_user)):
-        """Post-activation consolidated order summary: units per variant + fulfilment destinations."""
+        """Post-activation consolidated order summary: per-variant units (+paid),
+        payment-status breakdown, per-destination item detail, and per-order
+        customer contact for fulfilment coordination."""
         supplier = await _require_supplier(user)
         w = await db.waves.find_one({"wave_id": wave_id, "supplier_id": supplier["supplier_id"]}, {"_id": 0})
         if not w:
@@ -736,21 +738,75 @@ def build_router(deps: Dict[str, Any]) -> APIRouter:
             {"wave_id": wave_id, "status": {"$in": ACTIVE_PART_STATUSES}}, {"_id": 0}
         ).to_list(2000)
 
+        # Resolve customer contact for each participating user (one query).
+        uids = list({p["user_id"] for p in parts})
+        users: Dict[str, dict] = {}
+        if uids:
+            async for u in db.users.find(
+                {"user_id": {"$in": uids}}, {"_id": 0, "user_id": 1, "name": 1, "email": 1, "phone": 1}
+            ):
+                users[u["user_id"]] = u
+
+        is_tyres = w["category"] == "tyres"
         breakdown: Dict[str, dict] = {}
         destinations: Dict[str, dict] = {}
+        orders: List[dict] = []
         total_units = 0
+        pay = {"paid_units": 0, "paid_orders": 0, "reserved_units": 0, "reserved_orders": 0,
+               "authorized_units": 0, "authorized_orders": 0, "total_orders": len(parts)}
+
         for p in parts:
+            st = p.get("status")
+            is_paid = p.get("payment_status") == "paid" or st == "captured"
+            units = int(p.get("units", 0))
+            u = users.get(p["user_id"], {})
+            order_items = []
             for it in p.get("items", []):
                 key = it["variant_id"]
-                if key not in breakdown:
-                    breakdown[key] = {"label": it.get("label"), "model": it.get("model"), "units": 0}
-                breakdown[key]["units"] += it["qty"]
+                b = breakdown.setdefault(key, {"label": it.get("label"), "model": it.get("model"), "units": 0, "paid_units": 0})
+                b["units"] += it["qty"]
+                if is_paid:
+                    b["paid_units"] += it["qty"]
                 total_units += it["qty"]
+                order_items.append({"model": it.get("model"), "label": it.get("label"), "qty": it["qty"]})
+
+            # payment-status rollup
+            if is_paid:
+                pay["paid_units"] += units; pay["paid_orders"] += 1
+            elif st == "authorized":
+                pay["authorized_units"] += units; pay["authorized_orders"] += 1
+            else:
+                pay["reserved_units"] += units; pay["reserved_orders"] += 1
+
             dest = p.get("garage_name") or p.get("delivery_address") or "—"
-            d = destinations.setdefault(dest, {"destination": dest, "units": 0, "fittings": []})
-            d["units"] += p.get("units", 0)
+            d = destinations.setdefault(dest, {"destination": dest, "type": "garage" if is_tyres else "delivery",
+                                               "units": 0, "items": {}, "fittings": []})
+            d["units"] += units
+            for it in p.get("items", []):
+                ik = f'{it.get("model")} · {it.get("label")}'
+                d["items"][ik] = d["items"].get(ik, 0) + it["qty"]
             if p.get("fitting_slot_label"):
-                d["fittings"].append({"slot": p["fitting_slot_label"], "units": p.get("units", 0)})
+                d["fittings"].append({"slot": p["fitting_slot_label"], "units": units})
+
+            orders.append({
+                "order_id": p["participation_id"],
+                "customer": {"name": u.get("name") or "—", "email": u.get("email"), "phone": u.get("phone")},
+                "destination": dest,
+                "type": "garage" if is_tyres else "delivery",
+                "items": order_items,
+                "fitting_slot": p.get("fitting_slot_label"),
+                "units": units,
+                "subtotal": p.get("subtotal"),
+                "payment_status": "paid" if is_paid else ("authorized" if st == "authorized" else "unpaid"),
+                "status": st,
+                "created_at": p.get("created_at"),
+            })
+
+        dest_list = []
+        for d in destinations.values():
+            d["items"] = [{"label": k, "qty": v} for k, v in d["items"].items()]
+            dest_list.append(d)
+        orders.sort(key=lambda o: o.get("created_at") or "", reverse=True)
 
         return {
             "wave_id": wave_id,
@@ -758,8 +814,10 @@ def build_router(deps: Dict[str, Any]) -> APIRouter:
             "state": w["state"],
             "category": w["category"],
             "total_units": total_units,
+            "payment_summary": pay,
             "variant_breakdown": list(breakdown.values()),
-            "destinations": list(destinations.values()),
+            "destinations": dest_list,
+            "orders": orders,
         }
 
     # =================================================================
@@ -959,6 +1017,78 @@ def build_router(deps: Dict[str, Any]) -> APIRouter:
         if respawn:
             result["respawn_result"] = respawn
         return result
+
+    @router.get("/admin/regional-waves/{wave_id}/financials")
+    async def admin_wave_financials(wave_id: str, user: dict = Depends(get_current_user)):
+        """Admin-only wave financials: revenue (wave price × units), supplier cost,
+        gross margin, RRP value and savings passed to customers — for committed
+        (reserved/authorized/captured) and paid-only (captured) units, plus a
+        per-variant breakdown."""
+        await require_role(user, ["admin"])
+        w = await db.waves.find_one({"wave_id": wave_id}, {"_id": 0})
+        if not w:
+            raise HTTPException(status_code=404, detail="Wave not found")
+        # variant cost/price index from the wave doc (supplier_cost lives here)
+        vidx: Dict[str, dict] = {}
+        for p in w.get("products", []):
+            for v in p.get("variants", []):
+                vidx[v["variant_id"]] = {
+                    "model": p["model"], "label": v["label"],
+                    "supplier_cost": float(v.get("supplier_cost", 0) or 0),
+                    "retail_price": float(v.get("retail_price", 0) or 0),
+                    "wave_price": float(v.get("wave_price", 0) or 0),
+                }
+        parts = await db.wave_participations.find(
+            {"wave_id": wave_id, "status": {"$in": ACTIVE_PART_STATUSES}}, {"_id": 0}
+        ).to_list(5000)
+
+        def _blank():
+            return {"units": 0, "revenue": 0.0, "cost": 0.0, "retail_value": 0.0}
+        committed, paid = _blank(), _blank()
+        by_variant: Dict[str, dict] = {}
+
+        for p in parts:
+            is_paid = p.get("payment_status") == "paid" or p.get("status") == "captured"
+            for it in p.get("items", []):
+                vi = vidx.get(it["variant_id"], {})
+                wp = float(it.get("wave_price", vi.get("wave_price", 0)) or 0)
+                rp = float(it.get("retail_price", vi.get("retail_price", 0)) or 0)
+                sc = float(vi.get("supplier_cost", 0) or 0)
+                qty = int(it["qty"])
+                committed["units"] += qty; committed["revenue"] += wp * qty
+                committed["cost"] += sc * qty; committed["retail_value"] += rp * qty
+                if is_paid:
+                    paid["units"] += qty; paid["revenue"] += wp * qty
+                    paid["cost"] += sc * qty; paid["retail_value"] += rp * qty
+                bv = by_variant.setdefault(it["variant_id"], {
+                    "model": vi.get("model") or it.get("model"), "label": vi.get("label") or it.get("label"),
+                    "wave_price": wp, "supplier_cost": sc, "retail_price": rp,
+                    "units": 0, "paid_units": 0, "revenue": 0.0, "cost": 0.0, "margin": 0.0,
+                })
+                bv["units"] += qty; bv["revenue"] += wp * qty; bv["cost"] += sc * qty
+                bv["margin"] += (wp - sc) * qty
+                if is_paid:
+                    bv["paid_units"] += qty
+
+        def _finalize(b):
+            b["margin"] = round(b["revenue"] - b["cost"], 2)
+            b["savings"] = round(b["retail_value"] - b["revenue"], 2)
+            for k in ("revenue", "cost", "retail_value"):
+                b[k] = round(b[k], 2)
+            return b
+        for bv in by_variant.values():
+            for k in ("revenue", "cost", "margin"):
+                bv[k] = round(bv[k], 2)
+
+        sup = await db.suppliers.find_one({"supplier_id": w.get("supplier_id")}, {"_id": 0, "business_name": 1})
+        return {
+            "wave_id": wave_id, "title": w["title"], "category": w["category"],
+            "category_label": w.get("category_label"), "state": w["state"],
+            "supplier_name": sup.get("business_name") if sup else "—",
+            "committed": _finalize(committed), "paid": _finalize(paid),
+            "by_variant": list(by_variant.values()),
+        }
+
 
     @router.delete("/admin/regional-waves/{wave_id}")
     async def admin_delete_wave(wave_id: str, user: dict = Depends(get_current_user)):

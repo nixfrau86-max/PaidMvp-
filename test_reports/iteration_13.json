@@ -1,0 +1,32 @@
+{
+  "summary": "Frontend verification of the two NEW modals: SUPPLIER /supplier/waves Order-Summary modal (enhanced payment-breakdown + per-destination items + per-order customer details) and ADMIN Regional Waves tab per-wave Financials modal (committed vs paid + by-variant table). Both modals open via the documented testids, render every required sub-section with real data, close cleanly via the X button, and produce ZERO functional console errors. The admin financials modal exactly matches the expected numeric values for the Midlands LG OLED TV Wave (wave_b1140b2501) committed bucket and the all-zero paid bucket.",
+  "verified_flows": {
+    "supplier_order_summary_modal": "PASS — Logged in as supplier_test@collective.co. Iterated through all 10 supplier waves clicking [data-testid=summary-wave-{id}]. Modal [data-testid=order-summary-modal] opened in every case. Sections rendered: summary-payment-breakdown with summary-paid / summary-authorized / summary-unpaid cards (each showing units + order count), 'By option' breakdown, 'Ship to (per destination)' summary-destination block, and 'Orders & customers' summary-orders-table with summary-order-{id} rows. Empty-state 'No orders yet.' rendered correctly for 7/10 waves with no participations. For wave_435d6f0388 (TEST_MERGE_481F94) the modal showed PAID 2 units / 1 order, AUTHORIZED 0/0, RESERVED 1 unit / 1 order, 1 destination ('1 Rd', 3 units, items '↳ M · X 3 units'), and 2 order rows with customer name 'Tester', email test_life_fecd4154@test.co, items column ('1× M · X' and '2× M · X'), Delivery '1 Rd', and PAID / UNPAID status badges. Modal X-button close verified on all 10 attempts (modal becomes invisible).",
+    "admin_financials_modal": "PASS — Logged in as founder@thecollectivesavers.co.uk via intent-consumer → tab-email. /admin auto-loaded the Regional Waves tab once clicked via [data-testid=admin-tab-regional]; [data-testid=regional-waves-tab] rendered. Clicked [data-testid=admin-wave-financials-wave_b1140b2501]. Modal [data-testid=wave-financials-modal] opened with title 'MIDLANDS LG OLED TV WAVE · — · OPEN'. financials-committed rendered '1 UNITS · Revenue £1,199.00 · Supplier cost £980.00 · Gross margin £219.00 · RRP value £1,499.00 · Savings £300.00' — EXACTLY matches the spec. financials-paid rendered '0 UNITS' with all five rows £0.00 (count = 5). 'By option' table rendered single row: 'OLED C4 evo · 55-inch | 1 (0 paid) | £1,199.00 | £980.00 | £219.00'. Modal X-button close verified (modal becomes invisible).",
+    "modal_close_buttons": "PASS — Both modal X buttons (header close) work correctly; modals unmount on click. Verified on 10 supplier modal opens + 1 admin modal open.",
+    "console_errors": "PASS — Only 2 noise errors observed across both sessions, both are pre-login probes 'Failed to load resource: 401' from GET /api/auth/me (expected when no cookie yet). No JS pageerrors, no React errors, no broken-resource errors during modal lifecycle."
+  },
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "SupplierWaves.jsx SummaryModal (line 395) and admin/RegionalWavesTab.jsx FinancialsModal (line 173) read summary.variant_breakdown.length / data.by_variant.length directly. If the backend ever returns null/undefined for these arrays (e.g., older payload, partial migration) it will throw 'Cannot read length of undefined' and crash the modal. Guard with `(summary.variant_breakdown || []).length` and `(data.by_variant || []).length`. Same for summary.destinations.length (line 407).",
+    "SummaryModal (line 365) and FinancialsModal (line 151) close buttons have NO data-testid. Tests currently locate them via '[data-testid=order-summary-modal] .border-b-2 button' / first button-in-header CSS chains. Recommend adding data-testid='order-summary-close' and data-testid='wave-financials-close' for stable selectors.",
+    "RegionalWavesTab.jsx FinCard (line 134) — data-testid is on the wrapping container BUT the individual rows (Revenue/Cost/Margin/RRP/Savings) have NO testids. Asserting specific numeric values requires inner_text scraping. Consider per-stat testids (e.g., data-testid='financials-committed-revenue') to make value-level assertions robust in CI.",
+    "SummaryModal summary-destination testid is reused across N destinations (line 409). When there are multiple destinations, page.locator('[data-testid=summary-destination]') matches N elements. Using `summary-destination-{index}` or `summary-destination-{destination_id}` would prevent ambiguity (low priority).",
+    "Money component (RegionalWavesTab.jsx line 119) uses toLocaleString('en-GB', {minimumFractionDigits:2}) — renders '£1,199.00' (thousands separator). The review-request spec wrote '£1199.00' (no comma). The on-screen value is correct & user-friendly; this is a spec-text formatting note, not a bug. The numeric values themselves are exact."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "skipped (per request)", "frontend": "100% — both modals + close buttons + numeric values verified end-to-end"},
+  "test_credentials": "supplier_test@collective.co / Supplier1234 (intent-supplier → tab-email); founder@thecollectivesavers.co.uk / SaversCollective (intent-consumer → tab-email — auto-redirects to /admin).",
+  "seed_data_creation": "None. No data created or modified. No Stripe payments executed. No waves deleted. Used pre-existing wave_435d6f0388 (supplier wave w/ orders) and wave_b1140b2501 (Midlands LG OLED) read-only.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Both modals are fully working. Supplier login pattern: intent-supplier → tab-email → email-email/email-password → email-submit → redirects to /supplier/onboarding (then nav to /supplier/waves). Admin login pattern: clear cookies first (important — page.context.clear_cookies()), then intent-consumer → tab-email → email-submit → auto-redirects to /admin. Admin Regional Waves tab testid is 'admin-tab-regional' (NOT 'regional-waves-tab' — that is the tab CONTENT panel). Test wave with orders for SummaryModal exploration: wave_435d6f0388. Target wave for FinancialsModal: wave_b1140b2501 (committed £1,199 / £980 / £219 / £1,499 / £300; paid all £0.00).",
+  "rca_of_the_issue": "N/A — no bugs found. Both modals match spec exactly."
+}

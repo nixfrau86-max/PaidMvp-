@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Plus, Trash } from "@phosphor-icons/react";
+import { Plus, Trash, CurrencyGbp, X } from "@phosphor-icons/react";
 import { api } from "../../lib/api";
 import { Th, Td } from "./_shared";
 
@@ -11,6 +11,7 @@ export default function RegionalWavesTab() {
   const [regions, setRegions] = useState([]);
   const [newRegion, setNewRegion] = useState("");
   const [busy, setBusy] = useState(false);
+  const [financials, setFinancials] = useState(null);
 
   const load = useCallback(async () => {
     setBusy(true);
@@ -50,6 +51,12 @@ export default function RegionalWavesTab() {
     if (!window.confirm(`Delete region "${r.name}"?`)) return;
     try { await api.delete(`/admin/regions/${r.region_id}`); toast.success("Region deleted"); load(); }
     catch (e) { toast.error(e?.response?.data?.detail || "Region has waves — deactivate instead"); }
+  };
+  const openFinancials = async (w) => {
+    try {
+      const { data } = await api.get(`/admin/regional-waves/${w.wave_id}/financials`);
+      setFinancials(data);
+    } catch (e) { toast.error(e?.response?.data?.detail || "Failed to load financials"); }
   };
 
   return (
@@ -91,7 +98,10 @@ export default function RegionalWavesTab() {
                     {STATES.map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </Td>
-                <Td><button onClick={() => remove(w)} className="bg-white border-2 border-ink px-2 py-1 text-[10px] shadow-brut-sm hover-brut" data-testid={`admin-wave-delete-${w.wave_id}`}><Trash weight="bold" size={12} /></button></Td>
+                <Td><div className="flex gap-1">
+                  <button onClick={() => openFinancials(w)} className="bg-white border-2 border-ink px-2 py-1 text-[10px] shadow-brut-sm hover-brut inline-flex items-center gap-1" data-testid={`admin-wave-financials-${w.wave_id}`} title="Financials"><CurrencyGbp weight="bold" size={12} /></button>
+                  <button onClick={() => remove(w)} className="bg-white border-2 border-ink px-2 py-1 text-[10px] shadow-brut-sm hover-brut" data-testid={`admin-wave-delete-${w.wave_id}`}><Trash weight="bold" size={12} /></button>
+                </div></Td>
               </tr>
             ))}
             {waves.length === 0 && !busy && (
@@ -99,6 +109,83 @@ export default function RegionalWavesTab() {
             )}
           </tbody>
         </table>
+      </div>
+
+      {financials && <FinancialsModal data={financials} onClose={() => setFinancials(null)} />}
+    </div>
+  );
+}
+
+function Money({ v }) {
+  return <span className="tabular-nums">£{(Number(v) || 0).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>;
+}
+
+function FinStat({ label, value, accent }) {
+  return (
+    <div className="flex justify-between border-b border-[#eee] py-1 font-mono text-sm">
+      <span className="text-[#3A3A3A] uppercase tracking-widest text-[11px]">{label}</span>
+      <span className={`font-bold ${accent || ""}`}><Money v={value} /></span>
+    </div>
+  );
+}
+
+function FinCard({ title, b, testid }) {
+  return (
+    <div className="border-2 border-ink p-3" data-testid={testid}>
+      <div className="font-display text-lg uppercase mb-2">{title} <span className="text-[#3A3A3A] text-sm">· {b.units} units</span></div>
+      <FinStat label="Revenue (wave price)" value={b.revenue} />
+      <FinStat label="Supplier cost" value={b.cost} />
+      <FinStat label="Gross margin" value={b.margin} accent="text-[#00C853]" />
+      <FinStat label="RRP value" value={b.retail_value} />
+      <FinStat label="Savings to customers" value={b.savings} accent="text-[#0021A5]" />
+    </div>
+  );
+}
+
+function FinancialsModal({ data, onClose }) {
+  return (
+    <div className="fixed inset-0 bg-ink/60 z-50 flex items-start justify-center p-4 overflow-auto" data-testid="wave-financials-modal">
+      <div className="w-full max-w-2xl bg-white border-2 border-ink shadow-brut-lg my-6">
+        <div className="border-b-2 border-ink p-4 flex items-center justify-between sticky top-0 bg-white z-10">
+          <h3 className="font-display text-xl uppercase">Financials</h3>
+          <button onClick={onClose} className="p-2 border-2 border-ink"><X weight="bold" /></button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div className="font-mono text-[11px] uppercase tracking-widest text-[#3A3A3A]">{data.title} · {data.supplier_name} · {data.state}</div>
+          <div className="grid sm:grid-cols-2 gap-3">
+            <FinCard title="Committed" b={data.committed} testid="financials-committed" />
+            <FinCard title="Paid" b={data.paid} testid="financials-paid" />
+          </div>
+          <div>
+            <div className="font-display text-lg uppercase mb-1">By option</div>
+            <div className="overflow-x-auto border-2 border-ink">
+              <table className="w-full font-mono text-[11px]">
+                <thead className="bg-ink text-white">
+                  <tr>
+                    <th className="text-left px-2 py-2 uppercase tracking-widest">Option</th>
+                    <th className="text-right px-2 py-2 uppercase tracking-widest">Units</th>
+                    <th className="text-right px-2 py-2 uppercase tracking-widest">Revenue</th>
+                    <th className="text-right px-2 py-2 uppercase tracking-widest">Cost</th>
+                    <th className="text-right px-2 py-2 uppercase tracking-widest">Margin</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.by_variant.length === 0 ? (
+                    <tr><td colSpan={5} className="px-2 py-4 text-center text-[#3A3A3A]">No committed units yet.</td></tr>
+                  ) : data.by_variant.map((v) => (
+                    <tr key={`${v.model}-${v.label}`} className="border-t-2 border-ink">
+                      <td className="px-2 py-2">{v.model} · {v.label}</td>
+                      <td className="px-2 py-2 text-right tabular-nums">{v.units} <span className="text-[#00C853]">({v.paid_units} paid)</span></td>
+                      <td className="px-2 py-2 text-right"><Money v={v.revenue} /></td>
+                      <td className="px-2 py-2 text-right"><Money v={v.cost} /></td>
+                      <td className="px-2 py-2 text-right font-bold text-[#00C853]"><Money v={v.margin} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
