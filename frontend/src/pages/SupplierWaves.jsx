@@ -392,8 +392,8 @@ function SummaryModal({ summary, onClose }) {
           {/* By option */}
           <div>
             <div className="font-display text-lg uppercase mb-1">By option</div>
-            {summary.variant_breakdown.length === 0 ? <div className="font-mono text-xs text-[#3A3A3A]">No committed units yet.</div> :
-              summary.variant_breakdown.map((b) => (
+            {(summary.variant_breakdown || []).length === 0 ? <div className="font-mono text-xs text-[#3A3A3A]">No committed units yet.</div> :
+              (summary.variant_breakdown || []).map((b) => (
                 <div key={`${b.model}-${b.label}`} className="flex justify-between border-b border-[#eee] py-1 font-mono text-sm">
                   <span>{b.model} · {b.label}</span>
                   <span className="font-bold">{b.units} units <span className="text-[#00C853] text-[11px]">({b.paid_units || 0} paid)</span></span>
@@ -404,8 +404,8 @@ function SummaryModal({ summary, onClose }) {
           {/* Per-destination items */}
           <div>
             <div className="font-display text-lg uppercase mb-1">Ship to (per destination)</div>
-            {summary.destinations.length === 0 ? <div className="font-mono text-xs text-[#3A3A3A]">—</div> :
-              summary.destinations.map((d) => (
+            {(summary.destinations || []).length === 0 ? <div className="font-mono text-xs text-[#3A3A3A]">—</div> :
+              (summary.destinations || []).map((d) => (
                 <div key={d.destination} className="border-2 border-ink mb-2 p-2" data-testid="summary-destination">
                   <div className="flex justify-between font-mono text-sm"><span className="font-bold">{d.destination}</span><span className="font-bold">{d.units} units</span></div>
                   <div className="mt-1 pl-2 space-y-0.5">

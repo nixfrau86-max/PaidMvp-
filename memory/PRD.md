@@ -20,6 +20,12 @@ Build a real-time demand aggregation platform that turns fragmented consumer int
 8. Admin role is restricted to `ADMIN_EMAILS` env allowlist.
 
 ## What's implemented (latest — 2026-06-14)
+### 📋 Richer supplier Order Summary + admin Wave Financials (DONE)
+- **Supplier Order Summary** (`GET /supplier/waves/{id}/order-summary`, `SummaryModal` in `SupplierWaves.jsx`) now shows: a **payment-status breakdown** (paid / authorized / reserved units + order counts), **per-destination item detail** (which product·option·qty ships to each garage/address, with fitting slots), and an **Orders & customers** table — per-order customer **name + email + phone**, items, destination/fitting, and a payment badge. Variant breakdown now also shows paid units.
+- **Admin Wave Financials** (`GET /admin/regional-waves/{id}/financials`, admin-only; new `FinancialsModal` + `£` button per row in `RegionalWavesTab.jsx`): **Committed vs Paid** cards (Revenue = wave price × units, Supplier cost, Gross margin, RRP value, Savings to customers) + a per-variant table. Supplier cost is sourced from the wave doc (never exposed to suppliers).
+- **Tests**: `tests/test_supplier_summary_financials.py` (e2e: create wave → consumer joins → asserts enriched summary fields + exact financial maths + admin-only guard). Frontend verified by testing agent **iteration_13: 100%** (both modals, exact numbers for Midlands LG wave, close + zero console errors). Added defensive `|| []` guards on the new array reads.
+
+## What's implemented (latest — 2026-06-14)
 ### ♻️ Auto wave engine expanded to all categories (automatic completion → respawn) (DONE)
 The auto-respawn engine was already category-agnostic, but it only fired when an **admin manually** set a wave to `completed` — so respawn never happened on its own, for any category. Added an automatic-completion worker so the engine is now hands-off across **every product category** (manual admin completion still works too).
 - **New worker** `auto_complete_due_waves(db, manager)` (`routes/waves.py`), symmetric with `expire_overdue_waves`: any **`activated`** wave whose **`deadline`** has passed (and not yet respawned) auto-transitions to `completed`, then runs `complete_wave_and_respawn` — captured units recorded as sold, stranded reservations carried into a fresh `· Round N` follow-on for the leftover stock (live if inside the Mon–Fri 08:30–16:30 London window, otherwise scheduled). Wired into the 60s startup loop in `server.py` (alongside the scheduled-respawn, payment-sweep and expiry workers).

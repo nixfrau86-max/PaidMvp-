@@ -170,9 +170,9 @@ function FinancialsModal({ data, onClose }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {data.by_variant.length === 0 ? (
+                  {(data.by_variant || []).length === 0 ? (
                     <tr><td colSpan={5} className="px-2 py-4 text-center text-[#3A3A3A]">No committed units yet.</td></tr>
-                  ) : data.by_variant.map((v) => (
+                  ) : (data.by_variant || []).map((v) => (
                     <tr key={`${v.model}-${v.label}`} className="border-t-2 border-ink">
                       <td className="px-2 py-2">{v.model} · {v.label}</td>
                       <td className="px-2 py-2 text-right tabular-nums">{v.units} <span className="text-[#00C853]">({v.paid_units} paid)</span></td>
