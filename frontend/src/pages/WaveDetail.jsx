@@ -6,7 +6,7 @@ import Navbar from "../components/Navbar";
 import { api, wsUrl } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { track } from "../lib/firebase";
-import { Lightning, ArrowRight, ShieldCheck, MapPin, Minus, Plus, CheckCircle, ArrowsClockwise, ArrowLeft } from "@phosphor-icons/react";
+import { Lightning, ArrowRight, ShieldCheck, MapPin, Minus, Plus, CheckCircle, ArrowsClockwise, ArrowLeft, Info } from "@phosphor-icons/react";
 
 const STATE_LABEL = {
   open: "Open — accepting members",
@@ -258,6 +258,10 @@ export default function WaveDetail() {
                   <p className="mt-3 text-xs text-slate-400">
                     Not sure of your size? It's printed on your tyre sidewall, e.g. <span className="font-semibold text-slate-600">225/65 R18</span> (width / profile / rim).
                   </p>
+                  <div className="mt-3 flex items-start gap-2 rounded-xl bg-amber-50 border border-amber-100 px-3.5 py-2.5 text-xs font-medium text-amber-800" data-testid="fitting-charge-notice">
+                    <Info weight="fill" size={15} className="mt-0.5 shrink-0 text-amber-500" />
+                    <span>Your wave price covers the <span className="font-semibold">tyres only</span>. The fitting service is arranged with and <span className="font-semibold">charged separately by the garage</span> on the day.</span>
+                  </div>
 
                   {garageId && (
                     <div className="mt-5 border-t border-slate-100 pt-5" data-testid="slot-picker">

@@ -879,6 +879,22 @@ def build_router(deps: Dict[str, Any]) -> APIRouter:
 
         # Derive a human fitting-slot label + validate stock (module helpers)
         fitting_label = _derive_fitting_label(w["category"], payload.fitting_slot_iso, payload.fitting_slot_label)
+
+        # One customer per garage+slot: reject if another member already holds this
+        # fitting slot at this garage (active reservation) or has a confirmed booking.
+        if w["category"] == "tyres" and payload.fitting_slot_iso:
+            clash = await db.wave_participations.find_one(
+                {"garage_id": payload.garage_id, "fitting_slot_iso": payload.fitting_slot_iso,
+                 "status": {"$in": ACTIVE_PART_STATUSES}, "user_id": {"$ne": user["user_id"]}},
+                {"_id": 0},
+            )
+            booking_clash = await db.bookings.find_one(
+                {"garage_id": payload.garage_id, "slot_iso": payload.fitting_slot_iso, "status": "confirmed"},
+                {"_id": 0},
+            )
+            if clash or booking_clash:
+                raise HTTPException(status_code=409, detail="That fitting slot was just taken at this garage — please pick another.")
+
         items, subtotal, units, inc_ops, array_filters = _validate_join_items(w, payload.items)
 
         if committed + units > ideal:

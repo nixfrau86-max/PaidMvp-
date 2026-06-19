@@ -19,6 +19,12 @@ Build a real-time demand aggregation platform that turns fragmented consumer int
 7. Payment methods (admin-configurable fees + recommended flag + on/off): Open Banking (+£1, recommended), Apple Pay (+£3), Google Pay (+£3), Card (+£3), Bank Transfer (+£1.50). Wallet rails route through Stripe; OB/Bank Transfer mocked until TrueLayer/Faster Payments are wired.
 8. Admin role is restricted to `ADMIN_EMAILS` env allowlist.
 
+## What's implemented (latest — 2026-06-19)
+### 🔧 Fitting-charge notice + one-customer-per-garage-slot (DONE)
+- **Garage notice** (`WaveDetail.jsx`, `data-testid=fitting-charge-notice`): when a member is choosing an approved fitting garage (tyres), an amber notice now explains the wave price covers **tyres only** and that **fitting is arranged with and charged separately by the garage** on the day. Visually confirmed.
+- **No double-booking a garage+slot:** the slot list (`GET /garages/{id}/slots`, `server.py`) now treats a slot as taken if it has a confirmed legacy booking **OR** an active wave reservation (reserved/authorized/captured) — so a held slot disappears from the picker even before payment. `join_wave` (`routes/waves.py`) also rejects a join (HTTP 409) if another member already holds that garage+slot, preventing over-allocation to one garage/time. Self re-joins/merges are excluded so a member doesn't clash with their own reservation.
+- **Tests**: `tests/test_fitting_slot_uniqueness.py` (slot vanishes from list after first joiner; second joiner → 409). Full new-feature suite green (6 passed).
+
 ## What's implemented (latest — 2026-06-14)
 ### 📋 Richer supplier Order Summary + admin Wave Financials (DONE)
 - **Supplier Order Summary** (`GET /supplier/waves/{id}/order-summary`, `SummaryModal` in `SupplierWaves.jsx`) now shows: a **payment-status breakdown** (paid / authorized / reserved units + order counts), **per-destination item detail** (which product·option·qty ships to each garage/address, with fitting slots), and an **Orders & customers** table — per-order customer **name + email + phone**, items, destination/fitting, and a payment badge. Variant breakdown now also shows paid units.

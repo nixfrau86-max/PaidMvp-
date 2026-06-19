@@ -1641,11 +1641,19 @@ async def list_garage_slots(garage_id: str, days: int = 14, min_lead_days: int =
     if not g:
         raise HTTPException(status_code=404, detail="Garage not found")
     av = await db.garage_availability.find_one({"garage_id": garage_id}, {"_id": 0}) or DEFAULT_AVAILABILITY
-    # Booked slots in next `days`
+    # Slots already taken: confirmed legacy bookings PLUS active wave reservations
+    # (reserved/authorized/captured) so we never offer one garage+slot to two
+    # customers — even before payment is captured.
     booked_docs = await db.bookings.find(
         {"garage_id": garage_id, "status": "confirmed"}, {"_id": 0, "slot_iso": 1}
     ).to_list(2000)
     booked = {b["slot_iso"] for b in booked_docs}
+    held_docs = await db.wave_participations.find(
+        {"garage_id": garage_id, "fitting_slot_iso": {"$ne": None},
+         "status": {"$in": ["reserved", "authorized", "captured"]}},
+        {"_id": 0, "fitting_slot_iso": 1},
+    ).to_list(5000)
+    booked |= {h["fitting_slot_iso"] for h in held_docs if h.get("fitting_slot_iso")}
 
     today = datetime.now(timezone.utc).date()
     start = max(0, int(min_lead_days))
