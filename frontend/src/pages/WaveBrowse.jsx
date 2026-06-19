@@ -37,6 +37,12 @@ function savingsBand(wave) {
 const selectCls =
   "w-full appearance-none rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-900 outline-none transition-colors focus:border-[#FF5400] focus:ring-2 focus:ring-[#FF5400]/15";
 
+// Stable motion config (avoids recreating objects on every render)
+const CARD_HOVER = { y: -4 };
+const CARD_SPRING = { type: "spring", stiffness: 300, damping: 24 };
+const BAR_INITIAL = { width: 0 };
+const BAR_SPRING = { type: "spring", bounce: 0, duration: 1 };
+
 export default function WaveBrowse() {
   const [waves, setWaves] = useState([]);
   const [regions, setRegions] = useState([]);
@@ -54,8 +60,8 @@ export default function WaveBrowse() {
     try {
       const { data } = await api.get("/waves" + (search.toString() ? `?${search}` : ""));
       setWaves(data);
-    } catch (err) {
-      console.error("Failed to load waves", err);
+    } catch {
+      /* keep the current list on a transient fetch error */
     } finally {
       setLoading(false);
     }
@@ -67,7 +73,7 @@ export default function WaveBrowse() {
         const [r, c] = await Promise.all([api.get("/regions"), api.get("/wave-categories")]);
         setRegions(r.data);
         setCategories(c.data);
-      } catch (err) { console.warn("filters load failed", err); }
+      } catch { /* non-critical: filters stay empty */ }
     })();
   }, []);
 
@@ -88,9 +94,9 @@ export default function WaveBrowse() {
               : w
           ));
         }
-      } catch (err) { console.warn("Bad waves WS payload", err); }
+      } catch { /* ignore malformed payload */ }
     };
-    return () => { try { ws.close(); } catch (err) { console.warn("WS close", err); } };
+    return () => { try { ws.close(); } catch { /* already closed */ } };
   }, []);
 
   const totalMembers = waves.reduce((a, w) => a + (w.participants_count || 0), 0);
@@ -177,7 +183,7 @@ function WaveCard({ w }) {
   const state = STATE_STYLE[w.state] || STATE_STYLE.open;
   const variantCount = (w.products || []).reduce((a, p) => a + (p.variants || []).length, 0);
   return (
-    <motion.div whileHover={{ y: -4 }} transition={{ type: "spring", stiffness: 300, damping: 24 }}>
+    <motion.div whileHover={CARD_HOVER} transition={CARD_SPRING}>
       <Link
         to={`/wave/${w.wave_id}`}
         className="group flex h-full flex-col rounded-2xl border border-slate-100 bg-white p-4 shadow-[0_4px_20px_rgb(0,0,0,0.03)] transition-shadow duration-300 hover:shadow-[0_16px_44px_rgb(0,0,0,0.10)]"
@@ -222,7 +228,7 @@ function WaveCard({ w }) {
               <span className="text-[#FF5400] tabular-nums">{pct.toFixed(0)}%</span>
             </div>
             <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
-              <motion.div className="h-full rounded-full bg-[#FF5400]" initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ type: "spring", bounce: 0, duration: 1 }} />
+              <motion.div className="h-full rounded-full bg-[#FF5400]" initial={BAR_INITIAL} animate={{ width: `${pct}%` }} transition={BAR_SPRING} />
             </div>
             <div className="mt-3.5 flex items-center justify-between text-xs font-semibold">
               <span className="text-slate-400">{variantCount} option{variantCount === 1 ? "" : "s"}</span>

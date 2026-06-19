@@ -18,6 +18,13 @@ const STATE_LABEL = {
   expired: "Expired",
 };
 
+// Stable motion config (avoids recreating objects each render)
+const BAR_INITIAL = { width: 0 };
+const BAR_SPRING = { type: "spring", bounce: 0, duration: 1 };
+const PULSE_ANIM = { scale: [1, 1.015, 1] };
+const PULSE_REST = {};
+const PULSE_TRANSITION = { duration: 0.5 };
+
 export default function WaveDetail() {
   const { id } = useParams();
   const { user } = useAuth();
@@ -43,8 +50,7 @@ export default function WaveDetail() {
       const { data } = await api.get(`/waves/${id}`);
       setW(data);
       if (data.products?.length) setSelProduct((prev) => prev || data.products[0].product_id);
-    } catch (err) {
-      console.error("wave fetch failed", err);
+    } catch {
       toast.error("Wave not found");
       navigate("/waves");
     }
@@ -55,7 +61,7 @@ export default function WaveDetail() {
 
   useEffect(() => {
     if (w?.category === "tyres") {
-      api.get("/garages").then(({ data }) => setGarages(data)).catch((err) => console.warn("garages load failed", err));
+      api.get("/garages").then(({ data }) => setGarages(data)).catch(() => setGarages([]));
     }
   }, [w?.category]);
 
@@ -65,7 +71,7 @@ export default function WaveDetail() {
     setSlotsLoading(true);
     api.get(`/garages/${garageId}/slots?days=12&min_lead_days=2`)
       .then(({ data }) => setSlotDays((data.days || []).filter((d) => d.slots.length > 0)))
-      .catch((err) => { console.warn("slots load failed", err); setSlotDays([]); })
+      .catch(() => setSlotDays([]))
       .finally(() => setSlotsLoading(false));
   }, [garageId, w?.category]);
 
@@ -80,9 +86,9 @@ export default function WaveDetail() {
           setPulse(true);
           setTimeout(() => setPulse(false), 600);
         }
-      } catch (err) { console.warn("Bad wave WS payload", err); }
+      } catch { /* ignore malformed payload */ }
     };
-    return () => { try { ws.close(); } catch (err) { console.warn("WS close", err); } };
+    return () => { try { ws.close(); } catch { /* already closed */ } };
   }, [w?.wave_id]);
 
   const product = useMemo(() => (w?.products || []).find((p) => p.product_id === selProduct), [w, selProduct]);
@@ -312,7 +318,7 @@ export default function WaveDetail() {
 
           {/* RIGHT: sticky rail */}
           <div className="lg:sticky lg:top-24 self-start">
-            <motion.div animate={pulse ? { scale: [1, 1.015, 1] } : {}} transition={{ duration: 0.5 }}
+            <motion.div animate={pulse ? PULSE_ANIM : PULSE_REST} transition={PULSE_TRANSITION}
               className={`rounded-3xl border bg-white p-6 sm:p-8 shadow-[0_12px_40px_rgb(0,0,0,0.06)] transition-colors ${pulse ? "border-[#FF5400]" : "border-slate-100"}`}>
               <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#FF5400] mb-3">
                 <span className="relative flex h-2 w-2">
@@ -327,7 +333,7 @@ export default function WaveDetail() {
                 <span className="ml-auto font-outfit text-2xl font-bold tabular-nums text-[#FF5400]">{pct.toFixed(0)}%</span>
               </div>
               <div className="mt-4 h-3 w-full overflow-hidden rounded-full bg-slate-100">
-                <motion.div className="h-full rounded-full bg-[#FF5400]" initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ type: "spring", bounce: 0, duration: 1 }} />
+                <motion.div className="h-full rounded-full bg-[#FF5400]" initial={BAR_INITIAL} animate={{ width: `${pct}%` }} transition={BAR_SPRING} />
               </div>
               <div className="mt-3 text-xs font-medium text-slate-500" data-testid="wave-state">
                 {STATE_LABEL[w.state] || w.state} · activates at {w.min_activation} units

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import Navbar from "../components/Navbar";
@@ -122,6 +122,7 @@ function AvailabilityEditor({ av, onSaved }) {
   const [capacity, setCapacity] = useState(av.slot_capacity || 1);
   const [newDate, setNewDate] = useState("");
   const [saving, setSaving] = useState(false);
+  const sortedOverrides = useMemo(() => Object.entries(overrides).sort(), [overrides]);
 
   const addRange = (d) => setWeekly(w => ({ ...w, [d]: [...(w[d] || []), { start: "09:00", end: "17:00" }] }));
   const updateRange = (d, idx, field, val) => setWeekly(w => ({ ...w, [d]: w[d].map((r, i) => i === idx ? { ...r, [field]: val } : r) }));
@@ -169,7 +170,7 @@ function AvailabilityEditor({ av, onSaved }) {
               ) : (
                 <div className="space-y-2">
                   {(weekly[d.id] || []).map((r, i) => (
-                    <div key={i} className="flex items-center gap-2">
+                    <div key={`${d.id}-${r.start}-${r.end}-${i}`} className="flex items-center gap-2">
                       <input type="time" value={r.start} onChange={(e) => updateRange(d.id, i, "start", e.target.value)} className="border-2 border-ink p-1.5 font-mono text-xs" data-testid={`d-${d.id}-${i}-start`} />
                       <span className="font-mono text-xs">–</span>
                       <input type="time" value={r.end} onChange={(e) => updateRange(d.id, i, "end", e.target.value)} className="border-2 border-ink p-1.5 font-mono text-xs" data-testid={`d-${d.id}-${i}-end`} />
@@ -213,7 +214,7 @@ function AvailabilityEditor({ av, onSaved }) {
           <div className="border-2 border-dashed border-ink p-4 text-center font-mono text-[10px] uppercase tracking-widest text-[#3A3A3A]">No overrides</div>
         ) : (
           <div className="space-y-2">
-            {Object.entries(overrides).sort().map(([d, ov]) => (
+            {sortedOverrides.map(([d, ov]) => (
               <div key={d} className="border-2 border-ink p-3">
                 <div className="flex items-center justify-between mb-2">
                   <div className="font-mono text-xs font-bold">{d}</div>
@@ -234,7 +235,7 @@ function AvailabilityEditor({ av, onSaved }) {
                 {!ov.closed && (ov.ranges || []).length > 0 && (
                   <div className="space-y-2">
                     {ov.ranges.map((r, i) => (
-                      <div key={i} className="flex items-center gap-2">
+                      <div key={`${d}-${r.start}-${r.end}-${i}`} className="flex items-center gap-2">
                         <input type="time" value={r.start} onChange={(e) => setOverrides(o => ({ ...o, [d]: { ...o[d], ranges: o[d].ranges.map((rr, j) => j === i ? { ...rr, start: e.target.value } : rr) } }))} className="border-2 border-ink p-1.5 font-mono text-xs" />
                         <span className="font-mono text-xs">–</span>
                         <input type="time" value={r.end} onChange={(e) => setOverrides(o => ({ ...o, [d]: { ...o[d], ranges: o[d].ranges.map((rr, j) => j === i ? { ...rr, end: e.target.value } : rr) } }))} className="border-2 border-ink p-1.5 font-mono text-xs" />
@@ -375,6 +376,22 @@ function Stat({ label, v, icon: Icon, c }) {
   );
 }
 
+const GOOGLE_STEPS = [
+  "Click ‘Add to Google Calendar’ above, or",
+  "Open calendar.google.com → Other calendars → + → From URL",
+  "Paste the link and click Add calendar",
+];
+const APPLE_STEPS = [
+  "Click ‘Open in Apple Calendar’ on a Mac, or",
+  "Calendar → File → New Calendar Subscription",
+  "Paste the link → Subscribe → set auto-refresh",
+];
+const OUTLOOK_STEPS = [
+  "outlook.live.com → Calendar → Add calendar",
+  "Choose ‘Subscribe from web’",
+  "Paste the link → Import",
+];
+
 function CalendarSync() {
   const [info, setInfo] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -463,31 +480,19 @@ function CalendarSync() {
         <HowTo
           icon={GoogleLogo}
           title="Google Calendar"
-          steps={[
-            "Click ‘Add to Google Calendar’ above, or",
-            "Open calendar.google.com → Other calendars → + → From URL",
-            "Paste the link and click Add calendar",
-          ]}
+          steps={GOOGLE_STEPS}
           testId="howto-google"
         />
         <HowTo
           icon={AppleLogo}
           title="Apple Calendar (Mac)"
-          steps={[
-            "Click ‘Open in Apple Calendar’ on a Mac, or",
-            "Calendar → File → New Calendar Subscription",
-            "Paste the link → Subscribe → set auto-refresh",
-          ]}
+          steps={APPLE_STEPS}
           testId="howto-apple"
         />
         <HowTo
           icon={MicrosoftOutlookLogo}
           title="Outlook"
-          steps={[
-            "outlook.live.com → Calendar → Add calendar",
-            "Choose ‘Subscribe from web’",
-            "Paste the link → Import",
-          ]}
+          steps={OUTLOOK_STEPS}
           testId="howto-outlook"
         />
       </div>
@@ -503,7 +508,7 @@ function HowTo({ icon: Icon, title, steps, testId }) {
         <div className="font-mono text-xs font-bold uppercase tracking-widest">{title}</div>
       </div>
       <ol className="space-y-1.5 list-decimal pl-4 text-xs text-[#3A3A3A]">
-        {steps.map((s, i) => <li key={i}>{s}</li>)}
+        {steps.map((s) => <li key={s}>{s}</li>)}
       </ol>
     </div>
   );

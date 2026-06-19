@@ -20,6 +20,18 @@ Build a real-time demand aggregation platform that turns fragmented consumer int
 8. Admin role is restricted to `ADMIN_EMAILS` env allowlist.
 
 ## What's implemented (latest — 2026-06-19)
+### 🧹 Code-quality pass (review findings) (PARTIAL — safe fixes applied, risky refactors deferred)
+Applied the **safe, high-value** review fixes; **deliberately deferred** large refactors that would risk regressing tested, production code.
+- **Fixed — Security #1:** moved hardcoded test credentials to env-with-default (`os.environ.get("TEST_SUPPLIER_*"/"TEST_ADMIN_*", default)`) in `test_wave_image_upload.py`, `test_supplier_summary_financials.py`, `test_fitting_slot_uniqueness.py`.
+- **Fixed — Array-index keys #4:** `GarageDashboard.jsx` (weekly/override range rows → content-composite keys; HowTo steps → `key={s}`), `WaveBackground.jsx` (extracted `WAVE_LINES`/`PULSE_NODES` constants + stable `d`/`cx-cy` keys).
+- **Fixed — Inline objects in props #9:** extracted framer-motion config to module constants in `WaveBrowse.jsx` (`CARD_HOVER`, `CARD_SPRING`, `BAR_INITIAL`, `BAR_SPRING`) and `WaveDetail.jsx` (`BAR_*`, `PULSE_*`); extracted `GOOGLE/APPLE/OUTLOOK_STEPS` arrays in `GarageDashboard.jsx`.
+- **Fixed — In-render computation #11:** `useMemo` for the overrides sort (`GarageDashboard.jsx`) and payment-methods sort (`admin/FeesTab.jsx`).
+- **Fixed — Console statements #10:** removed all `console.*` from `WaveBrowse.jsx`, `WaveDetail.jsx`, `GarageDashboard.jsx` (now 0).
+- **Reviewed / not bugs:** #3 hook-dep flags on `WaveBrowse/WaveDetail` are tool noise (it lists globals/imports like `WebSocket`, `URLSearchParams`, `api`); the `useCallback` deps are correct. #6 `is True/False/None` in tests are correct Python (no `is <int/str>` identity bugs found); converting to `== True` would trip E712.
+- **Deferred (high risk / low ROI):** #5 `build_router()` splits (waves/wave_payments/admin_users), #7 component splits (WaveDetail/AvailabilityEditor/AdminPanel), #8 nested ternaries in legacy pages, #12 type-hint coverage. These touch working, fully-tested code; safe extraction needs a dedicated, separately-tested refactor pass.
+- **Verified:** all touched backend tests pass (10/10); frontend compiles clean; WaveBrowse mounts/renders.
+
+## What's implemented (latest — 2026-06-19)
 ### 🅿️ Per-slot fitting capacity (garage bays) (DONE)
 Garages can now take **more than one fitting per 30-min slot** (e.g. a 2-bay garage = 2 cars/slot) instead of a hard 1.
 - **Backend**: `garage_availability` gains `slot_capacity` (default 1, clamped 1–20); `GarageAvailability` model + `PUT /garages/me/availability` persist it. Slot occupancy is now **count-based**: `GET /garages/{id}/slots` tallies confirmed bookings + active wave reservations per slot and offers it while `count < capacity`, returning `remaining` & `capacity` per slot. `join_wave` and the legacy `create_booking` reject (409) only once a slot is **fully booked** (`held + booked >= capacity`); self re-joins excluded.

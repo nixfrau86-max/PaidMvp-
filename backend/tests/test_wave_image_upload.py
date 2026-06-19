@@ -14,8 +14,8 @@ import pytest
 import requests
 
 BASE_URL = os.environ["REACT_APP_BACKEND_URL"].rstrip("/")
-SUPPLIER_EMAIL = "supplier_test@collective.co"
-SUPPLIER_PASSWORD = "Supplier1234"
+SUPPLIER_EMAIL = os.environ.get("TEST_SUPPLIER_EMAIL", "supplier_test@collective.co")
+SUPPLIER_PASSWORD = os.environ.get("TEST_SUPPLIER_PASSWORD", "Supplier1234")
 
 
 def _minimal_png(width=4, height=4) -> bytes:

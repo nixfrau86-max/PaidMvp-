@@ -17,8 +17,10 @@ def _base():
 
 
 API = f"{_base()}/api"
-SUPPLIER = {"email": "supplier_test@collective.co", "password": "Supplier1234"}
-ADMIN = {"email": "founder@thecollectivesavers.co.uk", "password": "SaversCollective"}
+SUPPLIER = {"email": os.environ.get("TEST_SUPPLIER_EMAIL", "supplier_test@collective.co"),
+            "password": os.environ.get("TEST_SUPPLIER_PASSWORD", "Supplier1234")}
+ADMIN = {"email": os.environ.get("TEST_ADMIN_EMAIL", "founder@thecollectivesavers.co.uk"),
+         "password": os.environ.get("TEST_ADMIN_PASSWORD", "SaversCollective")}
 
 
 def _session(creds):

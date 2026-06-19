@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Sliders, Star } from "@phosphor-icons/react";
 import { api } from "../../lib/api";
@@ -14,6 +14,11 @@ export default function FeesTab() {
   };
 
   useEffect(() => { load(); }, []);
+
+  const sortedMethods = useMemo(
+    () => (config?.payment_methods ? [...config.payment_methods].sort((a, b) => a.order - b.order) : []),
+    [config?.payment_methods],
+  );
 
   if (!config) {
     return <div className="border-2 border-ink bg-white shadow-brut p-6 font-mono uppercase tracking-widest text-sm">Loading fees…</div>;
@@ -117,7 +122,7 @@ export default function FeesTab() {
         </p>
 
         <div className="space-y-3">
-          {[...config.payment_methods].sort((a, b) => a.order - b.order).map((m) => (
+          {sortedMethods.map((m) => (
             <div key={m.id} className="border-2 border-ink bg-[#FAFAFA] p-4 grid grid-cols-1 sm:grid-cols-12 gap-3 items-center" data-testid={`fees-method-${m.id}`}>
               <div className="sm:col-span-3 min-w-0">
                 <div className="font-bold uppercase tracking-wider text-sm">{m.label}</div>
