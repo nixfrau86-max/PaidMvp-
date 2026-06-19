@@ -281,12 +281,13 @@ export default function WaveDetail() {
                               <div className="flex flex-wrap gap-2">
                                 {d.slots.map((s) => {
                                   const isSel = selectedSlot?.iso === s.slot_iso;
+                                  const showLeft = (s.capacity || 1) > 1 && s.remaining != null;
                                   return (
                                     <button key={s.slot_iso} type="button"
                                       onClick={() => setSelectedSlot({ iso: s.slot_iso, label: `${new Date(d.date).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })} ${s.label}`, date: d.date })}
                                       className={`rounded-lg border px-3 py-1.5 text-xs font-semibold tabular-nums transition-colors ${isSel ? "border-[#FF5400] bg-[#FF5400] text-white" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"}`}
                                       data-testid={`slot-${s.slot_iso}`}>
-                                      {s.label}
+                                      {s.label}{showLeft && <span className={`ml-1 text-[10px] font-medium ${isSel ? "text-white/80" : "text-emerald-600"}`}>· {s.remaining} left</span>}
                                     </button>
                                   );
                                 })}

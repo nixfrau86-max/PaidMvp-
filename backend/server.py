@@ -225,10 +225,11 @@ class DayOverride(BaseModel):
 
 
 class GarageAvailability(BaseModel):
-    """Stored as { garage_id, weekly: {mon: [{start,end},...]}, overrides: {"YYYY-MM-DD": {closed, ranges}}, slot_minutes }"""
+    """Stored as { garage_id, weekly: {mon: [{start,end},...]}, overrides: {"YYYY-MM-DD": {closed, ranges}}, slot_minutes, slot_capacity }"""
     weekly: Dict[str, List[TimeRange]] = Field(default_factory=dict)
     overrides: Dict[str, DayOverride] = Field(default_factory=dict)
     slot_minutes: int = 30
+    slot_capacity: int = 1  # how many cars/bays can be fitted per slot
 
 
 class BookingCreateRequest(BaseModel):
@@ -1548,6 +1549,7 @@ DEFAULT_AVAILABILITY = {
     "weekly": {d: ([{"start": "09:00", "end": "17:00"}] if d not in ("sat", "sun") else []) for d in WEEKDAYS},
     "overrides": {},
     "slot_minutes": 30,
+    "slot_capacity": 1,
 }
 
 
@@ -1586,6 +1588,7 @@ async def garage_set_availability(payload: GarageAvailability, user: dict = Depe
         "weekly": weekly,
         "overrides": overrides,
         "slot_minutes": int(payload.slot_minutes or 30),
+        "slot_capacity": max(1, min(20, int(payload.slot_capacity or 1))),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.garage_availability.update_one(
@@ -1595,8 +1598,11 @@ async def garage_set_availability(payload: GarageAvailability, user: dict = Depe
     return doc
 
 
-def _generate_slots_for_date(date_str: str, av: dict, booked: set) -> List[dict]:
-    """Generate available slot start times for a given YYYY-MM-DD."""
+def _generate_slots_for_date(date_str: str, av: dict, taken_counts: dict) -> List[dict]:
+    """Generate available slot start times for a given YYYY-MM-DD.
+
+    `taken_counts` maps slot_iso -> number of cars already booked/held; a slot is
+    offered while that count is below the garage's per-slot capacity (bays)."""
     try:
         dt = datetime.strptime(date_str, "%Y-%m-%d")
     except Exception:
@@ -1605,6 +1611,7 @@ def _generate_slots_for_date(date_str: str, av: dict, booked: set) -> List[dict]
     overrides = (av or {}).get("overrides", {}) or {}
     weekly = (av or {}).get("weekly", {}) or {}
     slot_min = int((av or {}).get("slot_minutes", 30))
+    cap = max(1, int((av or {}).get("slot_capacity", 1) or 1))
 
     ov = overrides.get(date_str)
     if ov:
@@ -1625,8 +1632,10 @@ def _generate_slots_for_date(date_str: str, av: dict, booked: set) -> List[dict]
         end_at = dt.replace(hour=eh, minute=em, second=0, microsecond=0, tzinfo=timezone.utc)
         while cursor + timedelta(minutes=slot_min) <= end_at:
             iso = cursor.isoformat()
-            if iso not in booked:
-                slots.append({"slot_iso": iso, "label": cursor.strftime("%H:%M")})
+            used = taken_counts.get(iso, 0)
+            if used < cap:
+                slots.append({"slot_iso": iso, "label": cursor.strftime("%H:%M"),
+                              "remaining": cap - used, "capacity": cap})
             cursor = cursor + timedelta(minutes=slot_min)
     return slots
 
@@ -1641,19 +1650,24 @@ async def list_garage_slots(garage_id: str, days: int = 14, min_lead_days: int =
     if not g:
         raise HTTPException(status_code=404, detail="Garage not found")
     av = await db.garage_availability.find_one({"garage_id": garage_id}, {"_id": 0}) or DEFAULT_AVAILABILITY
-    # Slots already taken: confirmed legacy bookings PLUS active wave reservations
-    # (reserved/authorized/captured) so we never offer one garage+slot to two
-    # customers — even before payment is captured.
+    # Per-slot occupancy: count confirmed legacy bookings + active wave
+    # reservations (reserved/authorized/captured) per slot_iso, so a slot stays
+    # bookable until it hits the garage's per-slot capacity (bays).
     booked_docs = await db.bookings.find(
         {"garage_id": garage_id, "status": "confirmed"}, {"_id": 0, "slot_iso": 1}
-    ).to_list(2000)
-    booked = {b["slot_iso"] for b in booked_docs}
+    ).to_list(5000)
+    taken_counts: Dict[str, int] = {}
+    for b in booked_docs:
+        taken_counts[b["slot_iso"]] = taken_counts.get(b["slot_iso"], 0) + 1
     held_docs = await db.wave_participations.find(
         {"garage_id": garage_id, "fitting_slot_iso": {"$ne": None},
          "status": {"$in": ["reserved", "authorized", "captured"]}},
         {"_id": 0, "fitting_slot_iso": 1},
     ).to_list(5000)
-    booked |= {h["fitting_slot_iso"] for h in held_docs if h.get("fitting_slot_iso")}
+    for h in held_docs:
+        iso = h.get("fitting_slot_iso")
+        if iso:
+            taken_counts[iso] = taken_counts.get(iso, 0) + 1
 
     today = datetime.now(timezone.utc).date()
     start = max(0, int(min_lead_days))
@@ -1661,7 +1675,7 @@ async def list_garage_slots(garage_id: str, days: int = 14, min_lead_days: int =
     for i in range(start, start + max(1, min(days, 30))):
         d = today + timedelta(days=i)
         date_str = d.isoformat()
-        slots = _generate_slots_for_date(date_str, av, booked)
+        slots = _generate_slots_for_date(date_str, av, taken_counts)
         # Filter out past slots for today
         if i == 0:
             now_iso = datetime.now(timezone.utc).isoformat()
@@ -1686,12 +1700,16 @@ async def create_booking(payload: BookingCreateRequest, user: dict = Depends(get
     garage = await db.garages.find_one({"garage_id": payload.garage_id, "is_active": True}, {"_id": 0})
     if not garage:
         raise HTTPException(status_code=404, detail="Garage not found")
-    # Check slot is not already booked
-    clash = await db.bookings.find_one(
-        {"garage_id": payload.garage_id, "slot_iso": payload.slot_iso, "status": "confirmed"}, {"_id": 0}
+    av = await db.garage_availability.find_one({"garage_id": payload.garage_id}, {"_id": 0})
+    slot_min = int((av or {}).get("slot_minutes", 30))
+    cap = max(1, int((av or {}).get("slot_capacity", 1) or 1))
+    # Slot is bookable until it reaches the garage's per-slot capacity (bays)
+    taken = await db.bookings.count_documents(
+        {"garage_id": payload.garage_id, "slot_iso": payload.slot_iso, "status": "confirmed",
+         "user_id": {"$ne": user["user_id"]}}
     )
-    if clash:
-        raise HTTPException(status_code=409, detail="That slot was just taken — please pick another.")
+    if taken >= cap:
+        raise HTTPException(status_code=409, detail="That slot is fully booked — please pick another.")
     # Replace existing booking for this wave by this user
     existing = await db.bookings.find_one(
         {"vpp_id": payload.vpp_id, "user_id": user["user_id"]}, {"_id": 0}
@@ -1701,8 +1719,6 @@ async def create_booking(payload: BookingCreateRequest, user: dict = Depends(get
             {"booking_id": existing["booking_id"]},
             {"$set": {"status": "cancelled"}}
         )
-    av = await db.garage_availability.find_one({"garage_id": payload.garage_id}, {"_id": 0})
-    slot_min = int((av or {}).get("slot_minutes", 30))
     booking = Booking(
         vpp_id=payload.vpp_id,
         user_id=user["user_id"],

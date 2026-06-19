@@ -20,6 +20,13 @@ Build a real-time demand aggregation platform that turns fragmented consumer int
 8. Admin role is restricted to `ADMIN_EMAILS` env allowlist.
 
 ## What's implemented (latest — 2026-06-19)
+### 🅿️ Per-slot fitting capacity (garage bays) (DONE)
+Garages can now take **more than one fitting per 30-min slot** (e.g. a 2-bay garage = 2 cars/slot) instead of a hard 1.
+- **Backend**: `garage_availability` gains `slot_capacity` (default 1, clamped 1–20); `GarageAvailability` model + `PUT /garages/me/availability` persist it. Slot occupancy is now **count-based**: `GET /garages/{id}/slots` tallies confirmed bookings + active wave reservations per slot and offers it while `count < capacity`, returning `remaining` & `capacity` per slot. `join_wave` and the legacy `create_booking` reject (409) only once a slot is **fully booked** (`held + booked >= capacity`); self re-joins excluded.
+- **Frontend**: Garage dashboard availability editor has a **"Bays / cars per slot"** selector (`data-testid=slot-capacity`) saved alongside slot length; the stats strip shows "Xmin · N bays". The member slot picker (`WaveDetail.jsx`) shows a subtle "· N left" on each slot when capacity > 1.
+- **Tests** (`tests/test_fitting_slot_uniqueness.py`, 2): capacity-1 (second joiner 409, slot vanishes) **and** capacity-2 (two members share a slot, `remaining` decrements 2→1→gone, third joiner 409). Both green.
+
+## What's implemented (latest — 2026-06-19)
 ### 🔧 Fitting-charge notice + one-customer-per-garage-slot (DONE)
 - **Garage notice** (`WaveDetail.jsx`, `data-testid=fitting-charge-notice`): when a member is choosing an approved fitting garage (tyres), an amber notice now explains the wave price covers **tyres only** and that **fitting is arranged with and charged separately by the garage** on the day. Visually confirmed.
 - **No double-booking a garage+slot:** the slot list (`GET /garages/{id}/slots`, `server.py`) now treats a slot as taken if it has a confirmed legacy booking **OR** an active wave reservation (reserved/authorized/captured) — so a held slot disappears from the picker even before payment. `join_wave` (`routes/waves.py`) also rejects a join (HTTP 409) if another member already holds that garage+slot, preventing over-allocation to one garage/time. Self re-joins/merges are excluded so a member doesn't clash with their own reservation.

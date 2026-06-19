@@ -75,7 +75,7 @@ export default function GarageDashboard() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
           <Stat label="Status" v={garage.is_active ? "Active" : "Paused"} icon={Wrench} />
           <Stat label="Open days/wk" v={DAYS.filter(d => (availability.weekly?.[d.id] || []).length > 0).length} icon={Calendar} />
-          <Stat label="Slot length" v={`${availability.slot_minutes} min`} icon={Clock} />
+          <Stat label="Slot length" v={`${availability.slot_minutes} min · ${availability.slot_capacity || 1} bay${(availability.slot_capacity || 1) > 1 ? "s" : ""}`} icon={Clock} />
           <Stat label="Upcoming bookings" v={upcoming.length} icon={Calendar} c={upcoming.length ? "#00C853" : undefined} />
         </div>
 
@@ -119,6 +119,7 @@ function AvailabilityEditor({ av, onSaved }) {
   const [weekly, setWeekly] = useState(av.weekly || {});
   const [overrides, setOverrides] = useState(av.overrides || {});
   const [slot, setSlot] = useState(av.slot_minutes || 30);
+  const [capacity, setCapacity] = useState(av.slot_capacity || 1);
   const [newDate, setNewDate] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -139,7 +140,7 @@ function AvailabilityEditor({ av, onSaved }) {
     setSaving(true);
     try {
       const { data } = await api.put("/garages/me/availability", {
-        weekly, overrides, slot_minutes: Number(slot),
+        weekly, overrides, slot_minutes: Number(slot), slot_capacity: Number(capacity),
       });
       onSaved(data);
     } catch (e) {
@@ -182,11 +183,20 @@ function AvailabilityEditor({ av, onSaved }) {
             </div>
           ))}
         </div>
-        <div className="mt-4 flex items-center gap-3">
-          <label className="font-mono text-[10px] font-bold uppercase tracking-widest">Slot length</label>
-          <select value={slot} onChange={(e) => setSlot(e.target.value)} className="border-2 border-ink p-2 font-mono text-xs" data-testid="slot-length">
-            {[15, 20, 30, 45, 60, 90, 120].map(n => <option key={n} value={n}>{n} min</option>)}
-          </select>
+        <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-3">
+          <div className="flex items-center gap-3">
+            <label className="font-mono text-[10px] font-bold uppercase tracking-widest">Slot length</label>
+            <select value={slot} onChange={(e) => setSlot(e.target.value)} className="border-2 border-ink p-2 font-mono text-xs" data-testid="slot-length">
+              {[15, 20, 30, 45, 60, 90, 120].map(n => <option key={n} value={n}>{n} min</option>)}
+            </select>
+          </div>
+          <div className="flex items-center gap-3">
+            <label className="font-mono text-[10px] font-bold uppercase tracking-widest">Bays / cars per slot</label>
+            <select value={capacity} onChange={(e) => setCapacity(e.target.value)} className="border-2 border-ink p-2 font-mono text-xs" data-testid="slot-capacity">
+              {[1, 2, 3, 4, 5, 6, 8, 10].map(n => <option key={n} value={n}>{n}</option>)}
+            </select>
+            <span className="font-mono text-[10px] text-[#3A3A3A]">how many fittings you can take in the same slot</span>
+          </div>
         </div>
       </div>
 

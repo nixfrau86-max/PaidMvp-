@@ -880,20 +880,19 @@ def build_router(deps: Dict[str, Any]) -> APIRouter:
         # Derive a human fitting-slot label + validate stock (module helpers)
         fitting_label = _derive_fitting_label(w["category"], payload.fitting_slot_iso, payload.fitting_slot_label)
 
-        # One customer per garage+slot: reject if another member already holds this
-        # fitting slot at this garage (active reservation) or has a confirmed booking.
+        # One booking per garage+slot up to the garage's per-slot capacity (bays):
+        # reject only once the slot is fully booked (active reservations + bookings).
         if w["category"] == "tyres" and payload.fitting_slot_iso:
-            clash = await db.wave_participations.find_one(
+            gav = await db.garage_availability.find_one(
+                {"garage_id": payload.garage_id}, {"_id": 0, "slot_capacity": 1})
+            cap = max(1, int((gav or {}).get("slot_capacity", 1) or 1))
+            held = await db.wave_participations.count_documents(
                 {"garage_id": payload.garage_id, "fitting_slot_iso": payload.fitting_slot_iso,
-                 "status": {"$in": ACTIVE_PART_STATUSES}, "user_id": {"$ne": user["user_id"]}},
-                {"_id": 0},
-            )
-            booking_clash = await db.bookings.find_one(
-                {"garage_id": payload.garage_id, "slot_iso": payload.fitting_slot_iso, "status": "confirmed"},
-                {"_id": 0},
-            )
-            if clash or booking_clash:
-                raise HTTPException(status_code=409, detail="That fitting slot was just taken at this garage — please pick another.")
+                 "status": {"$in": ACTIVE_PART_STATUSES}, "user_id": {"$ne": user["user_id"]}})
+            booked = await db.bookings.count_documents(
+                {"garage_id": payload.garage_id, "slot_iso": payload.fitting_slot_iso, "status": "confirmed"})
+            if held + booked >= cap:
+                raise HTTPException(status_code=409, detail="That fitting slot is fully booked at this garage — please pick another.")
 
         items, subtotal, units, inc_ops, array_filters = _validate_join_items(w, payload.items)
 
