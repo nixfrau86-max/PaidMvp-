@@ -20,6 +20,18 @@ Build a real-time demand aggregation platform that turns fragmented consumer int
 8. Admin role is restricted to `ADMIN_EMAILS` env allowlist.
 
 ## What's implemented (latest — 2026-06-19)
+### 📧 Resend transactional emails (IMPLEMENTED — awaiting API key to go live)
+- `backend/email_service.py`: non-blocking async Resend layer (`send_email` + branded HTML templates) that **gracefully no-ops if `RESEND_API_KEY`/`SENDER_EMAIL` are unset**, so the app runs without credentials. Loads env via `load_dotenv()`.
+- **Wired events** (all fire-and-forget via `asyncio.create_task`, never break the request): (1) **reservation confirmation** on wave join — incl. fitting slot for tyres / delivery address for others (`routes/waves.py join_wave`); (2) **wave activation** notification to **all active participants** the moment a wave flips to `activated` (`_recompute_wave` → `_notify_wave_activation`); (3) **payment receipt + fitting confirmation** on capture (`routes/wave_payments.py settle_wave_participation`).
+- `.env`: `SENDER_EMAIL=founder@thecollectivesavers.co.uk`, `APP_BASE_URL=<preview>`, `RESEND_API_KEY=` (empty — **pending user key**). Resend SDK added to `requirements.txt`.
+- **Status**: code complete & backend healthy; **needs the Resend API key + verified domain `thecollectivesavers.co.uk` to test a live send.**
+
+### 🧹 Code-quality pass #2 (review findings — verified against real linters)
+- **Fixed (genuine):** removed unused imports (`send_payment_receipt` in `waves.py`; `json`/`status`/`JSONResponse`/`EmailStr` in `server.py`) → pyflakes clean. Added a dev-only `src/lib/log.js` (`logError`/`logWarn`, silent in production) and used it in `WaveBrowse`/`WaveDetail` catch blocks — resolves the contradiction between review #1 ("remove console") and review #2 ("don't use empty catch"). Fixed `Landing.jsx:52` index key.
+- **Verified as NOT bugs (tool noise):** pyflakes found **0 undefined variables** (report claimed 7); CRA build-eslint reports **0 `react-hooks/exhaustive-deps` warnings** on the flagged files (report's "60 missing deps" lists globals/imports like `WebSocket`/`api`/`data`, which the real rule never flags); the 72 `is True/False/None` test comparisons are valid Python (no `is <int/str>` identity bugs).
+- **Deferred (high-risk/large, documented):** `build_router()` splits (waves/wave_payments/admin_users/admin_suppliers), large-component splits (WaveDetail/AdminPanel/BookFitter/Checkout), nested ternaries in legacy pages, type-hint coverage — these need a dedicated, test-guarded refactor pass (one unit at a time) to avoid regressing tested production code.
+
+## What's implemented (latest — 2026-06-19)
 ### 🧹 Code-quality pass (review findings) (PARTIAL — safe fixes applied, risky refactors deferred)
 Applied the **safe, high-value** review fixes; **deliberately deferred** large refactors that would risk regressing tested, production code.
 - **Fixed — Security #1:** moved hardcoded test credentials to env-with-default (`os.environ.get("TEST_SUPPLIER_*"/"TEST_ADMIN_*", default)`) in `test_wave_image_upload.py`, `test_supplier_summary_financials.py`, `test_fitting_slot_uniqueness.py`.

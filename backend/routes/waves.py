@@ -22,7 +22,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, 
 from pydantic import BaseModel, Field
 
 import storage
-from email_service import send_join_confirmation, send_wave_activation, send_payment_receipt  # noqa: F401
+from email_service import send_join_confirmation, send_wave_activation
 
 
 # --------------------------------------------------------------------------

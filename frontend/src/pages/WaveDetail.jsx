@@ -6,6 +6,7 @@ import Navbar from "../components/Navbar";
 import { api, wsUrl } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { track } from "../lib/firebase";
+import { logWarn } from "../lib/log";
 import { Lightning, ArrowRight, ShieldCheck, MapPin, Minus, Plus, CheckCircle, ArrowsClockwise, ArrowLeft, Info } from "@phosphor-icons/react";
 
 const STATE_LABEL = {
@@ -86,9 +87,9 @@ export default function WaveDetail() {
           setPulse(true);
           setTimeout(() => setPulse(false), 600);
         }
-      } catch { /* ignore malformed payload */ }
+      } catch (err) { logWarn("Ignoring malformed wave WS payload", err); }
     };
-    return () => { try { ws.close(); } catch { /* already closed */ } };
+    return () => { try { ws.close(); } catch (err) { logWarn("WS close", err); } };
   }, [w?.wave_id]);
 
   const product = useMemo(() => (w?.products || []).find((p) => p.product_id === selProduct), [w, selProduct]);

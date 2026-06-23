@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import Navbar from "../components/Navbar";
 import { api, wsUrl } from "../lib/api";
+import { logError, logWarn } from "../lib/log";
 import { MagnifyingGlass, ArrowRight, Lightning, Users, MapPin, ArrowsClockwise } from "@phosphor-icons/react";
 
 const CATEGORY_GRADIENT = {
@@ -60,8 +61,8 @@ export default function WaveBrowse() {
     try {
       const { data } = await api.get("/waves" + (search.toString() ? `?${search}` : ""));
       setWaves(data);
-    } catch {
-      /* keep the current list on a transient fetch error */
+    } catch (err) {
+      logError("Failed to refresh waves", err);
     } finally {
       setLoading(false);
     }
@@ -73,7 +74,7 @@ export default function WaveBrowse() {
         const [r, c] = await Promise.all([api.get("/regions"), api.get("/wave-categories")]);
         setRegions(r.data);
         setCategories(c.data);
-      } catch { /* non-critical: filters stay empty */ }
+      } catch (err) { logWarn("Filters failed to load", err); }
     })();
   }, []);
 
@@ -94,9 +95,9 @@ export default function WaveBrowse() {
               : w
           ));
         }
-      } catch { /* ignore malformed payload */ }
+      } catch (err) { logWarn("Ignoring malformed waves WS payload", err); }
     };
-    return () => { try { ws.close(); } catch { /* already closed */ } };
+    return () => { try { ws.close(); } catch (err) { logWarn("WS close", err); } };
   }, []);
 
   const totalMembers = waves.reduce((a, w) => a + (w.participants_count || 0), 0);

@@ -48,8 +48,8 @@ export default function Landing() {
         {/* kinetic strip */}
         <div className="absolute bottom-0 left-0 right-0 border-t-2 border-ink bg-ink text-white py-3 overflow-hidden">
           <Marquee gradient={false} speed={32}>
-            {Array.from({ length: 8 }).map((_, i) => (
-              <span key={i} className="font-display text-base sm:text-lg uppercase tracking-tight mx-8 inline-flex items-center gap-3">
+            {["a", "b", "c", "d", "e", "f", "g", "h"].map((k) => (
+              <span key={`marquee-${k}`} className="font-display text-base sm:text-lg uppercase tracking-tight mx-8 inline-flex items-center gap-3">
                 Coordinated purchasing
                 <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#FF5400]" />
                 Real-time Waves

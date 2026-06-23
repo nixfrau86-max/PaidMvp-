@@ -6,7 +6,6 @@ Real-time collective buying platform powered by VPPs (Value Party Power Systems)
 import os
 import re
 import uuid
-import json
 import secrets
 import asyncio
 import logging
@@ -18,12 +17,11 @@ from typing import List, Optional, Dict, Any, Literal
 import httpx
 from fastapi import (
     FastAPI, APIRouter, Request, Response, Cookie, HTTPException,
-    WebSocket, WebSocketDisconnect, Depends, Header, status
+    WebSocket, WebSocketDisconnect, Depends, Header
 )
-from fastapi.responses import JSONResponse
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
-from pydantic import BaseModel, Field, ConfigDict, EmailStr
+from pydantic import BaseModel, Field, ConfigDict
 from dotenv import load_dotenv
 
 from emergentintegrations.payments.stripe.checkout import (
