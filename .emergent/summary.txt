@@ -1,30 +1,29 @@
-<analysis>**original_problem_statement**: Pivot the platform to a Regional Product Waves© architecture. Implement Admin & Supplier wave management controls. Integrate fitting slot logistics. Implement automated wave respawning logic. Implement Phase 3: Stripe Pay-on-activation flow.
+<analysis>**original_problem_statement**: Pivot the platform to a Regional Product Waves© architecture. Implement Phase 4 Premium UX (Stripe/Revolut-inspired UI), integrate wave image uploads, expand the automated wave respawn engine to all categories, enhance supplier/admin order financial summaries, enforce strict garage slot capacity controls, and implement Resend transactional emails.
 PRODUCT REQUIREMENTS: 
 - Core Pivot: .
-- Payment Flow: Stripe Pay-on-activation. 
-- Fulfillment: Garages get real-time booking slots in 30-minute intervals.
-- Auto-Respawn: Completed waves automatically respawn a new wave for remaining stock.
-- Limits: Per-user annual unit limits categorized by product type, editable by admin.
+- Payment Flow: Stripe Pay-on-activation.
+- Fulfillment: Garages set per-slot bay capacity; platform enforces anti-double-booking based on capacity.
+- Auto-Respawn: A background worker automatically completes expired waves and respawns new waves for leftover stock.
 
 **User's preferred language**: English (INSTRUCT next agent to respond in the user's preferred language only)
 
-**what currently exists?**: A full-stack React + FastAPI + MongoDB app. The new Regional Product Waves© engine (Phases 1-3) is fully functional and hardened. Stripe Pay-on-activation works end-to-end. Auth has been secured using  cookies (stripping all frontend  tokens). Complex wave logic has been refactored, featuring atomic join operations, non-blocking activation capacity, and background sweeper/expiry workers. Auto-respawn logic handles active demand correctly. An admin-controlled, per-user annual unit limit feature by category is active and enforced.
+**what currently exists?**: A full-stack React + FastAPI + MongoDB app. The Regional Product Waves© engine is highly developed. Phase 4 Premium UX is live on Browse/Detail pages using Framer Motion and Shadcn. Suppliers can upload wave images (via Object Storage integration). An auto-completion background worker orchestrates wave respawns across all categories. Supplier summaries include payment status and destinations; Admins have a Financials modal (Revenue/Cost/Margin). Garages control per-slot capacity (bays). Resend email integration is coded and wired but gracefully skipping due to a missing API key.
 
 **Last working item**:
-- Last item agent was working: Implemented per-user annual unit limits per category (tyres: 12, electronics: 5, footwear/others: 3) based on a calendar year. Enforced this limit across frontend (WaveDetail, Admin panels) and backend (, configuration APIs), allowing admins to configure global defaults and per-user overrides.
-- Status: COMPLETED
-- Agent Testing Done: Y
-- Which testing method agent to use?: NA
+- Last item agent was working: Implementing Resend transactional emails for join confirmations, wave activations, and payment receipts. The code implementation is complete, but it requires the user's API key to function.
+- Status: BLOCKED
+- Agent Testing Done: Y (Tested that it gracefully skips when key is absent)
+- Which testing method agent to use?: backend
 - User Testing Done: N
 
 **All Pending/In progress Issue list**:
   - Issue 1: Resend Transactional Emails Integration (P0)
-     - Attempted fixes: Deferred, waiting on user key.
-     - Next debug checklist: Ask user for Resend API key to implement email notifications.
-     - Why fix this issue and what will be achieved with the fix? Required for automated platform communications (booking confirmations, wave activation notifications).
+     - Attempted fixes:  is fully implemented and wired into  and .
+     - Next debug checklist: Ask the user for their , add it to the backend , and trigger a live test (e.g., join a wave).
+     - Why fix this issue and what will be achieved with the fix?: Required for automated platform communications (booking confirmations, wave activation notifications).
      - Status: BLOCKED
-     - Is recurring issue? N
-     - Should Test frontend/backend/both after fix? backend
+     - Is recurring issue?: N
+     - Should Test frontend/backend/both after fix?: backend
      - Blocked on other issue: User API key.
 
 **In progress Task List**:
@@ -32,7 +31,6 @@ PRODUCT REQUIREMENTS:
 
 **Upcoming and Future Tasks**
 Upcoming Tasks:
-- P1: Phase 4 Premium UX & discovery (Stripe/Revolut-inspired UI, live counters, progress bars, allowance badges on wave cards).
 - P1: Wire Live Twilio Credentials (currently DEV mode).
 Future Tasks:
 - P2: Implement Consumer iCal feed generation.
@@ -41,22 +39,22 @@ Future Tasks:
 - P2: Implement Refer a Driver growth loop.
 - P2: Apple Sign-in integration.
 - P2: Admin dashboard commission/revenue chart.
+- P2: Allow 2-3 gallery images per wave (Enhancement).
+- P2: Add Print export of the supplier Order Summary (Enhancement).
+- P2: Admin Auto-Engine dashboard widget to track upcoming auto-completions (Enhancement).
+- P2: Allow garages to set different capacities per weekday (Enhancement).
 
 **Completed work in this session**
-- Migrated JWT storage from  to  cookies across frontend and backend.
-- Refactored  to break down massive functions and reduce cyclomatic complexity.
-- Fixed  leak in .
-- Overhauled core wave logic (fixed capacity-filling latches, atomic reservations, added sweeper/expiry background workers).
-- Upgraded  to v0.2.0 and successfully verified Phase 3 Stripe Pay-on-activation end-to-end.
-- Fixed wave auto-respawn logic to properly regenerate waves when units are allocated but unpaid.
-- Implemented and integrated Calendar Year Per-User Unit Limits with Admin configurability and user overrides.
+- Implemented Phase 4 Premium Fintech UX for  and  using Tailwind, Shadcn, and Framer Motion.
+- Implemented Wave Image Uploads via Emergent Object Storage integration ().
+- Expanded Auto Wave Engine: Added  background worker to auto-complete expired waves and trigger respawns across all categories.
+- Enhanced Supplier Order Summary (payment breakdown, per-destination items) and added Admin Financials Modal.
+- Implemented Garage Slot Capacity: Garages can set bays per slot, and the booking engine enforces capacity-based anti-double-booking.
+- Addressed critical Code Quality findings: Removed hardcoded test credentials, fixed React array keys, memoized objects, removed console.logs. Deliberately deferred high-risk massive component/route refactoring.
+- Fixed backend CORS wildcard bug ( combined with ).
 
 **Earlier issues found/mentioned but not fixed**
-  - Issue 1: Missing React Hook Dependencies
-   - Debug checklist: Review React compiler/ESLint warnings and add missing dependencies in  and  across multiple frontend files.
-   - Why to solve this issue and what will be achieved with this? Resolves potential stale closure bugs.
-   - Should Test frontend/backend/both after fix: frontend
-   - Is recurring issue? N
+  - None.
 
 **Known issue recurrence from previous fork**
   - Issue recurrence in previous fork: None
@@ -67,77 +65,79 @@ Future Tasks:
 
 
 **Key Technical Concepts**
-Frontend: React, Tailwind CSS, Shadcn UI
-Backend: FastAPI, MongoDB (Motor), WebSockets
-Architecture: Regional Waves, Pay-on-activation Stripe Checkout, Async Scheduling (Wave Respawn), Background Sweeper Workers, HTTP-Only Cookie Session Auth.
+Frontend: React, Tailwind CSS, Shadcn UI, Framer Motion.
+Backend: FastAPI, MongoDB (Motor), WebSockets.
+Architecture: Regional Waves, Pay-on-activation Stripe Checkout, Async Scheduling (Wave Respawn, Auto-completion), Background Sweeper Workers, HTTP-Only Cookie Session Auth, Emergent Object Storage, Resend Email.
 
 **key DB schema**
   - : 
   - : 
   - : 
   - : 
-  - : 
+  - :  (Added  integer)
 
 **changes in tech stack**
-  - Upgraded  from 0.1.0 to 0.2.0 in  to fix Stripe session retrieval endpoint.
-  - Auth entirely migrated to HTTP-Only cookies. Frontend completely stripped of  token parsing.
+  - Added  python SDK.
+  - Added  and  to the frontend.
 
 **All files of reference**
-  -  (Contains rebuilt wave lifecycle, atomic joins, and unit limit enforcement)
-  -  (Hosts new background sweeping/expiry workers and auth overrides)
-  -  (Handles user limit overrides)
-  -  (Modified to show active unit caps and gate actions)
-  -  & 
-  -  (Created this session for wave boundary limits)
+  -  (New: Manages Resend API calls)
+  -  (New: Object storage helper)
+  -  (Added  worker, CORS fix, garage capacity logic)
+  -  (Image uploading, Financials endpoint, email service triggers)
+  -  &  (Redesigned)
+  -  (Slot capacity editor)
+  -  (New: Premium UX tokens)
 
 **Areas that need refactoring**
-  - Frontend components ( /  dependency arrays) as mentioned in the pending issues list.
+  - The user has run external code quality tools that flagged massive function complexity in , , , and large React components like  and . The previous agent deliberately deferred these to avoid breaking a stable, heavily-tested app. Address these only if explicitly requested as part of a tech debt phase.
 
 **key api endpoints**
   - , 
-  -  (Stripe checkout)
-  - , 
   - 
+  -  (Image uploads)
+  -  (Admin financials)
 
 **Critical Info for New Agent**
-  - **Auth Pattern:** Auth tokens are passed strictly via HTTP-Only cookies. Do NOT attempt to read/write JWTs from .
-  - **Wave Lifecycle Update:** Waves no longer stop accepting users when  is reached. They act as a non-blocking latch and remain open until  capacity is filled. 
-  - **Stripe & Emergent Integrations:** Ensure  if touching payments. Stripe uses testing key  sourced from the pod environment variable. Do not override this key.
-  - **Unit Caps:** Users have annual calendar limits per category. Default config lives in the  collection, overrides in the  collection.
+  - **Resend Blockage:** The code for transactional emails is fully implemented. Do NOT write more email logic. Simply ask the user for the , add it to , restart the backend, and test.
+  - **Auto-Respawn Logic:** Respawns are now triggered automatically by the  background worker in  running every 60 seconds (respecting UK working hours). 
+  - **CORS Context:** The backend uses an explicit regex to reflect the origin back instead of using a wildcard  to satisfy browser credential requirements behind the ingress proxy.
+  - **Garage Capacity:** Garage slots are no longer 1-to-1. Availability is validated against the  (bays) defined by the garage owner.
+  - **Code Quality Reports:** The user pastes automated linter outputs. Don't blindly trust them (e.g., possibly undefined variables that Pyflakes proves are fine). Fix real bugs (secrets, console logs, keys), but push back or defer high-risk structural refactors unless it's a dedicated task.
 
 **documents and test reports created in this job**
-  -  (Updated)
-  -  (Created)
+  - 
+  - 
+  - , , 
 
 **Last 10 User Messages and any pending HUMAN messages** 
- - Instructed to fix pending auth/complexity issues. (COMPLETED)
- - Requested to review wave logic. (COMPLETED)
- - Instructed to fix all found wave logic architectural flaws. (COMPLETED)
- - Requested to verify & close Phase 3 Stripe Pay-on-activation. (COMPLETED)
- - Reported bug: wave not respawning when stock allocated but unpaid. (COMPLETED)
- - Requested per-user annual unit limits per category. (COMPLETED)
- - Answered clarification questions for unit limit design choices. (COMPLETED)
- - *PENDING HUMAN MESSAGE:* None. Session was closed with the finish tool. Ask the user how they would like to proceed (e.g., start Phase 4 Premium UX, or provide Resend API keys).
+ - Requested fitting notice and garage slot double-booking prevention. (COMPLETED)
+ - Requested per-slot fitting capacity (garage bays). (COMPLETED)
+ - Provided Code Quality Report #1. (PARTIALLY COMPLETED - Safe fixes applied, risky refactors deferred)
+ - Reminded agent about Resend emails (P0). (BLOCKED ON KEY)
+ - Provided sender email () and Code Quality Report #2. (PARTIALLY COMPLETED)
+ - *PENDING HUMAN MESSAGE:* The user has not yet provided the . You must ask for it to finalize the email integration.
 
 **Project Health Check:**
   - Broken: None
-  - Mocked: Twilio SMS Auth (DEV mode). Resend Email flow (Blocked on API key). 
+  - Mocked: Twilio SMS (DEV mode), Resend Email (Gracefully skipping due to missing API key).
 
 **3rd Party Integrations**
   - Stripe (Payments) — uses Emergent integrations via environment test key
   - Twilio (SMS Auth) — requires User API Key (currently dev mode)
   - Resend (Emails) — requires User API Key (Blocked/Pending user action)
   - Firebase (Analytics) — requires User Config
+  - Emergent Object Storage — uses Emergent integration
 
 **Testing status**
-  - Testing agent used after significant changes: NO (Agent self-tested meticulously via backend pytest execution, cURL workflows, and frontend screenshot verifications)
+  - Testing agent used after significant changes: YES
   - Troubleshoot agent used after agent stuck in loop: NO
-  - Test files created: 
-  - Known regressions: None
+  - Test files created: , , 
+  - Known regressions: None (Test suites passing).
 
 **Credentials to test flow:**
-  - Admin Email:  
+  - Admin/Sender Email:  
   - Password: 
 
 **What agent forgot to execute**
-  - The missing React hook dependency cleanup (Issue 1 from Earlier issues) was deferred to focus on completing the complex backend architecture overhauls and testing.</analysis>
+  - Nothing forgotten. The agent deliberately deferred major architectural refactoring (splitting  and massive React components) requested by the user's automated linter reports to protect platform stability.</analysis>
