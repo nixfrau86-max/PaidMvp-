@@ -22,6 +22,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, 
 from pydantic import BaseModel, Field
 
 import storage
+from email_service import send_join_confirmation, send_wave_activation, send_payment_receipt  # noqa: F401
 
 
 # --------------------------------------------------------------------------
@@ -375,6 +376,9 @@ async def _recompute_wave(db, manager, wave: dict) -> dict:
 
     await db.waves.update_one({"wave_id": wave["wave_id"]}, {"$set": updates})
     fresh = await db.waves.find_one({"wave_id": wave["wave_id"]}, {"_id": 0})
+    # Notify all participants once, exactly when the Wave flips to "activated".
+    if updates.get("state") == "activated" and current != "activated":
+        asyncio.create_task(_notify_wave_activation(db, fresh))
     await _broadcast(manager, wave["wave_id"], {
         "type": "wave_update",
         "units_committed": fresh.get("units_committed", 0),
@@ -383,6 +387,22 @@ async def _recompute_wave(db, manager, wave: dict) -> dict:
         "progress_pct": round(min(100.0, fresh.get("units_committed", 0) / max(1, fresh.get("ideal_target", 1)) * 100), 1),
     })
     return fresh
+
+
+async def _notify_wave_activation(db, wave: dict):
+    """Email every active participant when a Wave activates (fire-and-forget)."""
+    try:
+        parts = await db.wave_participations.find(
+            {"wave_id": wave["wave_id"], "status": {"$in": ACTIVE_PART_STATUSES}},
+            {"_id": 0, "user_id": 1},
+        ).to_list(2000)
+        uids = list({p["user_id"] for p in parts})
+        if not uids:
+            return
+        async for u in db.users.find({"user_id": {"$in": uids}}, {"_id": 0, "email": 1, "name": 1}):
+            await send_wave_activation(u.get("email"), u.get("name"), wave)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 async def _release_participation(db, p: dict, new_status: str = "released"):
@@ -942,6 +962,12 @@ def build_router(deps: Dict[str, Any]) -> APIRouter:
         fresh = await db.waves.find_one({"wave_id": wave_id}, {"_id": 0})
         await _recompute(fresh)
         part.pop("_id", None)
+        # Reservation confirmation email (non-blocking, never breaks the join)
+        asyncio.create_task(send_join_confirmation(
+            user.get("email"), user.get("name"), w, part.get("units", units),
+            fitting_label if w["category"] == "tyres" else None,
+            payload.delivery_address if w["category"] != "tyres" else None,
+        ))
         return {"success": True, "participation": part, "merged": merged,
                 "reservation_minutes": RESERVATION_MINUTES}
 

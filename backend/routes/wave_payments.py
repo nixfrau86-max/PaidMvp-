@@ -12,6 +12,7 @@ card pre-auth holds aren't available, so payment is deferred to activation.
 """
 import os
 import uuid
+import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
@@ -104,6 +105,20 @@ async def settle_wave_participation(db, manager, participation_id: str, payment_
         await manager.broadcast(f"wave:{p['wave_id']}", {"type": "payment_captured", "participation_id": participation_id})
     except Exception:
         pass
+
+    # Payment receipt + fitting confirmation email (non-blocking)
+    try:
+        from email_service import send_payment_receipt
+        w = await db.waves.find_one({"wave_id": p["wave_id"]},
+                                    {"_id": 0, "title": 1, "region_name": 1, "wave_id": 1}) or {}
+        u = await db.users.find_one({"user_id": p["user_id"]}, {"_id": 0, "email": 1, "name": 1}) or {}
+        asyncio.create_task(send_payment_receipt(
+            u.get("email"), u.get("name"), w,
+            float(p.get("subtotal", 0) or 0), p.get("units", 0),
+            p.get("fitting_slot_label") if p.get("category") == "tyres" else None,
+        ))
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"receipt email skipped: {e}")
     return True
 
 
