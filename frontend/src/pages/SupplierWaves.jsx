@@ -18,7 +18,7 @@ const STATE_BADGE = {
 
 const uid = () => (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `k_${Math.random().toString(36).slice(2)}`);
 const emptyVariant = () => ({ _key: uid(), label: "", supplier_cost: "", retail_price: "", wave_price: "", inventory_qty: "" });
-const emptyProduct = () => ({ _key: uid(), model: "", variants: [emptyVariant()] });
+const emptyProduct = () => ({ _key: uid(), model: "", image_url: "", variants: [emptyVariant()] });
 
 export default function SupplierWaves() {
   const navigate = useNavigate();
@@ -165,28 +165,46 @@ function WaveForm({ regions, categories, editing, onClose, onSaved }) {
     min_activation: editing?.min_activation ?? 40,
     deadline_days: 30,
     products: editing?.products?.length
-      ? editing.products.map((p) => ({ _key: p.product_id || uid(), product_id: p.product_id, model: p.model, variants: p.variants.map((v) => ({ _key: v.variant_id || uid(), variant_id: v.variant_id, label: v.label, supplier_cost: v.supplier_cost, retail_price: v.retail_price, wave_price: v.wave_price, inventory_qty: v.inventory_qty })) }))
+      ? editing.products.map((p) => ({ _key: p.product_id || uid(), product_id: p.product_id, model: p.model, image_url: p.image_url || "", variants: p.variants.map((v) => ({ _key: v.variant_id || uid(), variant_id: v.variant_id, label: v.label, supplier_cost: v.supplier_cost, retail_price: v.retail_price, wave_price: v.wave_price, inventory_qty: v.inventory_qty })) }))
       : [emptyProduct()],
   }));
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [productUploading, setProductUploading] = useState({});
   const upd = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const uploadImage = async (file) => {
+    if (file.size > 5 * 1024 * 1024) { toast.error("Image too large — max 5MB"); return null; }
+    const fd = new FormData();
+    fd.append("file", file);
+    const { data } = await api.post("/supplier/wave-image", fd, { headers: { "Content-Type": "multipart/form-data" } });
+    return data.image_url;
+  };
 
   const onPickImage = async (e) => {
     const file = e.target.files?.[0];
     e.target.value = ""; // allow re-selecting the same file
     if (!file) return;
-    if (file.size > 5 * 1024 * 1024) { toast.error("Image too large — max 5MB"); return; }
-    const fd = new FormData();
-    fd.append("file", file);
     setUploading(true);
     try {
-      const { data } = await api.post("/supplier/wave-image", fd, { headers: { "Content-Type": "multipart/form-data" } });
-      setForm((f) => ({ ...f, image_url: data.image_url }));
-      toast.success("Image uploaded");
+      const url = await uploadImage(file);
+      if (url) { setForm((f) => ({ ...f, image_url: url })); toast.success("Image uploaded"); }
     } catch (err) {
       toast.error(err?.response?.data?.detail || "Upload failed");
     } finally { setUploading(false); }
+  };
+
+  const onPickProductImage = (pi) => async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setProductUploading((u) => ({ ...u, [pi]: true }));
+    try {
+      const url = await uploadImage(file);
+      if (url) { updProduct(pi, "image_url", url); toast.success("Product image uploaded"); }
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Upload failed");
+    } finally { setProductUploading((u) => ({ ...u, [pi]: false })); }
   };
 
   const updProduct = (pi, k, val) => setForm((f) => { const products = [...f.products]; products[pi] = { ...products[pi], [k]: val }; return { ...f, products }; });
@@ -206,6 +224,7 @@ function WaveForm({ regions, categories, editing, onClose, onSaved }) {
       .map((p) => ({
         product_id: p.product_id,
         model: p.model.trim(),
+        image_url: p.image_url || "",
         variants: p.variants.filter((v) => v.label.trim()).map((v) => ({
           variant_id: v.variant_id,
           label: v.label.trim(),
@@ -316,7 +335,16 @@ function WaveForm({ regions, categories, editing, onClose, onSaved }) {
             {form.products.map((p, pi) => (
               <div key={p._key} className="border-2 border-ink mb-3" data-testid={`product-block-${pi}`}>
                 <div className="flex items-center gap-2 p-2 border-b-2 border-ink bg-[#FAFAFA]">
+                  <label className={`relative w-12 h-12 shrink-0 border-2 border-ink bg-white overflow-hidden flex items-center justify-center cursor-pointer ${productUploading[pi] ? "opacity-60 pointer-events-none" : ""}`} data-testid={`product-image-label-${pi}`} title="Add product photo">
+                    {p.image_url ? (
+                      <img src={p.image_url} alt={p.model || "product"} className="w-full h-full object-cover" data-testid={`product-image-preview-${pi}`} />
+                    ) : (
+                      <Plus weight="bold" size={16} className="text-[#3A3A3A]" />
+                    )}
+                    <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" onChange={onPickProductImage(pi)} className="hidden" data-testid={`product-image-file-${pi}`} />
+                  </label>
                   <input value={p.model} onChange={(e) => updProduct(pi, "model", e.target.value)} className="inp flex-1" placeholder="Model (e.g. EcoContact 6)" data-testid={`product-model-${pi}`} />
+                  {p.image_url && <button type="button" onClick={() => updProduct(pi, "image_url", "")} className="p-2 border-2 border-ink" data-testid={`product-image-clear-${pi}`} title="Remove photo"><X weight="bold" size={12} /></button>}
                   {form.products.length > 1 && <button type="button" onClick={() => removeProduct(pi)} className="p-2 border-2 border-ink"><Trash weight="bold" size={12} /></button>}
                 </div>
                 <div className="p-2 space-y-2">

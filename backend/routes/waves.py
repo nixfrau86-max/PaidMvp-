@@ -77,6 +77,7 @@ class VariantInput(BaseModel):
 class ProductInput(BaseModel):
     product_id: Optional[str] = None
     model: str                       # "Eco Contact 6"
+    image_url: Optional[str] = None  # per-product photo shown to members
     variants: List[VariantInput] = Field(default_factory=list)
 
 
@@ -170,7 +171,7 @@ def _public_wave(w: dict, full: bool = False) -> dict:
                 vv["sold_qty"] = v.get("sold_qty", 0)
                 vv["supplier_cost"] = v.get("supplier_cost")
             variants.append(vv)
-        products.append({"product_id": p["product_id"], "model": p["model"], "variants": variants})
+        products.append({"product_id": p["product_id"], "model": p["model"], "image_url": p.get("image_url", ""), "variants": variants})
     d["products"] = products
     if not full:
         d.pop("supplier_id", None)
@@ -198,6 +199,7 @@ def _normalize_products(products: List[ProductInput]) -> List[dict]:
         out.append({
             "product_id": p.product_id or f"prd_{uuid.uuid4().hex[:8]}",
             "model": p.model.strip(),
+            "image_url": (p.image_url or "").strip(),
             "variants": variants,
         })
     return out
@@ -1209,7 +1211,7 @@ def _compute_remaining_products(wave: dict):
                 })
                 total += remaining
         if variants:
-            new_products.append({"product_id": f"prd_{uuid.uuid4().hex[:8]}", "model": p["model"], "variants": variants})
+            new_products.append({"product_id": f"prd_{uuid.uuid4().hex[:8]}", "model": p["model"], "image_url": p.get("image_url", ""), "variants": variants})
     return new_products, total
 
 
