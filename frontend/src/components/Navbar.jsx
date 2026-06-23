@@ -17,11 +17,11 @@ export default function Navbar() {
   return (
     <nav className="sticky top-0 z-40 bg-white border-b-2 border-ink" data-testid="main-navbar">
       <div className="max-w-7xl mx-auto flex items-center justify-between px-4 sm:px-6 py-3">
-        <Link to="/" className="flex items-center gap-2.5" data-testid="nav-logo">
-          <span className="inline-flex items-center justify-center w-10 h-10 bg-white border-2 border-ink shadow-brut-sm overflow-hidden">
-            <img src={LOGO_URL} alt="Collective Savers" className="w-full h-full object-contain p-0.5" />
+        <Link to="/" className="flex items-center gap-3" data-testid="nav-logo">
+          <span className="inline-flex items-center justify-center w-14 h-14 sm:w-16 sm:h-16 bg-white border-2 border-ink shadow-brut-sm overflow-hidden">
+            <img src={LOGO_URL} alt="Collective Savers" className="w-full h-full object-contain" />
           </span>
-          <span className="font-display text-base sm:text-lg tracking-tighter uppercase leading-none whitespace-nowrap">
+          <span className="font-display text-lg sm:text-xl tracking-tighter uppercase leading-none whitespace-nowrap">
             The Collective Savers<span className="text-[#FF5400]">.</span>
           </span>
         </Link>
