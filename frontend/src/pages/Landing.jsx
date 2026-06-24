@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
+import { motion } from "framer-motion";
 import Marquee from "react-fast-marquee";
 import Navbar from "../components/Navbar";
 import WaveBackground from "../components/WaveBackground";
@@ -90,12 +91,18 @@ export default function Landing() {
 
       {/* ============ HOW IT WORKS — Lightweight, no prices ============ */}
       <section className="max-w-6xl mx-auto px-4 sm:px-6 py-20 sm:py-28">
-        <div className="mb-12 max-w-2xl">
+        <motion.div
+          className="mb-12 max-w-2xl"
+          initial={{ opacity: 0, y: 24 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.5 }}
+          transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+        >
           <div className="text-[10px] font-bold uppercase tracking-[0.3em] font-mono text-[#FF5400] mb-3">How it works</div>
           <h2 className="font-display text-4xl sm:text-6xl uppercase leading-[0.95] tracking-tighter">
             Three coordinated<br />moments.
           </h2>
-        </div>
+        </motion.div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
           {[
             {
@@ -116,15 +123,23 @@ export default function Landing() {
               title: "Smart fulfilment",
               body: "Products are fulfilled directly through trusted, vetted suppliers.",
             },
-          ].map(({ step, icon: Icon, title, body }) => (
-            <div key={step} className="bg-white border-2 border-ink p-7 shadow-brut hover-brut" data-testid={`step-${step}`}>
+          ].map(({ step, icon: Icon, title, body }, idx) => (
+            <motion.div
+              key={step}
+              className="bg-white border-2 border-ink p-7 shadow-brut hover-brut"
+              data-testid={`step-${step}`}
+              initial={{ opacity: 0, y: 32 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, amount: 0.4 }}
+              transition={{ duration: 0.55, delay: idx * 0.12, ease: [0.22, 1, 0.36, 1] }}
+            >
               <div className="flex items-center justify-between mb-6">
                 <span className="font-mono text-xs font-bold tracking-widest text-[#3A3A3A]">{step}</span>
                 <Icon weight="duotone" size={28} className="text-[#FF5400]" />
               </div>
               <h3 className="font-display text-2xl uppercase mb-3 leading-tight">{title}</h3>
               <p className="text-sm text-[#3A3A3A] leading-relaxed">{body}</p>
-            </div>
+            </motion.div>
           ))}
         </div>
       </section>
@@ -133,14 +148,28 @@ export default function Landing() {
       <section className="relative border-y-2 border-ink bg-ink text-white overflow-hidden">
         <WaveBackground variant="dark" />
         <div className="relative max-w-5xl mx-auto px-4 sm:px-6 py-24 sm:py-32">
-          <div className="text-[10px] font-bold uppercase tracking-[0.3em] font-mono text-[#FF5400] mb-6">Why this exists</div>
-          <blockquote className="font-display text-3xl sm:text-5xl lg:text-6xl uppercase leading-[1.02] tracking-tighter">
+          <motion.div
+            className="text-[10px] font-bold uppercase tracking-[0.3em] font-mono text-[#FF5400] mb-6"
+            initial={{ opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.6 }}
+            transition={{ duration: 0.5 }}
+          >
+            Why this exists
+          </motion.div>
+          <motion.blockquote
+            className="font-display text-3xl sm:text-5xl lg:text-6xl uppercase leading-[1.02] tracking-tighter"
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.4 }}
+            transition={{ duration: 0.7, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
+          >
             <span className="text-white/65">Most platforms monetise your attention.</span><br />
             <span className="block mt-4">
               The Collective Savers monetises <span className="bg-[#FFD600] text-ink px-2 -mx-2 border-2 border-white shadow-brut-sm inline-block my-1">collective purchasing power</span> — when members save together,
               <span className="text-[#FF5400]"> everyone wins.</span>
             </span>
-          </blockquote>
+          </motion.blockquote>
         </div>
       </section>
 
