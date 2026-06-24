@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import Marquee from "react-fast-marquee";
 import Navbar from "../components/Navbar";
 import WaveBackground from "../components/WaveBackground";
+import HeroWaves from "../components/HeroWaves";
 import { api } from "../lib/api";
 import {
   ArrowRight, CheckCircle, Users, Pulse, Package, Envelope, Storefront,
@@ -19,30 +20,52 @@ export default function Landing() {
       {/* ============ HERO ============ */}
       <section className="relative overflow-hidden border-b-2 border-ink min-h-[88vh] flex items-center">
         <WaveBackground variant="light" />
-        <div className="relative max-w-6xl mx-auto px-4 sm:px-6 py-16 sm:py-24 w-full">
-          <div className="inline-flex items-center gap-2 border-2 border-ink bg-white px-3 py-1 mb-8 shadow-brut-sm">
-            <span className="w-2 h-2 rounded-full bg-[#FF5400] animate-pulse" />
-            <span className="text-[10px] font-bold uppercase tracking-[0.25em] font-mono">
-              Early Access · Founding Cohort
-            </span>
+        <div className="relative max-w-6xl mx-auto px-4 sm:px-6 py-16 sm:py-20 w-full">
+          <div className="grid lg:grid-cols-[1.15fr_0.85fr] gap-12 lg:gap-10 items-center">
+            <div>
+              <div className="inline-flex items-center gap-2 border-2 border-ink bg-white px-3 py-1 mb-8 shadow-brut-sm">
+                <span className="w-2 h-2 rounded-full bg-[#FF5400] animate-pulse" />
+                <span className="text-[10px] font-bold uppercase tracking-[0.25em] font-mono">
+                  Early Access · Founding Cohort
+                </span>
+              </div>
+
+              <h1 className="font-display text-5xl sm:text-7xl lg:text-[6rem] uppercase leading-[0.88] tracking-tighter mb-7">
+                Collective<br />
+                purchasing power,<br />
+                <span className="inline-block relative">
+                  unlocked
+                  <span className="text-[#FF5400]">.</span>
+                </span>
+              </h1>
+
+              <p className="text-base sm:text-xl text-[#3A3A3A] max-w-2xl mb-8 leading-relaxed">
+                The Collective Savers is building a smarter way for people to access
+                <span className="text-ink font-bold"> supplier-level pricing </span>
+                through coordinated purchasing Waves.
+              </p>
+
+              {/* social proof stat strip */}
+              <div className="flex flex-wrap gap-3 mb-9" data-testid="hero-stats">
+                {[
+                  { num: "23%", label: "Avg. savings" },
+                  { num: "4", label: "Live regions" },
+                  { num: "11", label: "Categories" },
+                ].map((s) => (
+                  <div key={s.label} className="border-2 border-ink bg-white shadow-brut-sm px-4 py-2">
+                    <div className="font-display text-2xl sm:text-3xl uppercase tracking-tighter leading-none">{s.num}</div>
+                    <div className="font-mono text-[9px] uppercase tracking-widest text-[#3A3A3A] mt-1">{s.label}</div>
+                  </div>
+                ))}
+              </div>
+
+              <WaitlistForm />
+            </div>
+
+            <div className="hidden lg:block">
+              <HeroWaves />
+            </div>
           </div>
-
-          <h1 className="font-display text-5xl sm:text-7xl lg:text-[7.5rem] uppercase leading-[0.88] tracking-tighter mb-7 max-w-5xl">
-            Collective<br />
-            purchasing power,<br />
-            <span className="inline-block relative">
-              unlocked
-              <span className="text-[#FF5400]">.</span>
-            </span>
-          </h1>
-
-          <p className="text-base sm:text-xl text-[#3A3A3A] max-w-2xl mb-10 leading-relaxed">
-            The Collective Savers is building a smarter way for people to access
-            <span className="text-ink font-bold"> supplier-level pricing </span>
-            through coordinated purchasing Waves.
-          </p>
-
-          <WaitlistForm />
         </div>
 
         {/* kinetic strip */}
