@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import Navbar from "../components/Navbar";
 import { api, wsUrl } from "../lib/api";
+import { useAuth } from "../lib/auth";
 import { logError, logWarn } from "../lib/log";
 import { MagnifyingGlass, ArrowRight, Lightning, Users, MapPin, ArrowsClockwise } from "@phosphor-icons/react";
 
@@ -45,6 +46,8 @@ const BAR_INITIAL = { width: 0 };
 const BAR_SPRING = { type: "spring", bounce: 0, duration: 1 };
 
 export default function WaveBrowse() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
   const [waves, setWaves] = useState([]);
   const [regions, setRegions] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -52,6 +55,11 @@ export default function WaveBrowse() {
   const [category, setCategory] = useState("");
   const [regionId, setRegionId] = useState("");
   const [q, setQ] = useState("");
+
+  // Suppliers have no access to the consumer Waves marketplace — send them to their console.
+  useEffect(() => {
+    if (user?.role === "supplier") navigate("/supplier", { replace: true });
+  }, [user, navigate]);
 
   const reload = useCallback(async () => {
     const search = new URLSearchParams();

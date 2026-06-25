@@ -46,6 +46,11 @@ export default function WaveDetail() {
   const [joining, setJoining] = useState(false);
   const [allowance, setAllowance] = useState(null);
 
+  // Suppliers have no access to the consumer Waves marketplace.
+  useEffect(() => {
+    if (user?.role === "supplier") navigate("/supplier", { replace: true });
+  }, [user, navigate]);
+
   const reload = useCallback(async () => {
     try {
       const { data } = await api.get(`/waves/${id}`);
