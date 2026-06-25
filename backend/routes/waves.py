@@ -182,6 +182,21 @@ def _public_wave(w: dict, full: bool = False) -> dict:
     ideal = max(1, int(d.get("ideal_target", 1)))
     d["progress_pct"] = round(min(100.0, _wave_units(w) / ideal * 100), 1)
     d["category_label"] = d.get("category_label") or CATEGORY_LABELS.get(d.get("category"), d.get("category"))
+    if full:
+        # Stock monitoring (supplier console + admin): allocated = reserved-but-unpaid,
+        # sold = captured/paid, left = remaining available inventory.
+        allocated = sold = total = 0
+        for p in w.get("products", []):
+            for v in p.get("variants", []):
+                total += int(v.get("inventory_qty", 0))
+                allocated += int(v.get("reserved_qty", 0))
+                sold += int(v.get("sold_qty", 0))
+        d["stock_summary"] = {
+            "total": total,
+            "allocated": allocated,
+            "sold": sold,
+            "left": max(0, total - allocated - sold),
+        }
     return d
 
 

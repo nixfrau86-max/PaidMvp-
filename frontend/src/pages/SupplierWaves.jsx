@@ -104,7 +104,7 @@ export default function SupplierWaves() {
           <div className="border-2 border-ink bg-white shadow-brut overflow-x-auto" data-testid="supplier-waves-table">
             <table className="w-full font-mono text-sm">
               <thead className="bg-ink text-white">
-                <tr><Th>Wave</Th><Th>Region</Th><Th>Category</Th><Th>State</Th><Th>Units</Th><Th>Activates</Th><Th>Actions</Th></tr>
+                <tr><Th>Wave</Th><Th>Region</Th><Th>Category</Th><Th>State</Th><Th>Units</Th><Th>Stock</Th><Th>Activates</Th><Th>Actions</Th></tr>
               </thead>
               <tbody>
                 {waves.map((w) => {
@@ -117,6 +117,7 @@ export default function SupplierWaves() {
                       <Td className="capitalize">{w.category_label}</Td>
                       <Td><span className="inline-flex border-2 border-ink px-2 py-1 text-[9px] font-bold uppercase tracking-widest" style={{ background: sb.bg, color: sb.text || "#0A0A0A" }}>{sb.label}</span></Td>
                       <Td>{w.units_committed}/{w.ideal_target}</Td>
+                      <Td><StockCell s={w.stock_summary} testid={`supplier-wave-stock-${w.wave_id}`} /></Td>
                       <Td>{w.min_activation}</Td>
                       <Td>
                         <div className="flex flex-wrap gap-1">
@@ -508,3 +509,14 @@ function Field({ label, full, children }) {
 }
 function Th({ children }) { return <th className="text-left text-[10px] uppercase tracking-widest font-bold px-4 py-3">{children}</th>; }
 function Td({ children, className = "" }) { return <td className={`px-4 py-3 align-middle ${className}`}>{children}</td>; }
+
+function StockCell({ s, testid }) {
+  if (!s) return <span className="text-[#3A3A3A]">—</span>;
+  return (
+    <div className="flex items-center gap-1.5 tabular-nums text-[10px]" data-testid={testid}>
+      <span className="border-2 border-ink bg-[#FFD600] px-1.5 py-0.5 font-bold" title="Allocated — reserved but not yet paid">A {s.allocated}</span>
+      <span className="border-2 border-ink bg-[#00C853] text-white px-1.5 py-0.5 font-bold" title="Sold — paid">S {s.sold}</span>
+      <span className="border-2 border-ink bg-white px-1.5 py-0.5 font-bold" title="Left — available inventory">L {s.left}</span>
+    </div>
+  );
+}

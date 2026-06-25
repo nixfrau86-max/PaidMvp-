@@ -83,7 +83,7 @@ export default function RegionalWavesTab() {
       <div className="border-2 border-ink bg-white shadow-brut overflow-x-auto">
         <table className="w-full font-mono text-sm">
           <thead className="bg-ink text-white">
-            <tr><Th>Wave</Th><Th>Supplier</Th><Th>Region</Th><Th>Category</Th><Th>Units</Th><Th>State</Th><Th>Actions</Th></tr>
+            <tr><Th>Wave</Th><Th>Supplier</Th><Th>Region</Th><Th>Category</Th><Th>Units</Th><Th>Stock (alloc · sold · left)</Th><Th>State</Th><Th>Actions</Th></tr>
           </thead>
           <tbody>
             {waves.map((w) => (
@@ -93,6 +93,7 @@ export default function RegionalWavesTab() {
                 <Td>{w.region_name}</Td>
                 <Td className="capitalize">{w.category_label}</Td>
                 <Td>{w.units_committed}/{w.ideal_target}</Td>
+                <Td><StockCell s={w.stock_summary} testid={`admin-wave-stock-${w.wave_id}`} /></Td>
                 <Td>
                   <select value={w.state} onChange={(e) => setState(w, e.target.value)} className="border-2 border-ink px-2 py-1 text-[10px] uppercase font-bold" data-testid={`admin-wave-state-${w.wave_id}`}>
                     {STATES.map((s) => <option key={s} value={s}>{s}</option>)}
@@ -105,7 +106,7 @@ export default function RegionalWavesTab() {
               </tr>
             ))}
             {waves.length === 0 && !busy && (
-              <tr><td colSpan={7} className="px-3 py-8 text-center font-mono text-[11px] uppercase tracking-widest text-[#3A3A3A]">No regional waves yet.</td></tr>
+              <tr><td colSpan={8} className="px-3 py-8 text-center font-mono text-[11px] uppercase tracking-widest text-[#3A3A3A]">No regional waves yet.</td></tr>
             )}
           </tbody>
         </table>
@@ -118,6 +119,17 @@ export default function RegionalWavesTab() {
 
 function Money({ v }) {
   return <span className="tabular-nums">£{(Number(v) || 0).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>;
+}
+
+function StockCell({ s, testid }) {
+  if (!s) return <span className="text-[#3A3A3A]">—</span>;
+  return (
+    <span className="inline-flex items-center gap-1.5 tabular-nums text-[11px]" data-testid={testid}>
+      <span className="border-2 border-ink bg-[#FFD600] px-1.5 py-0.5 font-bold" title="Allocated (reserved, unpaid)">{s.allocated}</span>
+      <span className="border-2 border-ink bg-[#00C853] text-white px-1.5 py-0.5 font-bold" title="Sold (paid)">{s.sold}</span>
+      <span className="border-2 border-ink bg-white px-1.5 py-0.5 font-bold" title="Left (available)">{s.left}</span>
+    </span>
+  );
 }
 
 function FinStat({ label, value, accent }) {
