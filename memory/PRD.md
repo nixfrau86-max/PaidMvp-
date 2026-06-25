@@ -19,6 +19,22 @@ Build a real-time demand aggregation platform that turns fragmented consumer int
 7. Payment methods (admin-configurable fees + recommended flag + on/off): Open Banking (+£1, recommended), Apple Pay (+£3), Google Pay (+£3), Card (+£3), Bank Transfer (+£1.50). Wallet rails route through Stripe; OB/Bank Transfer mocked until TrueLayer/Faster Payments are wired.
 8. Admin role is restricted to `ADMIN_EMAILS` env allowlist.
 
+## What's implemented (latest — 2026-06-24)
+### 🗓️ Wave schedule rework + test-user purge (DONE)
+- **Removed the 16:30 (4:30pm) cut-off.** Waves now run until **midnight** on their launch day (`_deadline_for_creation_london` → 23:59:59 London). No more same-day immediate respawn.
+- **Working week = Monday–Saturday**, excluding **Sundays + UK (England & Wales) bank holidays** (new `holidays==0.99` dep; `_is_working_day`). Launch time stays **08:30**.
+- **Orders placed the following working day:** `complete_wave_and_respawn` now **always schedules** the leftover-stock respawn for `_next_creation_time_london()` = the next working day at 08:30 (skips Sun + bank holidays). The old "immediate inside window" branch was removed.
+- Tests updated: `test_wave_respawn.py` (4 schedule cases incl. Fri→Sat, Sat→Mon, Good-Friday skip) + `test_wave_lifecycle.py::TestRespawnWorkingWindow` (midnight deadline). **15 passed.**
+- **DB cleanup:** purged **332 test users** (all `test_*`, `@example.com`, `wavetest_/tyretest_/elec_/garage_/acct_/lbl_/card_/dbg_/ui_` artefacts + the 2 named test admins `test_377c3ca6@`, `test_43d7ccba@`) plus their sessions (329) + participations (131). **19 real accounts preserved**; only `founder@thecollectivesavers.co.uk` remains admin. Founder + demo logins verified 200.
+
+## What's implemented (latest — 2026-06-24)
+### 🖼️ Per-product images in wave creation (DONE)
+- Suppliers attach a photo **per product** (not just per wave) in the Products & options section (`SupplierWaves.jsx`, reuses `/api/supplier/wave-image`). Backend: `image_url` on `ProductInput`, persisted via `_normalize_products`, surfaced in `_public_wave`, carried into respawns. Consumer `WaveDetail.jsx` Step 1 shows product-tab thumbnails + a hero image for the selected product. Verified end-to-end via curl.
+
+## What's implemented (latest — 2026-06-24)
+### 🎨 Landing graphics refresh (DONE)
+- Bigger navbar logo. New hero is a 2-col layout with an animated **live Waves** visual (`HeroWaves.jsx`) wired to **real `/api/waves` data** (category icon, progress, joined count, computed savings %; clickable to `/wave/:id`; illustrative fallback if no live waves) + a social-proof stat strip. Scroll-triggered entrance animations (Framer Motion `whileInView`) on the "How it works" cards + manifesto.
+
 ## What's implemented (latest — 2026-06-19)
 ### 📧 Resend transactional emails (IMPLEMENTED — awaiting API key to go live)
 - `backend/email_service.py`: non-blocking async Resend layer (`send_email` + branded HTML templates) that **gracefully no-ops if `RESEND_API_KEY`/`SENDER_EMAIL` are unset**, so the app runs without credentials. Loads env via `load_dotenv()`.

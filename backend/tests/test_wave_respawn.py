@@ -11,26 +11,28 @@ from routes.waves import (
 LON = ZoneInfo("Europe/London")
 
 
-def test_creation_time_working_day_before_4pm_is_now():
-    assert _next_creation_time_london(datetime(2026, 6, 8, 10, 0, tzinfo=LON)) is None
-    # before the 08:30 window opens → today 08:30 (not immediate)
-    r = _next_creation_time_london(datetime(2026, 6, 8, 7, 0, tzinfo=LON))
-    assert r.day == 8 and (r.hour, r.minute) == (8, 30)
+def test_creation_time_is_following_working_day_0830():
+    # Mon 2026-06-08 10:00 → next working day Tue 2026-06-09 08:30
+    r = _next_creation_time_london(datetime(2026, 6, 8, 10, 0, tzinfo=LON))
+    assert r.day == 9 and r.weekday() == 1 and (r.hour, r.minute) == (8, 30)
 
 
-def test_creation_time_past_4pm_rolls_to_next_working_day_830am():
-    r = _next_creation_time_london(datetime(2026, 6, 8, 16, 30, tzinfo=LON))  # Mon 4:30pm (window closed)
-    assert r.weekday() == 1 and (r.hour, r.minute) == (8, 30)  # Tue 8:30am
+def test_creation_time_friday_rolls_to_saturday_working_day():
+    # Sat is now a working day → Fri 2026-06-12 → Sat 2026-06-13 08:30
+    r = _next_creation_time_london(datetime(2026, 6, 12, 17, 0, tzinfo=LON))
+    assert r.weekday() == 5 and (r.hour, r.minute) == (8, 30)  # Saturday
 
 
-def test_creation_time_friday_evening_skips_weekend():
-    r = _next_creation_time_london(datetime(2026, 6, 12, 17, 0, tzinfo=LON))  # Fri 5pm
-    assert r.weekday() == 0 and (r.hour, r.minute) == (8, 30)  # Monday 8:30am
+def test_creation_time_saturday_skips_sunday_to_monday():
+    # Sat 2026-06-13 → Sun excluded → Mon 2026-06-15 08:30
+    r = _next_creation_time_london(datetime(2026, 6, 13, 11, 0, tzinfo=LON))
+    assert r.weekday() == 0 and r.day == 15 and (r.hour, r.minute) == (8, 30)
 
 
-def test_creation_time_weekend_schedules_monday():
-    r = _next_creation_time_london(datetime(2026, 6, 13, 11, 0, tzinfo=LON))  # Sat
-    assert r.weekday() == 0 and (r.hour, r.minute) == (8, 30)  # Monday 8:30am
+def test_creation_time_skips_uk_bank_holiday():
+    # Thu 2026-04-02 → Fri 2026-04-03 is Good Friday (bank holiday) → Sat 2026-04-04
+    r = _next_creation_time_london(datetime(2026, 4, 2, 10, 0, tzinfo=LON))
+    assert r.day == 4 and r.weekday() == 5 and (r.hour, r.minute) == (8, 30)
 
 
 def test_remaining_products_only_unsold_stock():

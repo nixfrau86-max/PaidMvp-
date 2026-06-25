@@ -263,42 +263,42 @@ class TestAnnualUnitLimits:
 
 
 class TestRespawnWorkingWindow:
-    """Pure-function tests for the Mon–Fri 08:30–16:30 respawn window + 16:30 deadline."""
+    """Pure-function tests for the Mon–Sat (excl. Sun + UK bank holidays) respawn
+    schedule: order placed the following working day 08:30; deadline = midnight."""
 
     @staticmethod
     def _london(y, mo, d, h, mi):
         return datetime(y, mo, d, h, mi, tzinfo=ZoneInfo("Europe/London"))
 
-    def test_immediate_inside_window(self):
+    def test_always_following_working_day(self):
         w = waves_mod
-        # Mon 2026-06-15 09:00 → inside window → create now (None)
-        assert w._next_creation_time_london(self._london(2026, 6, 15, 9, 0)) is None
-        # boundary: exactly 08:30 is inside; 16:29 inside
-        assert w._next_creation_time_london(self._london(2026, 6, 15, 8, 30)) is None
-        assert w._next_creation_time_london(self._london(2026, 6, 15, 16, 29)) is None
+        # Mon 2026-06-15 09:00 → next working day Tue 2026-06-16 08:30 (never same-day)
+        nxt = w._next_creation_time_london(self._london(2026, 6, 15, 9, 0))
+        assert nxt.day == 16 and nxt.weekday() == 1 and (nxt.hour, nxt.minute) == (8, 30)
 
-    def test_before_window_same_day_0830(self):
+    def test_friday_rolls_to_saturday(self):
         w = waves_mod
-        nxt = w._next_creation_time_london(self._london(2026, 6, 15, 7, 0))  # Mon 07:00
-        assert (nxt.hour, nxt.minute) == (8, 30) and nxt.day == 15
+        # Saturday is a working day → Fri 2026-06-12 → Sat 2026-06-13 08:30
+        nxt = w._next_creation_time_london(self._london(2026, 6, 12, 17, 0))
+        assert nxt.weekday() == 5 and (nxt.hour, nxt.minute) == (8, 30)
 
-    def test_after_window_next_working_day(self):
-        w = waves_mod
-        nxt = w._next_creation_time_london(self._london(2026, 6, 15, 17, 0))  # Mon 17:00
-        assert (nxt.hour, nxt.minute) == (8, 30) and nxt.weekday() == 1  # Tue
-
-    def test_weekend_rolls_to_monday(self):
+    def test_saturday_skips_sunday_to_monday(self):
         w = waves_mod
         nxt = w._next_creation_time_london(self._london(2026, 6, 13, 12, 0))  # Sat
-        assert nxt.weekday() == 0 and (nxt.hour, nxt.minute) == (8, 30)  # Mon 08:30
+        assert nxt.weekday() == 0 and nxt.day == 15 and (nxt.hour, nxt.minute) == (8, 30)
 
-    def test_deadline_is_1630_same_day_utc(self):
+    def test_skips_uk_bank_holiday(self):
         w = waves_mod
-        # London 09:00 in June (BST, UTC+1) → 16:30 BST == 15:30 UTC
+        # Thu 2026-04-02 → Good Friday 2026-04-03 skipped → Sat 2026-04-04
+        nxt = w._next_creation_time_london(self._london(2026, 4, 2, 10, 0))
+        assert nxt.day == 4 and nxt.weekday() == 5 and (nxt.hour, nxt.minute) == (8, 30)
+
+    def test_deadline_is_midnight_same_day(self):
+        w = waves_mod
         dl = w._deadline_for_creation_london(self._london(2026, 6, 15, 9, 0))
         assert dl.tzinfo is not None
         loc = dl.astimezone(ZoneInfo("Europe/London"))
-        assert (loc.hour, loc.minute) == (16, 30) and loc.day == 15
+        assert (loc.hour, loc.minute) == (23, 59) and loc.day == 15
 
 
 

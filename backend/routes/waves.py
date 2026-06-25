@@ -42,11 +42,15 @@ ACTIVE_PART_STATUSES = ["reserved", "authorized", "captured"]
 ALMOST_FULL_RATIO = 0.8
 RESERVATION_MINUTES = 25
 
-# Respawn working window (Europe/London): Mon–Fri 08:30 → 16:30. Waves that
-# complete inside this window respawn immediately; otherwise the next working
-# day 08:30. Every respawned wave gets a same-day 16:30 deadline.
-WORK_START_H, WORK_START_M = 8, 30
-WORK_END_H, WORK_END_M = 16, 30
+# Respawn / order placement schedule (Europe/London).
+# Working days: Monday–Saturday, EXCLUDING Sundays and UK (England & Wales) bank holidays.
+# Waves launch at 08:30 on a working day and run until MIDNIGHT (no 16:30 cut-off).
+# When a wave completes, the order/leftover-respawn is placed on the FOLLOWING
+# working day at 08:30.
+import holidays as _holidays_lib
+
+WORK_START_H, WORK_START_M = 8, 30        # daily launch time
+_UK_HOLIDAYS = _holidays_lib.country_holidays("GB", subdiv="ENG")
 
 # States the supplier/admin manage manually (never auto-overwritten by recompute)
 TERMINAL_OR_MANUAL = {"processing", "fulfilment", "completed", "expired"}
@@ -1152,10 +1156,10 @@ def build_router(deps: Dict[str, Any]) -> APIRouter:
 
 # --------------------------------------------------------------------------
 # Auto-respawn: when a wave COMPLETES with stock remaining, spin up a follow-on
-# wave for the leftover inventory until stock depletes. Working window
-# (Europe/London): Mon–Fri 08:30–16:30 — complete inside the window → create
-# immediately; otherwise schedule for the next working day 08:30. Every
-# respawned wave gets a same-day 16:30 deadline.
+# wave for the leftover inventory until stock depletes. Schedule (Europe/London):
+# the order/leftover-respawn is always placed on the FOLLOWING working day at
+# 08:30 (Mon–Sat, excluding Sundays + UK bank holidays); each wave runs until
+# midnight on its launch day (no 16:30 cut-off).
 # --------------------------------------------------------------------------
 def _london_now() -> datetime:
     try:
@@ -1165,33 +1169,34 @@ def _london_now() -> datetime:
         return datetime.now(timezone.utc)
 
 
-def _in_working_window(now: datetime) -> bool:
-    """True when `now` (London) is Mon–Fri between 08:30 and 16:30."""
-    if now.weekday() >= 5:  # Sat/Sun
+def _is_working_day(d: datetime) -> bool:
+    """True for Mon–Sat that are NOT UK (England & Wales) bank holidays. Sundays excluded."""
+    if d.weekday() == 6:  # Sunday
         return False
-    return (WORK_START_H, WORK_START_M) <= (now.hour, now.minute) < (WORK_END_H, WORK_END_M)
+    return d.date() not in _UK_HOLIDAYS
 
 
-def _next_creation_time_london(now: Optional[datetime] = None) -> Optional[datetime]:
-    """Return None to create immediately (inside Mon–Fri 08:30–16:30), else the
-    London datetime of the next working-day at 08:30."""
-    now = now or _london_now()
-    if _in_working_window(now):
-        return None
-    # Weekday but before the window opens → today 08:30.
-    if now.weekday() < 5 and (now.hour, now.minute) < (WORK_START_H, WORK_START_M):
-        return now.replace(hour=WORK_START_H, minute=WORK_START_M, second=0, microsecond=0)
-    # Otherwise (after 16:30 or weekend) → next working day 08:30.
+def _next_working_day_0830(now: datetime) -> datetime:
+    """The FOLLOWING working day at 08:30 (London). Always strictly after `now`'s day —
+    orders are placed the next working day, skipping Sundays + UK bank holidays."""
     d = now + timedelta(days=1)
-    while d.weekday() >= 5:  # skip Sat/Sun
+    while not _is_working_day(d):
         d = d + timedelta(days=1)
     return d.replace(hour=WORK_START_H, minute=WORK_START_M, second=0, microsecond=0)
 
 
+def _next_creation_time_london(now: Optional[datetime] = None) -> datetime:
+    """London datetime when the next (respawned) wave/order should be created:
+    the following working day at 08:30. (Order placed the next working day.)"""
+    now = now or _london_now()
+    return _next_working_day_0830(now)
+
+
 def _deadline_for_creation_london(create_local: Optional[datetime] = None) -> datetime:
-    """16:30 Europe/London on the creation day, returned as a UTC datetime."""
+    """Midnight (end of the creation day) Europe/London, returned as a UTC datetime.
+    Removes the old 16:30 cut-off — a wave runs the full day it is launched."""
     create_local = create_local or _london_now()
-    dl_local = create_local.replace(hour=WORK_END_H, minute=WORK_END_M, second=0, microsecond=0)
+    dl_local = create_local.replace(hour=23, minute=59, second=59, microsecond=0)
     return dl_local.astimezone(timezone.utc)
 
 
@@ -1302,17 +1307,8 @@ async def complete_wave_and_respawn(db, manager, wave: dict) -> dict:
                 "engaged": engaged, "sold": sold_total, "remaining": total_remaining}
 
     doc = _build_respawn_doc(wave, remaining_products, total_remaining, carried_units)
+    # Order placed the FOLLOWING working day — always scheduled, never same-day.
     when = _next_creation_time_london()
-    if when is None:
-        # Inside the working window → go live immediately, deadline today 16:30.
-        doc["created_at"] = _now()
-        doc["deadline"] = _deadline_for_creation_london(_london_now())
-        await db.waves.insert_one(dict(doc))
-        await db.suppliers.update_one({"supplier_id": doc["supplier_id"]}, {"$inc": {"waves_published": 1}})
-        await manager.broadcast("waves:feed", {"type": "wave_created", "wave_id": doc["wave_id"], "title": doc["title"]})
-        return {"respawned": True, "scheduled": False, "new_wave_id": doc["wave_id"],
-                "units": total_remaining, "carried_units": carried_units}
-
     spec = dict(doc)
     spec["created_at"] = None
     spec["deadline"] = None
