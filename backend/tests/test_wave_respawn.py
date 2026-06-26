@@ -4,11 +4,35 @@ from zoneinfo import ZoneInfo
 
 from routes.waves import (
     _next_creation_time_london,
+    _respawn_schedule,
     _compute_remaining_products,
     _build_respawn_doc,
 )
 
 LON = ZoneInfo("Europe/London")
+
+
+def test_respawn_immediate_during_working_hours():
+    # Mon 2026-06-15 10:00 (working day, ≥08:30) → immediate (None)
+    assert _respawn_schedule(datetime(2026, 6, 15, 10, 0, tzinfo=LON)) is None
+    # Sat 2026-06-13 11:00 is now a working day → immediate
+    assert _respawn_schedule(datetime(2026, 6, 13, 11, 0, tzinfo=LON)) is None
+
+
+def test_respawn_before_open_schedules_today_0830():
+    r = _respawn_schedule(datetime(2026, 6, 15, 7, 0, tzinfo=LON))  # Mon 07:00
+    assert r.day == 15 and (r.hour, r.minute) == (8, 30)
+
+
+def test_respawn_sunday_schedules_next_working_day():
+    r = _respawn_schedule(datetime(2026, 6, 14, 12, 0, tzinfo=LON))  # Sunday
+    assert r.weekday() == 0 and (r.hour, r.minute) == (8, 30)  # Monday 08:30
+
+
+def test_respawn_bank_holiday_schedules_next_working_day():
+    # Good Friday 2026-04-03 (bank holiday) → next working day Sat 2026-04-04 08:30
+    r = _respawn_schedule(datetime(2026, 4, 3, 10, 0, tzinfo=LON))
+    assert r.day == 4 and (r.hour, r.minute) == (8, 30)
 
 
 def test_creation_time_is_following_working_day_0830():

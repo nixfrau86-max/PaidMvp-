@@ -1,14 +1,22 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Plus, Trash, CurrencyGbp, X } from "@phosphor-icons/react";
+import { Plus, Trash, CurrencyGbp, X, ArrowsClockwise } from "@phosphor-icons/react";
 import { api } from "../../lib/api";
 import { Th, Td } from "./_shared";
 
 const STATES = ["open", "almost_full", "activated", "processing", "fulfilment", "completed", "expired"];
 
+function fmtWhen(iso) {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/London" });
+  } catch { return iso; }
+}
+
 export default function RegionalWavesTab() {
   const [waves, setWaves] = useState([]);
   const [regions, setRegions] = useState([]);
+  const [scheduled, setScheduled] = useState([]);
   const [newRegion, setNewRegion] = useState("");
   const [busy, setBusy] = useState(false);
   const [financials, setFinancials] = useState(null);
@@ -16,12 +24,14 @@ export default function RegionalWavesTab() {
   const load = useCallback(async () => {
     setBusy(true);
     try {
-      const [w, r] = await Promise.all([
+      const [w, r, s] = await Promise.all([
         api.get("/admin/regional-waves"),
         api.get("/regions?all_regions=true"),
+        api.get("/admin/scheduled-waves"),
       ]);
       setWaves(w.data);
       setRegions(r.data);
+      setScheduled(s.data);
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Failed to load");
     } finally { setBusy(false); }
@@ -77,6 +87,38 @@ export default function RegionalWavesTab() {
           <input value={newRegion} onChange={(e) => setNewRegion(e.target.value)} placeholder="New region name" className="flex-1 border-2 border-ink px-3 py-2 font-mono text-sm" data-testid="new-region-input" />
           <button onClick={addRegion} className="bg-[#FF5400] text-white border-2 border-ink px-3 py-2 font-bold uppercase tracking-widest text-[10px] shadow-brut-sm hover-brut inline-flex items-center gap-1" data-testid="add-region-btn"><Plus weight="bold" size={10} /> Add</button>
         </div>
+      </div>
+
+      {/* Scheduled regenerations (auto-engine monitor) */}
+      <div className="border-2 border-ink bg-white shadow-brut p-5" data-testid="scheduled-regenerations">
+        <div className="flex items-center gap-2 mb-3">
+          <ArrowsClockwise weight="bold" size={18} className="text-[#FF5400]" />
+          <div className="font-display text-xl uppercase">Scheduled regenerations</div>
+          <span className="ml-auto border-2 border-ink bg-[#FFD600] px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-widest">{scheduled.length} queued</span>
+        </div>
+        {scheduled.length === 0 ? (
+          <div className="font-mono text-[11px] uppercase tracking-widest text-[#3A3A3A]">No pending regenerations. Completed waves with leftover stock will queue here.</div>
+        ) : (
+          <div className="overflow-x-auto border-2 border-ink">
+            <table className="w-full font-mono text-[12px]">
+              <thead className="bg-ink text-white">
+                <tr><Th>Wave (next round)</Th><Th>Supplier</Th><Th>Region</Th><Th>Units</Th><Th>Carried</Th><Th>Goes live</Th></tr>
+              </thead>
+              <tbody>
+                {scheduled.map((s) => (
+                  <tr key={s.scheduled_id} className="border-t-2 border-ink" data-testid={`scheduled-row-${s.scheduled_id}`}>
+                    <Td><span className="font-bold uppercase text-xs">{s.title}</span></Td>
+                    <Td>{s.supplier_name}</Td>
+                    <Td>{s.region_name}</Td>
+                    <Td className="tabular-nums">{s.units}</Td>
+                    <Td className="tabular-nums">{s.carried_units || 0}</Td>
+                    <Td className="text-[#0021A5] font-bold">{fmtWhen(s.create_at)}</Td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Waves table */}

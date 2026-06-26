@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Tire, DeviceMobile, Sneaker, TShirt, Package, Users, Lightning } from "@phosphor-icons/react";
 import { api } from "../lib/api";
+import { useAuth } from "../lib/auth";
 
 const ICONS = {
   tyres: Tire,
@@ -36,7 +37,10 @@ function bestSavings(products = []) {
 }
 
 export default function HeroWaves() {
+  const { user } = useAuth();
   const [waves, setWaves] = useState(null);
+  // Suppliers & garages must not deep-link into the consumer marketplace from the front page.
+  const canOpen = !user || user.role === "consumer" || user.role === "admin";
 
   useEffect(() => {
     let alive = true;
@@ -83,8 +87,9 @@ export default function HeroWaves() {
           const Icon = ICONS[c.category] || Package;
           const accent = ACCENTS[i % ACCENTS.length];
           const rotate = ROTATES[i % ROTATES.length];
-          const Wrapper = c.wave_id ? Link : "div";
-          const wrapperProps = c.wave_id
+          const clickable = c.wave_id && canOpen;
+          const Wrapper = clickable ? Link : "div";
+          const wrapperProps = clickable
             ? { to: `/wave/${c.wave_id}`, "data-testid": `hero-wave-card-${c.wave_id}` }
             : { "aria-hidden": true };
           return (
@@ -103,7 +108,7 @@ export default function HeroWaves() {
               >
                 <Wrapper
                   {...wrapperProps}
-                  className={`block bg-white border-2 border-ink shadow-brut p-4 ${c.wave_id ? "hover-brut" : ""}`}
+                  className={`block bg-white border-2 border-ink shadow-brut p-4 ${clickable ? "hover-brut" : ""}`}
                 >
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2.5">

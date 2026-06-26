@@ -19,6 +19,17 @@ Build a real-time demand aggregation platform that turns fragmented consumer int
 7. Payment methods (admin-configurable fees + recommended flag + on/off): Open Banking (+£1, recommended), Apple Pay (+£3), Google Pay (+£3), Card (+£3), Bank Transfer (+£1.50). Wallet rails route through Stripe; OB/Bank Transfer mocked until TrueLayer/Faster Payments are wired.
 8. Admin role is restricted to `ADMIN_EMAILS` env allowlist.
 
+## What's implemented (latest — 2026-06-26)
+### 🔒 Waves access control + ♻️ regeneration (immediate + monitor) (DONE)
+- **Unauthorised-access audit + fix:** the consumer Waves marketplace (`/waves`, `/wave/:id`) now redirects **suppliers → /supplier** and **garages → /garage** (extends the earlier supplier-only guard). The front-page hero cards (`HeroWaves`) only deep-link into a wave for **consumer/admin/anonymous**; for supplier/garage they render non-clickable. Navbar already gated the Waves link to consumer/admin. NOTE: anonymous browsing of `/waves` remains allowed (original funnel design); the public `GET /api/waves[/{id}]` API stays open (marketplace data is non-sensitive) — frontend role-redirects are the access boundary.
+- **Regeneration reviewed — engine works** (proven via live reproduction: auto-complete → schedule → materialise → Round 2). Root cause of "not working" was the prior next-working-day deferral being invisible. **Fixed (option C):** `_respawn_schedule()` now launches a respawn **immediately** when completed during working hours (Mon–Sat ≥08:30), else schedules today 08:30 (if before open) or the next working day (Sun/bank holidays). `complete_wave_and_respawn` restored the immediate-live branch.
+- **Auto-engine monitor:** new `GET /api/admin/scheduled-waves` + a **"Scheduled regenerations"** panel in the Admin Regional Waves tab — shows each queued Round, supplier, region, leftover units, carried units, and London go-live time.
+- Tests: `_respawn_schedule` immediate/before-open/Sunday/bank-holiday cases added → **19 passed** (respawn + window + auto-complete).
+
+## What's implemented (latest — 2026-06-25)
+### 📦 Stock monitoring (supplier + admin) (DONE)
+- `_public_wave(full=True)` now returns `stock_summary {total, allocated(reserved-unpaid), sold(paid), left}`. Supplier console (`SupplierWaves`) + Admin Regional Waves table show A/S/L badges per wave.
+
 ## What's implemented (latest — 2026-06-24)
 ### 🗓️ Wave schedule rework + test-user purge (DONE)
 - **Removed the 16:30 (4:30pm) cut-off.** Waves now run until **midnight** on their launch day (`_deadline_for_creation_london` → 23:59:59 London). No more same-day immediate respawn.

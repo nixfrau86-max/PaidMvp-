@@ -56,9 +56,10 @@ export default function WaveBrowse() {
   const [regionId, setRegionId] = useState("");
   const [q, setQ] = useState("");
 
-  // Suppliers have no access to the consumer Waves marketplace — send them to their console.
+  // Suppliers & garages have no access to the consumer Waves marketplace — send them to their console.
   useEffect(() => {
     if (user?.role === "supplier") navigate("/supplier", { replace: true });
+    else if (user?.role === "garage") navigate("/garage", { replace: true });
   }, [user, navigate]);
 
   const reload = useCallback(async () => {

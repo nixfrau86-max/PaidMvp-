@@ -1061,6 +1061,31 @@ def build_router(deps: Dict[str, Any]) -> APIRouter:
             out.append({**_public_wave(d, full=True), "supplier_name": sup.get("business_name") if sup else "—"})
         return out
 
+    @router.get("/admin/scheduled-waves")
+    async def admin_list_scheduled_waves(user: dict = Depends(get_current_user)):
+        """Pending wave regenerations queued for a future working day (auto-engine monitor)."""
+        await require_role(user, ["admin"])
+        docs = await db.scheduled_waves.find({"created": {"$ne": True}}, {"_id": 0}).to_list(200)
+        out = []
+        for sw in docs:
+            spec = sw.get("spec", {})
+            sup = await db.suppliers.find_one({"supplier_id": spec.get("supplier_id")}, {"_id": 0, "business_name": 1})
+            out.append({
+                "scheduled_id": sw.get("scheduled_id"),
+                "title": spec.get("title"),
+                "region_name": spec.get("region_name"),
+                "category_label": spec.get("category_label") or CATEGORY_LABELS.get(spec.get("category"), spec.get("category")),
+                "units": spec.get("ideal_target", 0),
+                "carried_units": spec.get("carried_units", 0),
+                "round": spec.get("round"),
+                "create_at": sw.get("create_at"),
+                "create_at_local": sw.get("create_at_local"),
+                "parent_wave_id": sw.get("parent_wave_id"),
+                "supplier_name": sup.get("business_name") if sup else "—",
+            })
+        out.sort(key=lambda x: x.get("create_at") or "")
+        return out
+
     @router.patch("/admin/regional-waves/{wave_id}/state")
     async def admin_set_state(wave_id: str, payload: StateUpdateRequest, user: dict = Depends(get_current_user)):
         await require_role(user, ["admin"])
@@ -1202,9 +1227,23 @@ def _next_working_day_0830(now: datetime) -> datetime:
 
 def _next_creation_time_london(now: Optional[datetime] = None) -> datetime:
     """London datetime when the next (respawned) wave/order should be created:
-    the following working day at 08:30. (Order placed the next working day.)"""
+    the following working day at 08:30. (Used for scheduled/deferred respawns.)"""
     now = now or _london_now()
     return _next_working_day_0830(now)
+
+
+def _respawn_schedule(now: Optional[datetime] = None) -> Optional[datetime]:
+    """Decide WHEN a respawn should launch:
+      • working day, at/after 08:30  → None  (create immediately, live now)
+      • working day, before 08:30    → today 08:30
+      • non-working day              → next working day 08:30
+    Working days = Mon–Sat excluding Sundays + UK bank holidays."""
+    now = now or _london_now()
+    if not _is_working_day(now):
+        return _next_working_day_0830(now)
+    if (now.hour, now.minute) < (WORK_START_H, WORK_START_M):
+        return now.replace(hour=WORK_START_H, minute=WORK_START_M, second=0, microsecond=0)
+    return None  # inside working hours → immediate
 
 
 def _deadline_for_creation_london(create_local: Optional[datetime] = None) -> datetime:
@@ -1322,8 +1361,18 @@ async def complete_wave_and_respawn(db, manager, wave: dict) -> dict:
                 "engaged": engaged, "sold": sold_total, "remaining": total_remaining}
 
     doc = _build_respawn_doc(wave, remaining_products, total_remaining, carried_units)
-    # Order placed the FOLLOWING working day — always scheduled, never same-day.
-    when = _next_creation_time_london()
+    # Option C: launch immediately if completed during working hours (Mon–Sat ≥08:30);
+    # otherwise schedule for the next working day 08:30.
+    when = _respawn_schedule()
+    if when is None:
+        doc["created_at"] = _now()
+        doc["deadline"] = _deadline_for_creation_london(_london_now())
+        await db.waves.insert_one(dict(doc))
+        await db.suppliers.update_one({"supplier_id": doc["supplier_id"]}, {"$inc": {"waves_published": 1}})
+        await manager.broadcast("waves:feed", {"type": "wave_created", "wave_id": doc["wave_id"], "title": doc["title"]})
+        return {"respawned": True, "scheduled": False, "new_wave_id": doc["wave_id"],
+                "units": total_remaining, "carried_units": carried_units}
+
     spec = dict(doc)
     spec["created_at"] = None
     spec["deadline"] = None
