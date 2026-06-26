@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Plus, Trash, CurrencyGbp, X, ArrowsClockwise } from "@phosphor-icons/react";
+import { Plus, Trash, CurrencyGbp, X, ArrowsClockwise, Play } from "@phosphor-icons/react";
 import { api } from "../../lib/api";
 import { Th, Td } from "./_shared";
 
@@ -68,6 +68,16 @@ export default function RegionalWavesTab() {
       setFinancials(data);
     } catch (e) { toast.error(e?.response?.data?.detail || "Failed to load financials"); }
   };
+  const startScheduled = async (scheduledId) => {
+    if (!window.confirm("Launch this queued wave live now?")) return;
+    try { await api.post(`/admin/scheduled-waves/${scheduledId}/start`); toast.success("Wave launched live"); load(); }
+    catch (e) { toast.error(e?.response?.data?.detail || "Failed to start"); }
+  };
+  const cancelScheduled = async (scheduledId) => {
+    if (!window.confirm("Cancel this queued regeneration? It will not launch.")) return;
+    try { await api.delete(`/admin/scheduled-waves/${scheduledId}`); toast.success("Regeneration cancelled"); load(); }
+    catch (e) { toast.error(e?.response?.data?.detail || "Failed to cancel"); }
+  };
 
   return (
     <div className="space-y-6" data-testid="regional-waves-tab">
@@ -102,7 +112,7 @@ export default function RegionalWavesTab() {
           <div className="overflow-x-auto border-2 border-ink">
             <table className="w-full font-mono text-[12px]">
               <thead className="bg-ink text-white">
-                <tr><Th>Wave (next round)</Th><Th>Supplier</Th><Th>Region</Th><Th>Units</Th><Th>Carried</Th><Th>Goes live</Th></tr>
+                <tr><Th>Wave (next round)</Th><Th>Supplier</Th><Th>Region</Th><Th>Units</Th><Th>Carried</Th><Th>Goes live</Th><Th>Actions</Th></tr>
               </thead>
               <tbody>
                 {scheduled.map((s) => (
@@ -113,6 +123,26 @@ export default function RegionalWavesTab() {
                     <Td className="tabular-nums">{s.units}</Td>
                     <Td className="tabular-nums">{s.carried_units || 0}</Td>
                     <Td className="text-[#0021A5] font-bold">{fmtWhen(s.create_at)}</Td>
+                    <Td>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => startScheduled(s.scheduled_id)}
+                          disabled={busy}
+                          className="inline-flex items-center gap-1 border-2 border-ink bg-[#00C853] text-white px-2 py-1 text-[10px] font-bold uppercase tracking-widest hover-brut disabled:opacity-50"
+                          data-testid={`start-scheduled-${s.scheduled_id}`}
+                        >
+                          <Play weight="fill" size={11} /> Start now
+                        </button>
+                        <button
+                          onClick={() => cancelScheduled(s.scheduled_id)}
+                          disabled={busy}
+                          className="inline-flex items-center gap-1 border-2 border-ink bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-widest hover-brut disabled:opacity-50"
+                          data-testid={`cancel-scheduled-${s.scheduled_id}`}
+                        >
+                          <Trash weight="bold" size={11} /> Cancel
+                        </button>
+                      </div>
+                    </Td>
                   </tr>
                 ))}
               </tbody>

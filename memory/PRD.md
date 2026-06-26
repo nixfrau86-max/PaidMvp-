@@ -19,6 +19,11 @@ Build a real-time demand aggregation platform that turns fragmented consumer int
 7. Payment methods (admin-configurable fees + recommended flag + on/off): Open Banking (+£1, recommended), Apple Pay (+£3), Google Pay (+£3), Card (+£3), Bank Transfer (+£1.50). Wallet rails route through Stripe; OB/Bank Transfer mocked until TrueLayer/Faster Payments are wired.
 8. Admin role is restricted to `ADMIN_EMAILS` env allowlist.
 
+## What's implemented (latest — 2026-06-26c)
+### 🎛️ Admin control over queued waves + 🧹 test-wave purge (DONE)
+- **Admin start/queue control:** the Admin "Scheduled Regenerations" panel now has per-row **Start now** (force-launch a queued regeneration live immediately, deadline = today's cut-off) and **Cancel** (remove from queue so it never launches). New endpoints `POST /api/admin/scheduled-waves/{id}/start` and `DELETE /api/admin/scheduled-waves/{id}`; materialisation refactored into `_materialize_scheduled_wave` (shared with the background worker). Verified via curl (start → live open wave; cancel → removed).
+- **Purged test waves:** removed 10 `TEST_RSPAWN_*` / `TEST_MERGE_*` / `TEST_*` waves + their scheduled entries (10) + participations (8). 10 real waves remain.
+
 ## What's implemented (latest — 2026-06-26b)
 ### ♻️ Regeneration rules refined (cut-offs + original targets) (DONE)
 Per refined spec: a wave regenerates while **stock is left**, with timing:

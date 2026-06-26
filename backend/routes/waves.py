@@ -1087,6 +1087,25 @@ def build_router(deps: Dict[str, Any]) -> APIRouter:
         out.sort(key=lambda x: x.get("create_at") or "")
         return out
 
+    @router.post("/admin/scheduled-waves/{scheduled_id}/start")
+    async def admin_start_scheduled_wave(scheduled_id: str, user: dict = Depends(get_current_user)):
+        """Force a queued regeneration to go LIVE now (deadline = today's cut-off)."""
+        await require_role(user, ["admin"])
+        sw = await db.scheduled_waves.find_one({"scheduled_id": scheduled_id, "created": {"$ne": True}}, {"_id": 0})
+        if not sw:
+            raise HTTPException(404, "Pending wave not found")
+        new_id = await _materialize_scheduled_wave(db, manager, sw)
+        return {"started": True, "wave_id": new_id}
+
+    @router.delete("/admin/scheduled-waves/{scheduled_id}")
+    async def admin_cancel_scheduled_wave(scheduled_id: str, user: dict = Depends(get_current_user)):
+        """Cancel (remove) a queued regeneration so it never launches."""
+        await require_role(user, ["admin"])
+        res = await db.scheduled_waves.delete_one({"scheduled_id": scheduled_id, "created": {"$ne": True}})
+        if res.deleted_count == 0:
+            raise HTTPException(404, "Pending wave not found")
+        return {"cancelled": True}
+
     @router.patch("/admin/regional-waves/{wave_id}/state")
     async def admin_set_state(wave_id: str, payload: StateUpdateRequest, user: dict = Depends(get_current_user)):
         await require_role(user, ["admin"])
@@ -1406,23 +1425,29 @@ async def complete_wave_and_respawn(db, manager, wave: dict) -> dict:
             "units": total_remaining, "carried_units": carried_units}
 
 
+async def _materialize_scheduled_wave(db, manager, sw: dict) -> str:
+    """Turn a queued scheduled_wave spec into a live open wave. Returns the new wave_id."""
+    spec = dict(sw["spec"])
+    spec["wave_id"] = spec.get("wave_id") or f"wave_{uuid.uuid4().hex[:10]}"
+    spec["created_at"] = _now()
+    spec["deadline"] = _deadline_for_creation_london(_london_now())
+    spec["activated_at"] = None
+    spec["state"] = "open"
+    await db.waves.insert_one(dict(spec))
+    await db.suppliers.update_one({"supplier_id": spec["supplier_id"]}, {"$inc": {"waves_published": 1}})
+    await db.scheduled_waves.update_one({"scheduled_id": sw["scheduled_id"]},
+                                        {"$set": {"created": True, "created_wave_id": spec["wave_id"], "created_real_at": _now().isoformat()}})
+    await manager.broadcast("waves:feed", {"type": "wave_created", "wave_id": spec["wave_id"], "title": spec.get("title")})
+    return spec["wave_id"]
+
+
 async def process_due_scheduled_waves(db, manager) -> int:
     """Background worker tick: materialise any scheduled follow-on waves now due."""
     now_iso = _now().isoformat()
     due = await db.scheduled_waves.find({"created": False, "create_at": {"$lte": now_iso}}, {"_id": 0}).to_list(100)
     count = 0
     for sw in due:
-        spec = dict(sw["spec"])
-        spec["wave_id"] = spec.get("wave_id") or f"wave_{uuid.uuid4().hex[:10]}"
-        spec["created_at"] = _now()
-        spec["deadline"] = _deadline_for_creation_london(_london_now())
-        spec["activated_at"] = None
-        spec["state"] = "open"
-        await db.waves.insert_one(dict(spec))
-        await db.suppliers.update_one({"supplier_id": spec["supplier_id"]}, {"$inc": {"waves_published": 1}})
-        await db.scheduled_waves.update_one({"scheduled_id": sw["scheduled_id"]},
-                                            {"$set": {"created": True, "created_wave_id": spec["wave_id"], "created_real_at": now_iso}})
-        await manager.broadcast("waves:feed", {"type": "wave_created", "wave_id": spec["wave_id"], "title": spec.get("title")})
+        await _materialize_scheduled_wave(db, manager, sw)
         count += 1
     return count
 
