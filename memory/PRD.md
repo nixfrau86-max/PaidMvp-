@@ -19,6 +19,16 @@ Build a real-time demand aggregation platform that turns fragmented consumer int
 7. Payment methods (admin-configurable fees + recommended flag + on/off): Open Banking (+£1, recommended), Apple Pay (+£3), Google Pay (+£3), Card (+£3), Bank Transfer (+£1.50). Wallet rails route through Stripe; OB/Bank Transfer mocked until TrueLayer/Faster Payments are wired.
 8. Admin role is restricted to `ADMIN_EMAILS` env allowlist.
 
+## What's implemented (latest — 2026-06-26b)
+### ♻️ Regeneration rules refined (cut-offs + original targets) (DONE)
+Per refined spec: a wave regenerates while **stock is left**, with timing:
+- **Mon–Fri**: regenerate immediately if before **16:30** (deadline = 16:30, corporate close); after 16:30 → next working day 08:30.
+- **Saturday**: runs until **midnight** (deadline = Sat 23:59); regenerate immediately anytime that day.
+- **Sun + UK bank holidays**: no regeneration → relaunch **Monday 08:30**.
+- Regenerated waves now keep the **ORIGINAL `ideal_target` & `min_activation`** (carried across rounds), with leftover stock as inventory — not the reduced leftover count.
+- Impl: `_day_cutoff_hm`, updated `_respawn_schedule` (16:30 weekday / midnight Sat cut-off), `_deadline_for_creation_london` (16:30 vs Sat-midnight), `_build_respawn_doc` keeps original targets. Tests updated → **25 passed**. Verified live (immediate Round 2, ideal 50 / min 40 preserved, deadline Fri 16:30).
+- CAVEAT: if leftover stock < min_activation a round can't activate (may relist daily) — acceptable for high-inventory waves; flag if you want min_activation auto-capped to remaining stock.
+
 ## What's implemented (latest — 2026-06-26)
 ### 🔒 Waves access control + ♻️ regeneration (immediate + monitor) (DONE)
 - **Unauthorised-access audit + fix:** the consumer Waves marketplace (`/waves`, `/wave/:id`) is now **members-only** — **anonymous → /login**, **suppliers → /supplier**, **garages → /garage**; only consumer/admin can view (early-render auth gate prevents content flash; data fetch gated on authorisation). The front-page hero cards (`HeroWaves`) deep-link to a wave only for **consumer/admin**, route **anonymous → /login** (signup funnel), and are **non-clickable for supplier/garage**. NOTE: the public `GET /api/waves[/{id}]` API stays open (marketplace data is non-sensitive); frontend role-redirects are the access boundary.

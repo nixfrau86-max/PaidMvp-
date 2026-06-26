@@ -50,6 +50,7 @@ RESERVATION_MINUTES = 25
 import holidays as _holidays_lib
 
 WORK_START_H, WORK_START_M = 8, 30        # daily launch time
+WORK_END_H, WORK_END_M = 16, 30           # Mon–Fri order cut-off / deadline
 _UK_HOLIDAYS = _holidays_lib.country_holidays("GB", subdiv="ENG")
 
 # States the supplier/admin manage manually (never auto-overwritten by recompute)
@@ -1196,10 +1197,11 @@ def build_router(deps: Dict[str, Any]) -> APIRouter:
 
 # --------------------------------------------------------------------------
 # Auto-respawn: when a wave COMPLETES with stock remaining, spin up a follow-on
-# wave for the leftover inventory until stock depletes. Schedule (Europe/London):
-# the order/leftover-respawn is always placed on the FOLLOWING working day at
-# 08:30 (Mon–Sat, excluding Sundays + UK bank holidays); each wave runs until
-# midnight on its launch day (no 16:30 cut-off).
+# wave that keeps the ORIGINAL ideal target & min activation, carrying leftover
+# stock, until stock depletes. Schedule (Europe/London, Mon–Sat excl. Sun + UK
+# bank holidays): regenerate immediately while within working hours before the
+# day's cut-off (Mon–Fri 16:30, Saturday midnight); otherwise the next working
+# day 08:30 (e.g. weekend completions relaunch Monday 08:30).
 # --------------------------------------------------------------------------
 def _london_now() -> datetime:
     try:
@@ -1232,25 +1234,38 @@ def _next_creation_time_london(now: Optional[datetime] = None) -> datetime:
     return _next_working_day_0830(now)
 
 
+def _day_cutoff_hm(d: datetime):
+    """Order/deadline cut-off for a given working day (London):
+      • Mon–Fri → 16:30 (corporate offices close ~5pm)
+      • Saturday → 24:00 (midnight; distributor fulfils next opening hours)."""
+    return (23, 59) if d.weekday() == 5 else (WORK_END_H, WORK_END_M)
+
+
 def _respawn_schedule(now: Optional[datetime] = None) -> Optional[datetime]:
-    """Decide WHEN a respawn should launch:
-      • working day, at/after 08:30  → None  (create immediately, live now)
-      • working day, before 08:30    → today 08:30
-      • non-working day              → next working day 08:30
+    """Decide WHEN a respawn should launch (regeneration runs only while stock is left):
+      • working day, 08:30 → cut-off  → None (regenerate immediately, live now)
+            – Mon–Fri cut-off = 16:30
+            – Saturday  cut-off = midnight
+      • working day, before 08:30     → today 08:30
+      • working day, after cut-off    → next working day 08:30
+      • non-working day (Sun/bank hol)→ next working day 08:30 (e.g. Monday 08:30)
     Working days = Mon–Sat excluding Sundays + UK bank holidays."""
     now = now or _london_now()
     if not _is_working_day(now):
         return _next_working_day_0830(now)
     if (now.hour, now.minute) < (WORK_START_H, WORK_START_M):
         return now.replace(hour=WORK_START_H, minute=WORK_START_M, second=0, microsecond=0)
-    return None  # inside working hours → immediate
+    if (now.hour, now.minute) < _day_cutoff_hm(now):
+        return None  # within working hours, before cut-off → regenerate immediately
+    return _next_working_day_0830(now)  # past cut-off → next working day 08:30
 
 
 def _deadline_for_creation_london(create_local: Optional[datetime] = None) -> datetime:
-    """Midnight (end of the creation day) Europe/London, returned as a UTC datetime.
-    Removes the old 16:30 cut-off — a wave runs the full day it is launched."""
+    """Wave deadline (Europe/London → UTC): Mon–Fri 16:30, Saturday midnight."""
     create_local = create_local or _london_now()
-    dl_local = create_local.replace(hour=23, minute=59, second=59, microsecond=0)
+    h, m = _day_cutoff_hm(create_local)
+    sec = 59 if (h, m) == (23, 59) else 0
+    dl_local = create_local.replace(hour=h, minute=m, second=sec, microsecond=0)
     return dl_local.astimezone(timezone.utc)
 
 
@@ -1290,8 +1305,10 @@ def _build_respawn_doc(wave: dict, remaining_products: List[dict], total_remaini
         "description": wave.get("description", ""),
         "image_url": wave.get("image_url", ""),
         "products": remaining_products,
-        "ideal_target": total_remaining,
-        "min_activation": min(int(wave.get("min_activation", total_remaining)), total_remaining),
+        # Regenerated waves keep the ORIGINAL ideal target & min activation
+        # (carried across rounds), not the reduced leftover count.
+        "ideal_target": int(wave.get("ideal_target", total_remaining)),
+        "min_activation": int(wave.get("min_activation", total_remaining)),
         "eta": wave.get("eta", ""),
         "state": "open",
         "units_committed": 0,

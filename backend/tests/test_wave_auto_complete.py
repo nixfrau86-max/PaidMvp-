@@ -72,9 +72,9 @@ async def _run_case(category: str):
         assert orig["state"] == "completed"
         assert orig.get("respawned") is True
 
-        # A follow-on round for leftover stock (10 - 2 sold = 8) must exist EITHER
-        # live in `waves` (created inside the working window) OR queued in
-        # `scheduled_waves` (created outside Mon–Fri 08:30–16:30).
+        # A follow-on round must exist EITHER live in `waves` (regenerated within
+        # working hours before the cut-off) OR queued in `scheduled_waves`.
+        # The new round keeps the ORIGINAL ideal target (10), not the leftover count.
         child = await db.waves.find_one({"parent_wave_id": wid}, {"_id": 0})
         if child is None:
             sched = await db.scheduled_waves.find_one({"parent_wave_id": wid}, {"_id": 0})
@@ -82,7 +82,8 @@ async def _run_case(category: str):
             child = sched["spec"]
         assert child["category"] == category
         assert child["round"] == 2
-        assert child["ideal_target"] == 8
+        assert child["ideal_target"] == 10        # original target preserved
+        assert child["min_activation"] == 4       # original min activation preserved
         assert child.get("carried_units") == 2  # the unpaid/reserved units carry over
         return wid
     finally:

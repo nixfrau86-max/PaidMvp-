@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 from routes.waves import (
     _next_creation_time_london,
     _respawn_schedule,
+    _deadline_for_creation_london,
     _compute_remaining_products,
     _build_respawn_doc,
 )
@@ -73,19 +74,49 @@ def test_remaining_products_only_unsold_stock():
     assert products[0]["variants"][0]["sold_qty"] == 0
 
 
-def test_build_respawn_doc_increments_round_and_caps_targets():
+def test_respawn_weekday_after_cutoff_next_working_day():
+    # Mon 2026-06-15 17:00 (after 16:30) → next working day Tue 2026-06-16 08:30
+    r = _respawn_schedule(datetime(2026, 6, 15, 17, 0, tzinfo=LON))
+    assert r.day == 16 and r.weekday() == 1 and (r.hour, r.minute) == (8, 30)
+
+
+def test_respawn_friday_after_cutoff_rolls_to_saturday():
+    # Fri 2026-06-12 17:00 (after 16:30) → Saturday is a working day → Sat 08:30
+    r = _respawn_schedule(datetime(2026, 6, 12, 17, 0, tzinfo=LON))
+    assert r.weekday() == 5 and (r.hour, r.minute) == (8, 30)
+
+
+def test_respawn_saturday_runs_until_midnight():
+    # Saturday cut-off is midnight → 23:00 still immediate
+    assert _respawn_schedule(datetime(2026, 6, 13, 23, 0, tzinfo=LON)) is None
+
+
+def test_deadline_weekday_is_1630():
+    dl = _deadline_for_creation_london(datetime(2026, 6, 15, 9, 0, tzinfo=LON))  # Monday
+    loc = dl.astimezone(LON)
+    assert (loc.hour, loc.minute) == (16, 30) and loc.day == 15
+
+
+def test_deadline_saturday_is_midnight():
+    dl = _deadline_for_creation_london(datetime(2026, 6, 13, 9, 0, tzinfo=LON))  # Saturday
+    loc = dl.astimezone(LON)
+    assert (loc.hour, loc.minute) == (23, 59) and loc.day == 13
+
+
+def test_build_respawn_doc_keeps_original_targets():
     wave = {
         "wave_id": "wave_orig", "supplier_id": "sup_1", "category": "electronics",
         "region_id": "r1", "region_name": "Coventry", "brand": "Sony",
-        "title": "Coventry Sony Electronics Wave", "min_activation": 20, "round": 1,
+        "title": "Coventry Sony Electronics Wave",
+        "ideal_target": 50, "min_activation": 20, "round": 1,
     }
     products = [{"product_id": "p", "model": "M", "variants": [
         {"variant_id": "v", "label": "A", "supplier_cost": 1, "retail_price": 3, "wave_price": 2, "inventory_qty": 6, "reserved_qty": 0, "sold_qty": 0}
     ]}]
     doc = _build_respawn_doc(wave, products, 6)
     assert doc["round"] == 2
-    assert doc["ideal_target"] == 6
-    assert doc["min_activation"] == 6  # capped to remaining (was 20)
+    assert doc["ideal_target"] == 50         # original preserved, NOT leftover count
+    assert doc["min_activation"] == 20       # original preserved, NOT capped
     assert doc["origin_wave_id"] == "wave_orig"
     assert doc["parent_wave_id"] == "wave_orig"
     assert "Round 2" in doc["title"]

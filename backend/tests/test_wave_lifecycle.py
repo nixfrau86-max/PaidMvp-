@@ -293,12 +293,18 @@ class TestRespawnWorkingWindow:
         nxt = w._next_creation_time_london(self._london(2026, 4, 2, 10, 0))
         assert nxt.day == 4 and nxt.weekday() == 5 and (nxt.hour, nxt.minute) == (8, 30)
 
-    def test_deadline_is_midnight_same_day(self):
+    def test_deadline_is_1630_on_weekday(self):
         w = waves_mod
-        dl = w._deadline_for_creation_london(self._london(2026, 6, 15, 9, 0))
+        dl = w._deadline_for_creation_london(self._london(2026, 6, 15, 9, 0))  # Monday
         assert dl.tzinfo is not None
         loc = dl.astimezone(ZoneInfo("Europe/London"))
-        assert (loc.hour, loc.minute) == (23, 59) and loc.day == 15
+        assert (loc.hour, loc.minute) == (16, 30) and loc.day == 15
+
+    def test_deadline_is_midnight_on_saturday(self):
+        w = waves_mod
+        dl = w._deadline_for_creation_london(self._london(2026, 6, 13, 9, 0))  # Saturday
+        loc = dl.astimezone(ZoneInfo("Europe/London"))
+        assert (loc.hour, loc.minute) == (23, 59) and loc.day == 13
 
 
 
