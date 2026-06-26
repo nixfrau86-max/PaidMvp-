@@ -39,8 +39,8 @@ function bestSavings(products = []) {
 export default function HeroWaves() {
   const { user } = useAuth();
   const [waves, setWaves] = useState(null);
-  // Suppliers & garages must not deep-link into the consumer marketplace from the front page.
-  const canOpen = !user || user.role === "consumer" || user.role === "admin";
+  // Members (consumer/admin) open the wave; anonymous → login funnel; suppliers/garages have no access.
+  const isMember = !!user && (user.role === "consumer" || user.role === "admin");
 
   useEffect(() => {
     let alive = true;
@@ -87,10 +87,15 @@ export default function HeroWaves() {
           const Icon = ICONS[c.category] || Package;
           const accent = ACCENTS[i % ACCENTS.length];
           const rotate = ROTATES[i % ROTATES.length];
-          const clickable = c.wave_id && canOpen;
+          // Members open the wave; anonymous visitors are funnelled to login; suppliers/garages can't open it.
+          const memberOpen = c.wave_id && isMember;
+          const anonFunnel = c.wave_id && !user;
+          const clickable = memberOpen || anonFunnel;
           const Wrapper = clickable ? Link : "div";
-          const wrapperProps = clickable
+          const wrapperProps = memberOpen
             ? { to: `/wave/${c.wave_id}`, "data-testid": `hero-wave-card-${c.wave_id}` }
+            : anonFunnel
+            ? { to: "/login", "data-testid": `hero-wave-card-${c.wave_id}` }
             : { "aria-hidden": true };
           return (
             <motion.div

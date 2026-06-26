@@ -47,7 +47,7 @@ const BAR_SPRING = { type: "spring", bounce: 0, duration: 1 };
 
 export default function WaveBrowse() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [waves, setWaves] = useState([]);
   const [regions, setRegions] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -56,11 +56,15 @@ export default function WaveBrowse() {
   const [regionId, setRegionId] = useState("");
   const [q, setQ] = useState("");
 
-  // Suppliers & garages have no access to the consumer Waves marketplace — send them to their console.
+  const authorised = !!user && (user.role === "consumer" || user.role === "admin");
+
+  // Waves marketplace is members-only: anonymous → login; suppliers/garages → their console.
   useEffect(() => {
-    if (user?.role === "supplier") navigate("/supplier", { replace: true });
-    else if (user?.role === "garage") navigate("/garage", { replace: true });
-  }, [user, navigate]);
+    if (authLoading) return;
+    if (!user) { navigate("/login", { replace: true }); return; }
+    if (user.role === "supplier") { navigate("/supplier", { replace: true }); return; }
+    if (user.role === "garage") { navigate("/garage", { replace: true }); return; }
+  }, [user, authLoading, navigate]);
 
   const reload = useCallback(async () => {
     const search = new URLSearchParams();
@@ -88,9 +92,10 @@ export default function WaveBrowse() {
   }, []);
 
   useEffect(() => {
+    if (!authorised) return undefined;
     const t = setTimeout(reload, 250);
     return () => clearTimeout(t);
-  }, [reload]);
+  }, [reload, authorised]);
 
   useEffect(() => {
     const ws = new WebSocket(wsUrl("/api/ws/waves"));
@@ -110,6 +115,15 @@ export default function WaveBrowse() {
   }, []);
 
   const totalMembers = waves.reduce((a, w) => a + (w.participants_count || 0), 0);
+
+  if (authLoading || !authorised) {
+    return (
+      <div className="min-h-screen bg-slate-50 font-manrope text-slate-900" data-testid="waves-auth-gate">
+        <Navbar />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-20 text-center text-slate-400 font-manrope text-sm">Loading…</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 font-manrope text-slate-900">

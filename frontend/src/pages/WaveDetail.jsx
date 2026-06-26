@@ -28,7 +28,7 @@ const PULSE_TRANSITION = { duration: 0.5 };
 
 export default function WaveDetail() {
   const { id } = useParams();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [w, setW] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -46,11 +46,15 @@ export default function WaveDetail() {
   const [joining, setJoining] = useState(false);
   const [allowance, setAllowance] = useState(null);
 
-  // Suppliers & garages have no access to the consumer Waves marketplace.
+  const authorised = !!user && (user.role === "consumer" || user.role === "admin");
+
+  // Waves are members-only: anonymous → login; suppliers/garages → their console.
   useEffect(() => {
-    if (user?.role === "supplier") navigate("/supplier", { replace: true });
-    else if (user?.role === "garage") navigate("/garage", { replace: true });
-  }, [user, navigate]);
+    if (authLoading) return;
+    if (!user) { navigate("/login", { replace: true }); return; }
+    if (user.role === "supplier") { navigate("/supplier", { replace: true }); return; }
+    if (user.role === "garage") { navigate("/garage", { replace: true }); return; }
+  }, [user, authLoading, navigate]);
 
   const reload = useCallback(async () => {
     try {
@@ -64,7 +68,7 @@ export default function WaveDetail() {
     setLoading(false);
   }, [id, navigate]);
 
-  useEffect(() => { reload(); }, [reload]);
+  useEffect(() => { if (authorised) reload(); }, [reload, authorised]);
 
   useEffect(() => {
     if (w?.category === "tyres") {
@@ -157,6 +161,14 @@ export default function WaveDetail() {
       toast.error(e?.response?.data?.detail || "Could not join wave");
     } finally { setJoining(false); }
   };
+
+  if (authLoading || !authorised) {
+    return (
+      <div className="min-h-screen bg-slate-50 font-manrope" data-testid="wave-auth-gate"><Navbar />
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-12 text-sm font-medium text-slate-400">Loading…</div>
+      </div>
+    );
+  }
 
   if (loading || !w) {
     return (
