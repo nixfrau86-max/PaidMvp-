@@ -6,6 +6,7 @@ import StateBadge from "../components/StateBadge";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { ArrowRight, Lock, Wrench, Calendar, CheckCircle, MapPin, Truck, UserCircle, FloppyDisk } from "@phosphor-icons/react";
+import { logError } from "../lib/log";
 
 const ORDER_STATE = {
   reserved: { label: "Reserved", bg: "#FFD600" },
@@ -36,7 +37,7 @@ export default function MyParties() {
           setData(w.data);
           setOrders(o.data);
         } catch (err) {
-          console.error("Dashboard load failed", err);
+          logError("Dashboard load failed", err);
         } finally {
           setDataLoading(false);
         }

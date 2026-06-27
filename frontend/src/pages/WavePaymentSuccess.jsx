@@ -4,6 +4,7 @@ import Confetti from "react-confetti";
 import Navbar from "../components/Navbar";
 import { api } from "../lib/api";
 import { CheckCircle, ArrowRight, Wrench } from "@phosphor-icons/react";
+import { logWarn } from "../lib/log";
 
 export default function WavePaymentSuccess() {
   const location = useLocation();
@@ -23,7 +24,7 @@ export default function WavePaymentSuccess() {
         const { data } = await api.get(`/wave-checkout/status/${sessionId}`);
         if (data.payment_status === "paid") { setStatus("paid"); return; }
         if (data.status === "expired") { setStatus("expired"); return; }
-      } catch (err) { console.warn("Wave payment status poll error", err); }
+      } catch (err) { logWarn("Wave payment status poll error", err); }
       setAttempts(n + 1);
       setTimeout(() => poll(n + 1), 2000);
     };

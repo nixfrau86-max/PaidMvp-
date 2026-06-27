@@ -4,6 +4,7 @@ import Confetti from "react-confetti";
 import Navbar from "../components/Navbar";
 import { api } from "../lib/api";
 import { CheckCircle, ArrowRight } from "@phosphor-icons/react";
+import { logWarn } from "../lib/log";
 
 export default function CheckoutSuccess() {
   const location = useLocation();
@@ -30,7 +31,7 @@ export default function CheckoutSuccess() {
           setStatus("expired");
           return;
         }
-      } catch (err) { console.warn("Checkout status poll error", err); }
+      } catch (err) { logWarn("Checkout status poll error", err); }
       setAttempts(n + 1);
       setTimeout(() => poll(n + 1), 2000);
     };

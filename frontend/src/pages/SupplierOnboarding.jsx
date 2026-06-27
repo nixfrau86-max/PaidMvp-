@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import Navbar from "../components/Navbar";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { logWarn } from "../lib/log";
 import {
   Storefront, CheckCircle, ArrowRight, Lightning, ShieldCheck, Package, ChartLineUp,
 } from "@phosphor-icons/react";
@@ -115,7 +116,7 @@ export default function SupplierOnboarding() {
             api.post("/terms/accept", { doc_id: "privacy", version: "1.0", context: "supplier_apply" }),
           ]);
         } catch (err) {
-          console.warn("Terms acceptance log failed", err);
+          logWarn("Terms acceptance log failed", err);
         }
         toast.success("You're in! Your sandbox is live.");
       }
@@ -124,7 +125,7 @@ export default function SupplierOnboarding() {
         const me = await api.get("/auth/me");
         setUser(me.data);
       } catch (err) {
-        console.warn("Refresh /auth/me failed", err);
+        logWarn("Refresh /auth/me failed", err);
       }
       navigate("/supplier");
     } catch (err) {

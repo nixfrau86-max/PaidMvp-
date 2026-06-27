@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import Navbar from "../components/Navbar";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { logWarn } from "../lib/log";
 import {
   Wrench, CheckCircle, Calendar, MapPin, ShieldCheck, ArrowRight, Clock,
 } from "@phosphor-icons/react";
@@ -69,7 +70,7 @@ export default function GarageOnboarding() {
       try {
         const me = await api.get("/auth/me");
         setUser(me.data);
-      } catch (err) { console.warn("Refresh user after garage apply failed", err); }
+      } catch (err) { logWarn("Refresh user after garage apply failed", err); }
       toast.success("Garage registered. Welcome aboard.");
       navigate("/garage");
     } catch (err) {

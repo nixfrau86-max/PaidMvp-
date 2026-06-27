@@ -2,6 +2,7 @@
 // Web-app config values are public by design (Firebase secures access via project rules).
 import { initializeApp } from "firebase/app";
 import { getAnalytics, isSupported, logEvent, setUserId, setUserProperties } from "firebase/analytics";
+import { logWarn } from "./log";
 
 const firebaseConfig = {
   apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
@@ -28,11 +29,11 @@ if (enabled) {
       }
       return ok;
     }).catch((err) => {
-      console.warn("[firebase] analytics support check failed", err);
+      logWarn("[firebase] analytics support check failed", err);
       return false;
     });
   } catch (err) {
-    console.warn("[firebase] init failed", err);
+    logWarn("[firebase] init failed", err);
   }
 }
 
@@ -43,7 +44,7 @@ export async function track(eventName, params = {}) {
     await _ready;
     if (_analytics) logEvent(_analytics, eventName, params);
   } catch (err) {
-    console.warn("[firebase] track error", eventName, err);
+    logWarn("[firebase] track error", eventName, err);
   }
 }
 
@@ -63,6 +64,6 @@ export async function identify(user) {
       setUserId(_analytics, null);
     }
   } catch (err) {
-    console.warn("[firebase] identify error", err);
+    logWarn("[firebase] identify error", err);
   }
 }

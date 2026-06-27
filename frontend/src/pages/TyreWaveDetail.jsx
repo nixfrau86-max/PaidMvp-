@@ -5,6 +5,7 @@ import Navbar from "../components/Navbar";
 import { api, wsUrl } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { track } from "../lib/firebase";
+import { logError, logWarn } from "../lib/log";
 import {
   Lightning, Lock, ArrowRight, CheckCircle, Clock, ShieldCheck, X,
   CaretDown, Sparkle,
@@ -34,7 +35,7 @@ export default function TyreWaveDetail() {
       setPg(data);
       setSelectedSize(data.selected_size || "");
     } catch (err) {
-      console.error("Tyre wave fetch failed", err);
+      logError("Tyre wave fetch failed", err);
       toast.error("Wave not found");
       navigate("/tyres");
     }
@@ -56,11 +57,11 @@ export default function TyreWaveDetail() {
           setTimeout(() => setPulse(false), 500);
         }
       } catch (err) {
-        console.warn("Bad tyrewave WS payload", err);
+        logWarn("Bad tyrewave WS payload", err);
       }
     };
     return () => {
-      try { ws.close(); } catch (err) { console.warn("WS close error", err); }
+      try { ws.close(); } catch (err) { logWarn("WS close error", err); }
     };
   }, [pg?.wave?.wave_id]);
 
@@ -90,7 +91,7 @@ export default function TyreWaveDetail() {
             api.post("/terms/accept", { doc_id: "privacy", version: "1.0", context: `tyre_join:${id}` }),
           ]);
         } catch (err) {
-          console.warn("Terms acceptance log failed", err);
+          logWarn("Terms acceptance log failed", err);
         }
       }
       const { data } = await api.post(`/tyre/waves/${id}/join`, { selected_size: selectedSize });

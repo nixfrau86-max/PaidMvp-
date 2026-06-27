@@ -5,6 +5,7 @@ import Navbar from "../components/Navbar";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { Plus, Trash, PencilSimple, X, Package, ClipboardText } from "@phosphor-icons/react";
+import { logError } from "../lib/log";
 
 const STATE_BADGE = {
   open: { label: "Open", bg: "#00C853" },
@@ -43,7 +44,7 @@ export default function SupplierWaves() {
       setCategories(c.data);
     } catch (err) {
       if (err?.response?.status === 403) { navigate("/supplier/onboarding"); return; }
-      console.error("load failed", err);
+      logError("load failed", err);
     }
     setDataLoading(false);
   }, [navigate]);

@@ -7,6 +7,7 @@ import Countdown from "../components/Countdown";
 import StateBadge from "../components/StateBadge";
 import { api, wsUrl } from "../lib/api";
 import { useAuth, loginRedirect } from "../lib/auth";
+import { logWarn } from "../lib/log";
 import {
   Lightning, Users, CheckCircle, Lock, Storefront, ArrowRight,
   ReceiptX, ShieldCheck, Confetti as ConfettiIcon, Truck,
@@ -61,15 +62,15 @@ export default function VPPDetail() {
               prevState.current = msg.vpp.state;
             }
           }
-        } catch (err) { console.warn("Bad VPP WS payload", err); }
+        } catch (err) { logWarn("Bad VPP WS payload", err); }
       };
-    } catch (err) { console.warn("VPP WS init error", err); }
+    } catch (err) { logWarn("VPP WS init error", err); }
     return () => {
       closed = true;
       try {
         if (ws && ws.readyState === WebSocket.OPEN) ws.close();
         else if (ws) ws.onopen = () => ws.close();
-      } catch (err) { console.warn("VPP WS close error", err); }
+      } catch (err) { logWarn("VPP WS close error", err); }
     };
   }, [id]);
 

@@ -3,6 +3,7 @@ import Navbar from "../components/Navbar";
 import VPPCard from "../components/VPPCard";
 import { api, wsUrl } from "../lib/api";
 import { Funnel, MagnifyingGlass } from "@phosphor-icons/react";
+import { logWarn } from "../lib/log";
 
 const STATES = ["all", "active", "locked", "executing", "completed"];
 
@@ -37,9 +38,9 @@ export default function Browse() {
             return out;
           });
         }
-      } catch (err) { console.warn("Bad VPP WS payload", err); }
+      } catch (err) { logWarn("Bad VPP WS payload", err); }
     };
-    return () => { try { ws.close(); } catch (err) { console.warn("WS close error", err); } };
+    return () => { try { ws.close(); } catch (err) { logWarn("WS close error", err); } };
   }, []);
 
   const categories = useMemo(

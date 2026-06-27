@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import Navbar from "../components/Navbar";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { logError } from "../lib/log";
 import {
   Plus, ArrowLeft, Upload, FileCsv, Trash, Code,
   CheckCircle, X, Lightning, Package, Lock, ShieldCheck,
@@ -300,7 +301,7 @@ function ProductGroupDetail({ pgId, onBack }) {
       const { data: d } = await api.get(`/supplier/product-groups/${pgId}`);
       setData(d);
     } catch (err) {
-      console.error("Group fetch failed", err);
+      logError("Group fetch failed", err);
       toast.error("Group not found");
     }
     setLoading(false);

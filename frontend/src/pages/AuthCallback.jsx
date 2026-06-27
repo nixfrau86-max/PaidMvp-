@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { logError } from "../lib/log";
 
 export default function AuthCallback() {
   const location = useLocation();
@@ -31,7 +32,7 @@ export default function AuthCallback() {
         window.history.replaceState(null, "", "/dashboard");
         navigate("/dashboard", { state: { user: data.user } });
       } catch (e) {
-        console.error("Auth error", e);
+        logError("Auth error", e);
         navigate("/");
       }
     })();

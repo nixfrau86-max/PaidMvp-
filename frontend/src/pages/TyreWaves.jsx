@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { api, wsUrl } from "../lib/api";
 import { MagnifyingGlass, ArrowRight, Lightning, Lock, Users, CheckCircle } from "@phosphor-icons/react";
+import { logError, logWarn } from "../lib/log";
 
 export default function TyreWaves() {
   const [waves, setWaves] = useState([]);
@@ -21,7 +22,7 @@ export default function TyreWaves() {
       setWaves(w.data);
       setSizes(s.data);
     } catch (err) {
-      console.error("Failed to load tyre waves", err);
+      logError("Failed to load tyre waves", err);
     } finally {
       setLoading(false);
     }
@@ -46,11 +47,11 @@ export default function TyreWaves() {
           );
         }
       } catch (err) {
-        console.warn("Bad tyrewaves WS payload", err);
+        logWarn("Bad tyrewaves WS payload", err);
       }
     };
     return () => {
-      try { ws.close(); } catch (err) { console.warn("WS close error", err); }
+      try { ws.close(); } catch (err) { logWarn("WS close error", err); }
     };
   }, []);
 

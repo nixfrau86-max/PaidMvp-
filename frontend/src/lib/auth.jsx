@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState, useCallback } from "react";
 import { api } from "./api";
 import { identify, track } from "./firebase";
+import { logWarn } from "./log";
 
 const AuthContext = createContext(null);
 
@@ -14,7 +15,7 @@ export function AuthProvider({ children }) {
       setUser(data);
       identify(data);
     } catch (err) {
-      console.debug("auth/me failed", err?.response?.status);
+      logWarn("auth/me failed", err?.response?.status);
       setUser(null);
       identify(null);
     } finally {
@@ -35,7 +36,7 @@ export function AuthProvider({ children }) {
     try {
       await api.post("/auth/logout");
     } catch (err) {
-      console.warn("logout request failed", err);
+      logWarn("logout request failed", err);
     }
     setUser(null);
     identify(null);
