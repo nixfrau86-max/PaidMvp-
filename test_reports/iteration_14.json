@@ -1,0 +1,34 @@
+{
+  "summary": "Frontend regression test of WaveDetail.jsx refactor (page split into WaveProductStep + WaveFulfilmentStep + WaveProgressRail). Verified the consumer Browse + Join flow end-to-end on the live preview environment as member_demo@collective.co. Login → /waves browse → click wave card → /wave/:id → Step 1 variant select → Step 2 (electronics delivery / tyres garage+slot) → terms → Join Wave → success toast + live units increment. All required data-testids resolve, all 3 extracted sub-components render correctly, and the join API still succeeds. Zero regression detected.",
+  "verified_flows": {
+    "login": "PASS — intent-consumer → tab-email → email-email/email-password → email-submit lands on /dashboard.",
+    "browse_waves": "PASS — /waves rendered 4 live wave cards (wave-card-wave_d73c120aae, wave_826372caa1, wave_41c386051a, wave_9d679fd140). Clicking [data-testid=wave-card-wave_826372caa1] navigates to /wave/wave_826372caa1 and select-panel mounts.",
+    "electronics_render": "PASS — wave_826372caa1 (TEST_RSPAWN_9d2c6d · Round 2, category=electronics): hero card + brand + ETA · 7 days + STEP 1 select-panel with 1 variant tile (X · £20.00 · £30 strikethrough · 4 left) + STEP 2 fulfilment-panel with 'Delivery address' textarea (NO garage-select). After clicking variant-tile, qty-row appears with qty-minus / qty-value=1 / qty-plus + subtotal=£20.00 + annual-allowance pill ('5 of 5 electronics units left in 2026'). qty-plus → qty-value=2, qty-minus → 1. Right rail shows wave-units=0, '/ 4 units', '0%', wave-state='Open — accepting members · activates at 2 units', collective price £20.00 with 'You save £10.00' green pill, terms checkbox (data-testid=accept-terms-checkbox), join-wave-btn (disabled while terms unchecked). Toggling accept-terms-checkbox enables join-wave-btn.",
+    "tyres_render_and_join": "PASS — wave_9d679fd140 (Rugby CONTINENTAL Tyres Wave · Round 5, category=tyres, activated): 33 variant tiles rendered. Step 2 shows garage-select (NOT delivery-address) with 5 APPROVED garages: Rugby Wheel & Tyre · CV21 2AA, Leamington Garage Hub · CV31 1XT, Warwick Fast Fit · CV34 4QP, Coventry Tyre Centre · CV1 2AB, Rugby Tyres Express Service · CV21 3EE. Selecting gar_e716b40848 → GET /garages/{id}/slots loads slot-picker with 159 30-min slots across multiple [data-testid=slot-day-YYYY-MM-DD] day groups. Clicking first slot button → [data-testid=selected-slot] shows 'Mon 29 Jun 09:00'. After variant + garage + slot + terms, join-wave-btn enabled (disabled=null). Clicking it → POST /api/waves/wave_9d679fd140/join 200 → sonner toast 'RESERVED 1 UNIT — SECURED FOR 25 MIN. CARD CAPTURED ONLY ON ACTIVATION.' → wave-units WS-incremented 2 → 3 in real time.",
+    "progress_rail": "PASS — WaveProgressRail.jsx renders all required pieces: wave-units, /N units denominator, percentage, state label, 'Your collective price £X.XX' line, 'You save £X.XX' green pill (only when variant selected), accept-terms-label + checkbox, join-wave-btn with correct disabled state based on variant/terms/garageId/selectedSlot/allowance.",
+    "back_to_waves": "PASS — [data-testid=back-to-waves] link returns to /waves and wave-grid re-renders."
+  },
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "WaveDetail.jsx line 208 — the single-line WaveFulfilmentStep prop spread is now 14+ props long. Acceptable for the refactor but consider a typed `useWaveFulfilment(wave)` hook returning an object the sub-component destructures, to reduce prop-drilling and make future additions less noisy. Not blocking.",
+    "WaveFulfilmentStep.jsx — garage-select uses a native <select> (good for testability + a11y). However the empty-option label 'Select an approved local garage…' is the FIRST option but value='' and the parent treats empty as 'no garage'. Verified, but a small UX improvement would be to make it disabled+selected so the placeholder cannot be re-selected accidentally after a real choice. Low priority.",
+    "WaveProgressRail.jsx line 68 — join-wave-btn disabled expression has 5 ORs; works correctly but is hard to read. Consider extracting `const canJoin = useMemo(() => ...)` in the parent for clarity. Cosmetic.",
+    "WaveDetail.jsx line 76 — WebSocket URL uses wsUrl('/api/ws/wave/' + wave_id); if the WS handshake fails the user silently loses live updates (only logWarn on close). A small toast or reconnect-with-backoff would improve robustness. Not a regression — pre-existing behaviour.",
+    "WaveProductStep.jsx line 49 — qty-row (and qty-value testid) only render when `variant` is truthy. This is intentional + correct, but worth documenting for next-test-agent: any selector lookup for qty-value MUST happen AFTER variant-tile click. (My first script hit this and had to be re-ordered.)"
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "skipped (per request — 71/71 already pass)", "frontend": "100% — browse + electronics render + tyres render+join verified end-to-end; tyres join wrote a real reservation (2→3 units via WS)"},
+  "test_credentials": "member_demo@collective.co / Member1234 (intent-consumer → tab-email → email-submit).",
+  "seed_data_creation": "1 real RESERVATION was created on wave_9d679fd140 (Rugby CONTINENTAL Tyres Wave · Round 5): 1 unit at Rugby Wheel & Tyre, slot 'Mon 29 Jun 09:00'. Reservation auto-expires in 25 min; no card was captured (card only on activation). Visible under member_demo's /dashboard My Waves. No other data created or modified.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Refactor is GREEN. Browse + join flow works for both fulfilment modes. To re-verify: login pattern is intent-consumer → tab-email → email-email/email-password → email-submit → /dashboard. Live electronics waves: wave_826372caa1 (open, 0/4), wave_41c386051a (open). Live tyres wave: wave_9d679fd140 (activated, currently 3/5 after this run). Important selector ordering: variant-tile-{id} click MUST happen before reading qty-value or qty-plus/qty-minus — they are conditionally rendered. Avoid the CSS selector `div:has(...):first-of-type` in Playwright — combine as separate locators instead. WS at /api/ws/wave/{wave_id} drives wave-units live increment after join.",
+  "rca_of_the_issue": "N/A — pure-refactor regression test passed."
+}
