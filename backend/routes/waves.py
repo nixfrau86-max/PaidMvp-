@@ -1003,9 +1003,12 @@ def build_router(deps: Dict[str, Any]) -> APIRouter:
         parts = await db.wave_participations.find(
             {"user_id": user["user_id"], "status": {"$ne": "cancelled"}}, {"_id": 0}
         ).sort("created_at", -1).to_list(200)
+        wave_ids = list({p["wave_id"] for p in parts})
+        waves = await db.waves.find({"wave_id": {"$in": wave_ids}}, {"_id": 0}).to_list(len(wave_ids) or 1)
+        by_id = {w["wave_id"]: w for w in waves}
         out = []
         for p in parts:
-            w = await db.waves.find_one({"wave_id": p["wave_id"]}, {"_id": 0})
+            w = by_id.get(p["wave_id"])
             if not w:
                 continue
             out.append({**p, "wave": _public_wave(w)})
@@ -1061,21 +1064,22 @@ def build_router(deps: Dict[str, Any]) -> APIRouter:
     async def admin_list_waves(user: dict = Depends(get_current_user)):
         await require_role(user, ["admin"])
         docs = await db.waves.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
-        out = []
-        for d in docs:
-            sup = await db.suppliers.find_one({"supplier_id": d.get("supplier_id")}, {"_id": 0, "business_name": 1})
-            out.append({**_public_wave(d, full=True), "supplier_name": sup.get("business_name") if sup else "—"})
-        return out
+        sup_ids = list({d.get("supplier_id") for d in docs if d.get("supplier_id")})
+        sups = await db.suppliers.find({"supplier_id": {"$in": sup_ids}}, {"_id": 0, "supplier_id": 1, "business_name": 1}).to_list(len(sup_ids) or 1)
+        sup_names = {s["supplier_id"]: s.get("business_name") for s in sups}
+        return [{**_public_wave(d, full=True), "supplier_name": sup_names.get(d.get("supplier_id"), "—")} for d in docs]
 
     @router.get("/admin/scheduled-waves")
     async def admin_list_scheduled_waves(user: dict = Depends(get_current_user)):
         """Pending wave regenerations queued for a future working day (auto-engine monitor)."""
         await require_role(user, ["admin"])
         docs = await db.scheduled_waves.find({"created": {"$ne": True}}, {"_id": 0}).to_list(200)
+        sup_ids = list({sw.get("spec", {}).get("supplier_id") for sw in docs if sw.get("spec", {}).get("supplier_id")})
+        sups = await db.suppliers.find({"supplier_id": {"$in": sup_ids}}, {"_id": 0, "supplier_id": 1, "business_name": 1}).to_list(len(sup_ids) or 1)
+        sup_names = {s["supplier_id"]: s.get("business_name") for s in sups}
         out = []
         for sw in docs:
             spec = sw.get("spec", {})
-            sup = await db.suppliers.find_one({"supplier_id": spec.get("supplier_id")}, {"_id": 0, "business_name": 1})
             out.append({
                 "scheduled_id": sw.get("scheduled_id"),
                 "title": spec.get("title"),
@@ -1087,7 +1091,7 @@ def build_router(deps: Dict[str, Any]) -> APIRouter:
                 "create_at": sw.get("create_at"),
                 "create_at_local": sw.get("create_at_local"),
                 "parent_wave_id": sw.get("parent_wave_id"),
-                "supplier_name": sup.get("business_name") if sup else "—",
+                "supplier_name": sup_names.get(spec.get("supplier_id"), "—"),
             })
         out.sort(key=lambda x: x.get("create_at") or "")
         return out

@@ -19,6 +19,13 @@ Build a real-time demand aggregation platform that turns fragmented consumer int
 7. Payment methods (admin-configurable fees + recommended flag + on/off): Open Banking (+£1, recommended), Apple Pay (+£3), Google Pay (+£3), Card (+£3), Bank Transfer (+£1.50). Wallet rails route through Stripe; OB/Bank Transfer mocked until TrueLayer/Faster Payments are wired.
 8. Admin role is restricted to `ADMIN_EMAILS` env allowlist.
 
+## What's implemented (latest — 2026-06-27b)
+### ⚡ N+1 query optimisations + code-review triage (DONE)
+- **Applied (real, low-risk):** batched 4 N+1 query patterns flagged by the deployer/review into single `$in` lookups: `GET /me/wave-orders`, `GET /admin/regional-waves`, `GET /admin/scheduled-waves`, `GET /me/parties` (VPP fetch). All verified 200 with correct data; 36 unit tests pass.
+- **Restored** missing `member_demo@collective.co` consumer test account (recreated fresh, no seeded order).
+- **Declined as false positives (verified):** "7 undefined variables" (pyflakes clean), "71 `is` vs `==`" (all `is None/True/False` — correct PEP8 singleton checks; zero literal misuses), most "missing hook deps" (suggested deps are stable imports/local vars, not reactive). Console-statement cleanup was already applied previously.
+- **Deferred (high-risk, needs dedicated phase):** `build_router()` complexity splits (waves/admin_users/wave_payments), `WaveDetail.jsx` component split, TS adoption, lazy-loading, nested-ternary/inline-object cleanup.
+
 ## What's implemented (latest — 2026-06-27)
 ### ♻️ Regeneration now relists on STOCK-LEFT (fixes "waves not restarting") (DONE)
 - **Root cause:** regeneration only fired for ACTIVATED→COMPLETED waves. Relaunched rounds that got too few joins EXPIRED, and expired waves never regenerated → the chain stopped → marketplace went empty.

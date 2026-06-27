@@ -1077,10 +1077,13 @@ async def my_parties(user: dict = Depends(get_current_user)):
     parts = await db.vpp_participants.find(
         {"user_id": user["user_id"]}, {"_id": 0}
     ).sort("joined_at", -1).to_list(200)
+    vpp_ids = list({p["vpp_id"] for p in parts})
+    vpp_docs = await db.vpps.find({"vpp_id": {"$in": vpp_ids}}, {"_id": 0}).to_list(len(vpp_ids) or 1)
+    vpp_by_id = {v["vpp_id"]: v for v in vpp_docs}
     out = []
     total_savings = 0.0
     for p in parts:
-        vpp = await db.vpps.find_one({"vpp_id": p["vpp_id"]}, {"_id": 0})
+        vpp = vpp_by_id.get(p["vpp_id"])
         if not vpp:
             continue
         vpp = await _transition_vpp_if_needed(vpp)
