@@ -1531,11 +1531,28 @@ async def list_garages(postcode: Optional[str] = None, garage_type: Optional[str
 @api_router.post("/admin/garages/{garage_id}/verify")
 async def admin_verify_garage(garage_id: str, user: dict = Depends(get_current_user)):
     await require_role(user, ["admin"])
-    await db.garages.update_one(
+    res = await db.garages.update_one(
         {"garage_id": garage_id},
         {"$set": {"is_verified": True, "verified_at": datetime.now(timezone.utc).isoformat()}}
     )
-    return {"success": True}
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Garage not found")
+    g = await db.garages.find_one({"garage_id": garage_id}, {"_id": 0})
+    return _serialize_garage(g)
+
+
+# Admin endpoint to un-verify (revoke approval) a garage
+@api_router.post("/admin/garages/{garage_id}/unverify")
+async def admin_unverify_garage(garage_id: str, user: dict = Depends(get_current_user)):
+    await require_role(user, ["admin"])
+    res = await db.garages.update_one(
+        {"garage_id": garage_id},
+        {"$set": {"is_verified": False}, "$unset": {"verified_at": ""}}
+    )
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Garage not found")
+    g = await db.garages.find_one({"garage_id": garage_id}, {"_id": 0})
+    return _serialize_garage(g)
 
 
 @api_router.get("/admin/garages")

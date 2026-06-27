@@ -19,7 +19,19 @@ Build a real-time demand aggregation platform that turns fragmented consumer int
 7. Payment methods (admin-configurable fees + recommended flag + on/off): Open Banking (+£1, recommended), Apple Pay (+£3), Google Pay (+£3), Card (+£3), Bank Transfer (+£1.50). Wallet rails route through Stripe; OB/Bank Transfer mocked until TrueLayer/Faster Payments are wired.
 8. Admin role is restricted to `ADMIN_EMAILS` env allowlist.
 
-## What's implemented (latest — 2026-06-27b)
+## What's implemented (latest — 2026-06-27c)
+### 🅿️ Garage approval bug fix — added garages now selectable for fitting (DONE)
+- **Root cause:** garages created via `POST /api/garages/apply` default to `is_verified: false`; the consumer fitting dropdown (`GET /api/garages`) only lists `is_active && is_verified` garages — and there was **no admin UI to approve garages** (the `POST /api/admin/garages/{id}/verify` endpoint existed but was never surfaced). So every applied garage stayed invisible forever (16 of 20 garages were unverified).
+- **Fix:** new admin **Garages** tab (`pages/admin/GaragesTab.jsx`, wired into `AdminPanel.jsx`) listing all garages with Approve / Revoke actions, status badges (Pending/Approved/Inactive) + counts. Backend: `verify` now returns the updated garage + 404s on unknown id; added `POST /api/admin/garages/{id}/unverify` to revoke approval.
+- **Verified:** founder login → approved a pending garage → public `/api/garages` went 4→5 and the garage now appears in the fitting picker. Admin tab renders (screenshot confirmed).
+- NOTE: 15 of the pending garages are `TEST CalGarage*`/`TEST Garage*` artifacts from the test suite — could be purged for a cleaner panel.
+
+## Code review (2026-06-27c) — verified, mostly false positives
+- Applied genuine fixes: removed unused imports across 5 test files + 1 unused local (`pyflakes` now 0).
+- "7 undefined variables" → pyflakes finds 0. "62 missing hook deps" → ESLint `react-hooks/exhaustive-deps` finds 0 across `src/` (proven firing on a real violation). Both are external-tool noise (globals/imports).
+- Deferred (high-risk, awaiting go-ahead): `routes/waves.py` `build_router()` split (687 lines/complexity 152), large component splits.
+
+
 ### ⚡ N+1 query optimisations + code-review triage (DONE)
 - **Applied (real, low-risk):** batched 4 N+1 query patterns flagged by the deployer/review into single `$in` lookups: `GET /me/wave-orders`, `GET /admin/regional-waves`, `GET /admin/scheduled-waves`, `GET /me/parties` (VPP fetch). All verified 200 with correct data; 36 unit tests pass.
 - **Restored** missing `member_demo@collective.co` consumer test account (recreated fresh, no seeded order).

@@ -14,6 +14,7 @@ import UsersTab from "./admin/UsersTab";
 import TermsAuditTab from "./admin/TermsTab";
 import FeesTab from "./admin/FeesTab";
 import RegionalWavesTab from "./admin/RegionalWavesTab";
+import GaragesTab from "./admin/GaragesTab";
 
 export default function AdminPanel() {
   const navigate = useNavigate();
@@ -151,6 +152,7 @@ export default function AdminPanel() {
           { id: "regional", label: "Regional Waves" },
           { id: "pending_waves", label: `Pending Waves (${pendingWaves.length})`, badge: pendingWaves.length },
           { id: "suppliers", label: `Suppliers (${suppliers.length})`, badge: stats.pending_suppliers },
+          { id: "garages", label: "Garages" },
           { id: "users", label: "Users" },
           { id: "fees", label: "Fees & Payments" },
           { id: "terms", label: "T&Cs Audit" },
@@ -173,6 +175,7 @@ export default function AdminPanel() {
       {tab === "regional" && <RegionalWavesTab />}
       {tab === "pending_waves" && <PendingWavesTab pendingWaves={pendingWaves} onApprove={approveWave} onReject={rejectWave} />}
       {tab === "suppliers" && <SuppliersTab suppliers={suppliers} onVerify={verifySupplier} onReject={rejectSupplier} onSuspend={suspendSupplier} onUnsuspend={unsuspendSupplier} onDelete={deleteSupplier} onHardDelete={hardDeleteSupplier} />}
+      {tab === "garages" && <GaragesTab />}
       {tab === "fees" && <FeesTab />}
       {tab === "users" && <UsersTab />}
       {tab === "terms" && <TermsAuditTab />}
