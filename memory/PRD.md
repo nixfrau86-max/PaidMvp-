@@ -19,6 +19,13 @@ Build a real-time demand aggregation platform that turns fragmented consumer int
 7. Payment methods (admin-configurable fees + recommended flag + on/off): Open Banking (+£1, recommended), Apple Pay (+£3), Google Pay (+£3), Card (+£3), Bank Transfer (+£1.50). Wallet rails route through Stripe; OB/Bank Transfer mocked until TrueLayer/Faster Payments are wired.
 8. Admin role is restricted to `ADMIN_EMAILS` env allowlist.
 
+## What's implemented (latest — 2026-06-27)
+### ♻️ Regeneration now relists on STOCK-LEFT (fixes "waves not restarting") (DONE)
+- **Root cause:** regeneration only fired for ACTIVATED→COMPLETED waves. Relaunched rounds that got too few joins EXPIRED, and expired waves never regenerated → the chain stopped → marketplace went empty.
+- **Fix (user chose option A):** a wave now relists whenever **stock remains**, regardless of demand. `complete_wave_and_respawn` demand-gate removed (now only `total_remaining <= 0` stops it); `expire_overdue_waves` now calls `complete_wave_and_respawn` so under-filled/expired-but-stocked waves relist on the next working-day schedule, keeping original targets. ⚠️ A wave nobody buys relists every working day indefinitely (admin can Cancel from the Scheduled Regenerations panel). 36 backend tests pass.
+- **Marketplace repopulated:** relisted the 4 expired-but-stocked product lines live (Continental Tyres R4, Air Jordans R3, Air Jordan 4 R3, Nike Footwear R4). Purged TEST_* waves created by the live test suite. 4 clean live waves now showing.
+- NOTE: the API-based test suite (`test_wave_lifecycle.py`) creates `TEST_*` waves in the shared DB; with relist active they can reappear live — purge with a `^TEST_` title delete after running it.
+
 ## What's implemented (latest — 2026-06-26c)
 ### 🎛️ Admin control over queued waves + 🧹 test-wave purge (DONE)
 - **Admin start/queue control:** the Admin "Scheduled Regenerations" panel now has per-row **Start now** (force-launch a queued regeneration live immediately, deadline = today's cut-off) and **Cancel** (remove from queue so it never launches). New endpoints `POST /api/admin/scheduled-waves/{id}/start` and `DELETE /api/admin/scheduled-waves/{id}`; materialisation refactored into `_materialize_scheduled_wave` (shared with the background worker). Verified via curl (start → live open wave; cancel → removed).

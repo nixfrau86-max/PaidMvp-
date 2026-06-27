@@ -465,8 +465,9 @@ async def sweep_payment_windows(db, manager, hours: int = PAYMENT_WINDOW_HOURS) 
 
 
 async def expire_overdue_waves(db, manager) -> int:
-    """Transition under-filled waves past their deadline to `expired` and release
-    their reservations. Waves that already met min_activation are left alone."""
+    """Transition under-filled waves past their deadline to `expired`, release their
+    reservations, then RELIST leftover stock (regeneration happens whenever stock
+    remains). Waves that already met min_activation are left alone (they activate)."""
     now = _now()
     waves = await db.waves.find(
         {"state": {"$in": ["open", "almost_full"]}, "deadline": {"$ne": None, "$lt": now}}, {"_id": 0}
@@ -484,6 +485,10 @@ async def expire_overdue_waves(db, manager) -> int:
         await db.waves.update_one({"wave_id": w["wave_id"]}, {"$set": {"state": "expired"}})
         await _broadcast(manager, w["wave_id"], {"type": "wave_update", "state": "expired"})
         expired += 1
+        # Relist leftover stock: an under-filled wave that expires still has stock,
+        # so it regenerates (next working-day schedule) keeping its original targets.
+        fresh = await db.waves.find_one({"wave_id": w["wave_id"]}, {"_id": 0})
+        await complete_wave_and_respawn(db, manager, fresh)
     return expired
 
 
@@ -1390,10 +1395,10 @@ async def complete_wave_and_respawn(db, manager, wave: dict) -> dict:
 
     sold_total = sum(sold.values())
     remaining_products, total_remaining = _compute_remaining_products(wave)
-    # Respawn leftover stock whenever the wave saw genuine demand (joins/allocations
-    # OR sales) and stock remains. The demand check avoids cloning never-touched waves.
-    if engaged <= 0 or total_remaining <= 0:
-        return {"respawned": False, "reason": "no_demand_or_no_stock",
+    # Regeneration rule: a wave relists whenever STOCK REMAINS — regardless of demand
+    # (completed OR under-filled/expired). It keeps relisting until stock depletes.
+    if total_remaining <= 0:
+        return {"respawned": False, "reason": "no_stock_left",
                 "engaged": engaged, "sold": sold_total, "remaining": total_remaining}
 
     doc = _build_respawn_doc(wave, remaining_products, total_remaining, carried_units)

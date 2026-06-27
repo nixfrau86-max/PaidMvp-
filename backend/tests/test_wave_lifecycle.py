@@ -194,15 +194,17 @@ class TestRespawnOnDemand:
         mine = [o for o in orders if o["participation_id"] == pid]
         assert mine and mine[0]["status"] == "released"
 
-    def test_no_respawn_without_demand(self):
+    def test_respawn_with_stock_even_without_demand(self):
+        # Regeneration rule: stock left → relist, regardless of demand (no joins).
         sup = _supplier_session()
         admin = _admin_session()
         w = self._make_wave(sup, inventory=4)
         r = admin.patch(f"{API}/admin/regional-waves/{w['wave_id']}/state", json={"state": "completed"}, timeout=30)
         assert r.status_code == 200, r.text
         res = r.json().get("respawn_result")
-        assert res and res.get("respawned") is False
-        assert res.get("engaged") == 0
+        assert res and res.get("respawned") is True, f"stock-left should relist even with no demand: {res}"
+        assert res.get("units") == 4  # full inventory carried into the new round
+        assert res.get("carried_units") == 0  # nothing was allocated
 
 
 class TestAnnualUnitLimits:
