@@ -14,7 +14,6 @@ import os
 import uuid
 import copy
 import subprocess
-from typing import Optional
 
 import pytest
 import requests

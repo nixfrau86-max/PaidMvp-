@@ -5,7 +5,6 @@ plus suspend/delete login gating behavior.
 """
 import os
 import uuid
-import time
 import requests
 import pytest
 

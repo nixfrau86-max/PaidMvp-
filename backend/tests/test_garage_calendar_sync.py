@@ -13,9 +13,8 @@ import os
 import uuid
 import re
 import subprocess
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 
-import pytest
 import requests
 
 BASE_URL = os.environ.get(

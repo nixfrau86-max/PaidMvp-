@@ -6,12 +6,8 @@ join + state transitions, checkout (card + mock open banking),
 supplier & admin RBAC, websockets.
 """
 import os
-import json
 import uuid
-import time
-import asyncio
 import subprocess
-from datetime import datetime, timezone, timedelta
 
 import pytest
 import requests

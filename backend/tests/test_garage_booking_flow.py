@@ -18,7 +18,6 @@ import uuid
 import subprocess
 from datetime import datetime, timezone, timedelta
 
-import pytest
 import requests
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://wave-regional-pivot.preview.emergentagent.com").rstrip("/")

@@ -141,7 +141,6 @@ class TestFillToCapacity:
 
     def test_partial_join_capped_at_remaining(self, small_wave):
         sup, w = small_wave
-        wid = w["wave_id"]
         # join 3 of 4
         a = _new_consumer()
         assert _join(a, w, 3).status_code == 200
