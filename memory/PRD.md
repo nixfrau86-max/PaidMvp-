@@ -19,6 +19,13 @@ Build a real-time demand aggregation platform that turns fragmented consumer int
 7. Payment methods (admin-configurable fees + recommended flag + on/off): Open Banking (+£1, recommended), Apple Pay (+£3), Google Pay (+£3), Card (+£3), Bank Transfer (+£1.50). Wallet rails route through Stripe; OB/Bank Transfer mocked until TrueLayer/Faster Payments are wired.
 8. Admin role is restricted to `ADMIN_EMAILS` env allowlist.
 
+## What's implemented (latest — 2026-06-27d)
+### 🧱 Tech-debt refactor sprint — build_router split + WaveDetail split (DONE, verified)
+- **Backend `routes/waves.py`:** extracted the 4 heaviest handler bodies (`join_wave`, `supplier_order_summary`, `admin_wave_financials`, `update_wave`) into module-level logic functions (`_join_wave_logic`, `_supplier_order_summary_logic`, `_wave_financials_logic`, `_apply_wave_update`); in-router handlers now just auth + delegate. **`build_router` cyclomatic complexity 152 → 1** (radon); extracted fns are 14–22. Behaviour identical — **71/71 wave tests pass**, backend boots clean.
+- **Frontend `WaveDetail.jsx` (386 → 217 lines):** split the two step panels + sticky rail into `src/components/wave/WaveProductStep.jsx` (68), `WaveFulfilmentStep.jsx` (67), `WaveProgressRail.jsx` (83). All state/handlers stay in `WaveDetail`; every `data-testid` preserved. CRA compiles clean.
+- **Verified:** testing agent iteration_14 — **100% frontend** (browse → electronics delivery render → tyres garage+slot render → live Join writing a real reservation via WS). Zero regressions.
+- Deferred (still open, lower priority): `AdminPanel.jsx`/`Checkout.jsx`/`BookFitter.jsx`/`HeroWaves.jsx` component splits; `wave_payments.py`/`admin_users.py` router complexity.
+
 ## What's implemented (latest — 2026-06-27c)
 ### 🅿️ Garage approval bug fix — added garages now selectable for fitting (DONE)
 - **Root cause:** garages created via `POST /api/garages/apply` default to `is_verified: false`; the consumer fitting dropdown (`GET /api/garages`) only lists `is_active && is_verified` garages — and there was **no admin UI to approve garages** (the `POST /api/admin/garages/{id}/verify` endpoint existed but was never surfaced). So every applied garage stayed invisible forever (16 of 20 garages were unverified).
