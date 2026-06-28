@@ -19,7 +19,7 @@ function Field({ label, full, children }) {
 export default function WaveForm({ regions, categories, editing, onClose, onSaved, suppliers = null, admin = false }) {
   const isEdit = Boolean(editing);
   const imageEndpoint = admin ? "/admin/wave-image" : "/supplier/wave-image";
-  const activeSuppliers = (suppliers || []).filter((s) => !["suspended", "deleted"].includes(s.account_status));
+  const activeSuppliers = (suppliers || []).filter((s) => !["suspended", "deleted"].includes(s.account_status)).sort((a, b) => (a.business_name || "").localeCompare(b.business_name || ""));
   const [form, setForm] = useState(() => ({
     supplier_id: "",
     category: editing?.category || "tyres",

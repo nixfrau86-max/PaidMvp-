@@ -19,6 +19,12 @@ Build a real-time demand aggregation platform that turns fragmented consumer int
 7. Payment methods (admin-configurable fees + recommended flag + on/off): Open Banking (+£1, recommended), Apple Pay (+£3), Google Pay (+£3), Card (+£3), Bank Transfer (+£1.50). Wallet rails route through Stripe; OB/Bank Transfer mocked until TrueLayer/Faster Payments are wired.
 8. Admin role is restricted to `ADMIN_EMAILS` env allowlist.
 
+### 🌊 Admin can create Regional Waves (on behalf of any supplier) — DONE, verified
+- Admin's top-right button renamed **"+ Create VPP" → "Create Wave"** (`create-wave-btn`); it now opens the full Regional Wave form (legacy `CreateVPPForm` no longer wired).
+- The supplier `WaveForm` was extracted into a shared component `src/components/wave/WaveForm.jsx`, reused by both the supplier console and admin. In `admin` mode it shows a **Supplier dropdown** (alphabetically sorted, active suppliers only) and posts to the new admin endpoints.
+- Backend: `POST /api/admin/regional-waves` (admin-only, takes `supplier_id` + wave payload, validates supplier active) and `POST /api/admin/wave-image` (admin image upload); shared `_create_wave_for_supplier` / `_store_wave_image` helpers so supplier + admin paths share logic.
+- **Verified:** testing agent iteration_15 — 8/8 new backend tests + 4/4 frontend scenarios (admin create, admin no-supplier validation, supplier create regression, supplier edit regression). All test data cleaned up.
+
 ## What's implemented (latest — 2026-06-27d)
 ### 🧱 Tech-debt refactor sprint — build_router split + WaveDetail split (DONE, verified)
 - **Backend `routes/waves.py`:** extracted the 4 heaviest handler bodies (`join_wave`, `supplier_order_summary`, `admin_wave_financials`, `update_wave`) into module-level logic functions (`_join_wave_logic`, `_supplier_order_summary_logic`, `_wave_financials_logic`, `_apply_wave_update`); in-router handlers now just auth + delegate. **`build_router` cyclomatic complexity 152 → 1** (radon); extracted fns are 14–22. Behaviour identical — **71/71 wave tests pass**, backend boots clean.
