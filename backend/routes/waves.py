@@ -101,6 +101,10 @@ class WaveCreateRequest(BaseModel):
     products: List[ProductInput] = Field(default_factory=list)
 
 
+class AdminWaveCreateRequest(WaveCreateRequest):
+    supplier_id: str                 # admin chooses which supplier the wave belongs to
+
+
 class WaveUpdateRequest(BaseModel):
     brand: Optional[str] = None
     title: Optional[str] = None
@@ -752,7 +756,6 @@ async def _join_wave_logic(db, manager, get_unit_limits_config, resolve_unit_lim
 
 
 async def _wave_financials_logic(db, wave_id: str, w: dict) -> dict:
-    # variant cost/price index from the wave doc (supplier_cost lives here)
     vidx: Dict[str, dict] = {}
     for p in w.get("products", []):
         for v in p.get("variants", []):
@@ -813,6 +816,73 @@ async def _wave_financials_logic(db, wave_id: str, w: dict) -> dict:
         "by_variant": list(by_variant.values()),
     }
 
+
+
+async def _create_wave_for_supplier(db, supplier: dict, payload) -> dict:
+    region = await db.regions.find_one({"region_id": payload.region_id, "active": True}, {"_id": 0})
+    if not region:
+        raise HTTPException(status_code=400, detail="Invalid or inactive region")
+    if payload.min_activation > payload.ideal_target:
+        raise HTTPException(status_code=400, detail="Minimum activation cannot exceed the ideal target")
+    # Category: canonical id, or a custom slug (for "Other — specify"). Derive a
+    # human label; everything except `tyres` ships to a delivery address.
+    category = (payload.category or "").strip().lower()
+    if not category:
+        raise HTTPException(status_code=400, detail="Please choose a product category")
+    category_label = (payload.category_label or "").strip() or CATEGORY_LABELS.get(category, category.replace("_", " ").title())
+    title = (payload.title or "").strip() or f"{region['name']} {payload.brand} {category_label} Wave"
+    wave = {
+        "wave_id": f"wave_{uuid.uuid4().hex[:10]}",
+        "supplier_id": supplier["supplier_id"],
+        "category": category,
+        "category_label": category_label,
+        "region_id": region["region_id"],
+        "region_name": region["name"],
+        "brand": payload.brand.strip(),
+        "title": title,
+        "description": payload.description.strip(),
+        "image_url": payload.image_url or "",
+        "products": _normalize_products(payload.products),
+        "ideal_target": int(payload.ideal_target),
+        "min_activation": int(payload.min_activation),
+        "eta": payload.eta.strip(),
+        "state": "open",
+        "units_committed": 0,
+        "participants_count": 0,
+        "created_at": _now(),
+        "activated_at": None,
+        "deadline": _now() + timedelta(days=max(1, payload.deadline_days)),
+    }
+    await db.waves.insert_one(dict(wave))
+    await db.suppliers.update_one({"supplier_id": supplier["supplier_id"]}, {"$inc": {"waves_published": 1}})
+    return _public_wave(wave, full=True)
+
+
+async def _store_wave_image(db, owner_id: str, file) -> dict:
+    ext = (file.filename or "").rsplit(".", 1)[-1].lower() if "." in (file.filename or "") else ""
+    if ext not in storage.MIME_TYPES:
+        raise HTTPException(status_code=400, detail="Unsupported image type — use JPG, PNG, GIF or WEBP")
+    data = await file.read()
+    if len(data) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Image too large — max 5MB")
+    content_type = storage.MIME_TYPES[ext]
+    path = f"{storage.APP_NAME}/wave-images/{owner_id}/{uuid.uuid4().hex}.{ext}"
+    try:
+        result = await asyncio.to_thread(storage.put_object, path, data, content_type)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail="Image upload failed — please try again") from e
+    stored_path = result.get("path", path)
+    await db.files.insert_one({
+        "id": uuid.uuid4().hex,
+        "storage_path": stored_path,
+        "original_filename": file.filename,
+        "content_type": content_type,
+        "size": result.get("size", len(data)),
+        "supplier_id": owner_id,
+        "is_deleted": False,
+        "created_at": _iso(_now()),
+    })
+    return {"image_url": f"/api/wave-images/{stored_path}"}
 
 
 # --------------------------------------------------------------------------
@@ -899,30 +969,7 @@ def build_router(deps: Dict[str, Any]) -> APIRouter:
     @router.post("/supplier/wave-image")
     async def upload_wave_image(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
         supplier = await _require_supplier(user)
-        ext = (file.filename or "").rsplit(".", 1)[-1].lower() if "." in (file.filename or "") else ""
-        if ext not in storage.MIME_TYPES:
-            raise HTTPException(status_code=400, detail="Unsupported image type — use JPG, PNG, GIF or WEBP")
-        data = await file.read()
-        if len(data) > 5 * 1024 * 1024:
-            raise HTTPException(status_code=400, detail="Image too large — max 5MB")
-        content_type = storage.MIME_TYPES[ext]
-        path = f"{storage.APP_NAME}/wave-images/{supplier['supplier_id']}/{uuid.uuid4().hex}.{ext}"
-        try:
-            result = await asyncio.to_thread(storage.put_object, path, data, content_type)
-        except Exception as e:  # noqa: BLE001
-            raise HTTPException(status_code=502, detail="Image upload failed — please try again") from e
-        stored_path = result.get("path", path)
-        await db.files.insert_one({
-            "id": uuid.uuid4().hex,
-            "storage_path": stored_path,
-            "original_filename": file.filename,
-            "content_type": content_type,
-            "size": result.get("size", len(data)),
-            "supplier_id": supplier["supplier_id"],
-            "is_deleted": False,
-            "created_at": _iso(_now()),
-        })
-        return {"image_url": f"/api/wave-images/{stored_path}"}
+        return await _store_wave_image(db, supplier["supplier_id"], file)
 
     @router.get("/wave-images/{path:path}")
     async def serve_wave_image(path: str):
@@ -946,43 +993,7 @@ def build_router(deps: Dict[str, Any]) -> APIRouter:
     @router.post("/supplier/waves")
     async def create_wave(payload: WaveCreateRequest, user: dict = Depends(get_current_user)):
         supplier = await _require_supplier(user)
-        region = await db.regions.find_one({"region_id": payload.region_id, "active": True}, {"_id": 0})
-        if not region:
-            raise HTTPException(status_code=400, detail="Invalid or inactive region")
-        if payload.min_activation > payload.ideal_target:
-            raise HTTPException(status_code=400, detail="Minimum activation cannot exceed the ideal target")
-        # Category: canonical id, or a custom slug (for "Other — specify"). Derive a
-        # human label; everything except `tyres` ships to a delivery address.
-        category = (payload.category or "").strip().lower()
-        if not category:
-            raise HTTPException(status_code=400, detail="Please choose a product category")
-        category_label = (payload.category_label or "").strip() or CATEGORY_LABELS.get(category, category.replace("_", " ").title())
-        title = (payload.title or "").strip() or f"{region['name']} {payload.brand} {category_label} Wave"
-        wave = {
-            "wave_id": f"wave_{uuid.uuid4().hex[:10]}",
-            "supplier_id": supplier["supplier_id"],
-            "category": category,
-            "category_label": category_label,
-            "region_id": region["region_id"],
-            "region_name": region["name"],
-            "brand": payload.brand.strip(),
-            "title": title,
-            "description": payload.description.strip(),
-            "image_url": payload.image_url or "",
-            "products": _normalize_products(payload.products),
-            "ideal_target": int(payload.ideal_target),
-            "min_activation": int(payload.min_activation),
-            "eta": payload.eta.strip(),
-            "state": "open",
-            "units_committed": 0,
-            "participants_count": 0,
-            "created_at": _now(),
-            "activated_at": None,
-            "deadline": _now() + timedelta(days=max(1, payload.deadline_days)),
-        }
-        await db.waves.insert_one(dict(wave))
-        await db.suppliers.update_one({"supplier_id": supplier["supplier_id"]}, {"$inc": {"waves_published": 1}})
-        return _public_wave(wave, full=True)
+        return await _create_wave_for_supplier(db, supplier, payload)
 
     @router.get("/supplier/waves")
     async def list_my_waves(user: dict = Depends(get_current_user)):
@@ -1150,6 +1161,22 @@ def build_router(deps: Dict[str, Any]) -> APIRouter:
         sups = await db.suppliers.find({"supplier_id": {"$in": sup_ids}}, {"_id": 0, "supplier_id": 1, "business_name": 1}).to_list(len(sup_ids) or 1)
         sup_names = {s["supplier_id"]: s.get("business_name") for s in sups}
         return [{**_public_wave(d, full=True), "supplier_name": sup_names.get(d.get("supplier_id"), "—")} for d in docs]
+
+    @router.post("/admin/regional-waves")
+    async def admin_create_wave(payload: AdminWaveCreateRequest, user: dict = Depends(get_current_user)):
+        """Admin creates a Regional Wave on behalf of a chosen supplier (same flow as the supplier console)."""
+        await require_role(user, ["admin"])
+        supplier = await db.suppliers.find_one({"supplier_id": payload.supplier_id}, {"_id": 0})
+        if not supplier:
+            raise HTTPException(status_code=400, detail="Select a valid supplier")
+        if supplier.get("account_status") in ("suspended", "deleted"):
+            raise HTTPException(status_code=400, detail="That supplier account is not active")
+        return await _create_wave_for_supplier(db, supplier, payload)
+
+    @router.post("/admin/wave-image")
+    async def admin_upload_wave_image(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+        await require_role(user, ["admin"])
+        return await _store_wave_image(db, "admin", file)
 
     @router.get("/admin/scheduled-waves")
     async def admin_list_scheduled_waves(user: dict = Depends(get_current_user)):

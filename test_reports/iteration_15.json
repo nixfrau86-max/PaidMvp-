@@ -1,0 +1,37 @@
+{
+  "summary": "Iteration 15 — Full backend + frontend verification of the new admin Regional Wave creation feature (POST /api/admin/regional-waves + POST /api/admin/wave-image) and the WaveForm extraction. All 4 review scenarios PASS end-to-end on the live preview env (admin create, admin validation, supplier create regression, supplier edit regression). Backend: 8/8 pytest tests pass. Frontend: admin and supplier flows both verified via Playwright against the public URL.",
+  "verified_flows": {
+    "admin_create_wave_ui": "PASS — /admin shows orange button 'CREATE WAVE' (data-testid=create-wave-btn). Click opens [data-testid=wave-form-modal] titled 'CREATE REGIONAL WAVE'. form-supplier dropdown listed all active suppliers (incl. 'Test Wave Supplier'). After picking supplier + region (Coventry) + brand 'TEST_ADMIN_UI_BRAND' + product 'TEST UI Model' + variant (Sz X · cost 5 · rrp 30 · wave 20 · stock 50), save-wave-btn → sonner toast 'Wave created', modal closed, view stayed on REGIONAL WAVES tab and new row 'COVENTRY TEST_ADMIN_UI_BRAND ... WAVE' with supplier='Test Wave Supplier' appeared.",
+    "admin_validation": "PASS — Submitting the admin form without selecting a supplier (region + brand + product all filled) triggered sonner error toast 'Choose a supplier for this wave'. No wave was created (verified — no admin/regional-waves entry, modal stayed open until supplier picked).",
+    "supplier_create_wave_ui": "PASS — /supplier/waves shows 'CREATE WAVE' (data-testid=create-wave-btn). Clicking opens 'CREATE REGIONAL WAVE' modal. CRITICAL: form-supplier count = 0 (admin-only dropdown correctly hidden for supplier role). Filled region (Coventry) + brand 'TEST_SUPPLIER_UI_REG' + product + variant → sonner toast 'Wave created', wave appears in the supplier console table.",
+    "supplier_edit_wave_ui": "PASS — Clicking PencilSimple [data-testid=edit-wave-{id}] on the new wave opens modal titled 'EDIT WAVE'. form-supplier still hidden. Changing form-brand → 'TEST_SUPPLIER_EDITED' + save → sonner toast 'Wave updated'. Updated brand reflected in the table row (sub-text 'TEST_SUPPLIER_EDITED' visible).",
+    "backend_admin_endpoint": "PASS (8/8) — POST /api/admin/regional-waves returns 200 with supplier_id correctly attributed, state='open'; appears in GET /api/admin/regional-waves. Missing supplier_id → 422 (Pydantic). Invalid supplier_id → 400 'Select a valid supplier'. Supplier session calling admin endpoint → 403. POST /api/admin/wave-image (multipart png) → 200 with image_url. Supplier POST /api/supplier/waves + PATCH /api/supplier/waves/{id} regression still 200; PATCH change persists via GET."
+  },
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_admin_create_wave.py",
+    "/app/test_reports/pytest/iteration15_admin_create_wave.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "WaveForm.jsx line 22 — activeSuppliers filters out 'suspended' and 'deleted' status, which is correct. However the parent AdminPanel passes ALL suppliers — confirm AdminPanel only loads suppliers via /admin/suppliers and that the prop name/shape matches (it does in the test run: dropdown listed both TEST_Supplier_* test users and real suppliers like 'Test Wave Supplier' / 'Bundled Hardware Ltd'). Minor: consider sorting suppliers by business_name alphabetically — current order appears to be creation order which makes hunting for a specific supplier harder once the list grows beyond ~15. Cosmetic.",
+    "WaveForm.jsx line 88 — admin+!isEdit guard is correct: it allows admin-EDIT flows (where supplier is locked) to bypass the supplier check. Verified by the supplier-edit run (admin=false anyway, but logic is sound).",
+    "routes/waves.py admin_create_wave (line 1166) — validates supplier existence + active status, but uses Pydantic's required-field for supplier_id which yields a 422 rather than the 400 'Choose a supplier' the front-end shows. The front-end's own client-side guard fires first (toast 'Choose a supplier for this wave'), so the user never sees the 422. Acceptable; if a client ever bypasses validation they'll get a structured 422.",
+    "Cleanup: the supplier dropdown is populated with several TEST_Supplier_test-user-* accounts (likely leftovers from previous test iterations). Not a bug but a hygiene observation — consider a periodic cleanup of TEST_-prefixed supplier accounts to keep the admin UI realistic."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_admin_create_wave.py (NEW — 8 tests, all passing)"
+  ],
+  "success_rate": {"backend": "100% (8/8 new + all prior tests untouched)", "frontend": "100% (4/4 scenarios)"},
+  "test_credentials": "Admin: founder@thecollectivesavers.co.uk / SaversCollective. Supplier: supplier_test@collective.co / Supplier1234. Both confirmed working via the persona-CONTINUE → tab-email → email-submit flow.",
+  "seed_data_creation": "Created and CLEANED UP 4 test waves during this run: (1) admin-created wave_286e1d17d6 brand 'TEST_ADMIN_UI_BRAND' (deleted via DELETE /api/admin/regional-waves), (2) supplier-created wave_43427dbcf8 brand 'TEST_SUPPLIER_EDITED' (deleted via DELETE /api/supplier/waves), (3+4) two transient waves from backend pytest (cleaned by test_zz_cleanup). Final DB state: net zero new waves.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 15 feature is COMPLETE & GREEN. The admin Create Wave UI lives at /admin (button data-testid=create-wave-btn → modal data-testid=wave-form-modal). Supplier dropdown is data-testid=form-supplier and ONLY renders when admin=true && !isEdit. Backend endpoints: POST /api/admin/regional-waves (200), POST /api/admin/wave-image (200), validation 422/400, role 403. Supplier flow at /supplier/waves still uses the same WaveForm without the supplier dropdown — confirmed no regressions. Cookie-session auth (no token in response) — use requests.Session() for backend tests, see /app/backend/tests/test_regional_waves.py for the canonical pattern. Login persona buttons: take the FIRST 'CONTINUE' button (any persona works because the email tab is shared).",
+  "rca_of_the_issue": "N/A — feature works as designed."
+}

@@ -6,7 +6,7 @@ import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 
 import { Shell, Stat } from "./admin/_shared";
-import CreateVPPForm from "./admin/CreateVPPForm";
+import WaveForm from "../components/wave/WaveForm";
 import WavesTab from "./admin/WavesTab";
 import PendingWavesTab from "./admin/PendingWavesTab";
 import SuppliersTab from "./admin/SuppliersTab";
@@ -23,20 +23,26 @@ export default function AdminPanel() {
   const [vpps, setVpps] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [pendingWaves, setPendingWaves] = useState([]);
+  const [regions, setRegions] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [tab, setTab] = useState("waves");
 
   const load = useCallback(async () => {
-    const [s, v, sup, pw] = await Promise.all([
+    const [s, v, sup, pw, reg, cat] = await Promise.all([
       api.get("/admin/stats"),
       api.get("/admin/vpps"),
       api.get("/admin/suppliers"),
       api.get("/admin/waves/pending"),
+      api.get("/regions"),
+      api.get("/wave-categories"),
     ]);
     setStats(s.data);
     setVpps(v.data);
     setSuppliers(sup.data);
     setPendingWaves(pw.data);
+    setRegions(reg.data);
+    setCategories(cat.data);
   }, []);
 
   useEffect(() => {
@@ -126,15 +132,25 @@ export default function AdminPanel() {
           <h1 className="font-display text-5xl uppercase tracking-tighter leading-[0.9]">Control Room.</h1>
         </div>
         <button
-          onClick={() => setShowForm((s) => !s)}
+          onClick={() => setShowForm(true)}
           className="bg-[#FF5400] text-white border-2 border-ink font-bold uppercase tracking-wider px-5 py-3 text-xs shadow-brut hover-brut inline-flex items-center gap-2"
-          data-testid="new-vpp-btn"
+          data-testid="create-wave-btn"
         >
-          <Plus weight="bold" /> {showForm ? "Cancel" : "Create VPP"}
+          <Plus weight="bold" /> Create Wave
         </button>
       </div>
 
-      {showForm && <CreateVPPForm onCreated={() => { setShowForm(false); load(); }} />}
+      {showForm && (
+        <WaveForm
+          admin
+          suppliers={suppliers}
+          regions={regions}
+          categories={categories}
+          editing={null}
+          onClose={() => setShowForm(false)}
+          onSaved={() => { setShowForm(false); setTab("regional"); load(); }}
+        />
+      )}
 
       <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 mb-6">
         <Stat label="Total Waves" v={stats.total_vpps} />
