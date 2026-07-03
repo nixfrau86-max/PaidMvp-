@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import Navbar from "../components/Navbar";
 import { api } from "../lib/api";
 import { useAuth, loginRedirect } from "../lib/auth";
+import { track } from "../lib/firebase";
 import {
   Storefront, User, GoogleLogo, Envelope, DeviceMobile, ArrowRight, ArrowLeft,
   ShieldCheck, Lock, Wrench,
@@ -220,6 +221,7 @@ function EmailTab({ mode, onSuccess }) {
       const payload = mode === "signup" ? { email, password, name } : { email, password };
       const { data } = await api.post(endpoint, payload);
       setUser(data.user);
+      track(mode === "signup" ? "sign_up" : "login", { method: "email" });
       toast.success(mode === "signup" ? "Welcome aboard ⚡" : "Welcome back");
       onSuccess();
     } catch (err) {
@@ -293,6 +295,7 @@ function SmsTab({ onSuccess }) {
     try {
       const { data } = await api.post("/auth/sms/verify-otp", { phone, code, name: name || undefined });
       setUser(data.user);
+      track(data.is_new_user ? "sign_up" : "login", { method: "sms" });
       toast.success("Signed in ⚡");
       onSuccess();
     } catch (err) {

@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, Link } from "react-router-dom";
 import Confetti from "react-confetti";
 import Navbar from "../components/Navbar";
 import { api } from "../lib/api";
+import { track } from "../lib/firebase";
 import { CheckCircle, ArrowRight, Wrench } from "@phosphor-icons/react";
 import { logWarn } from "../lib/log";
 
@@ -11,6 +12,7 @@ export default function WavePaymentSuccess() {
   const navigate = useNavigate();
   const [status, setStatus] = useState("pending");
   const [attempts, setAttempts] = useState(0);
+  const tracked = useRef(false);
 
   const params = new URLSearchParams(location.search);
   const sessionId = params.get("session_id");
@@ -22,7 +24,18 @@ export default function WavePaymentSuccess() {
       if (stopped || n > 10) { if (!stopped) setStatus("timeout"); return; }
       try {
         const { data } = await api.get(`/wave-checkout/status/${sessionId}`);
-        if (data.payment_status === "paid") { setStatus("paid"); return; }
+        if (data.payment_status === "paid") {
+          setStatus("paid");
+          if (!tracked.current) {
+            tracked.current = true;
+            track("checkout_completed", {
+              transaction_id: sessionId,
+              value: (data.amount_total || 0) / 100,
+              currency: (data.currency || "gbp").toUpperCase(),
+            });
+          }
+          return;
+        }
         if (data.status === "expired") { setStatus("expired"); return; }
       } catch (err) { logWarn("Wave payment status poll error", err); }
       setAttempts(n + 1);

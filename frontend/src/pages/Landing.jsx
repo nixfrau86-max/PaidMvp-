@@ -6,6 +6,7 @@ import Navbar from "../components/Navbar";
 import WaveBackground from "../components/WaveBackground";
 import HeroWaves from "../components/HeroWaves";
 import { api } from "../lib/api";
+import { track } from "../lib/firebase";
 import {
   ArrowRight, CheckCircle, Users, Pulse, Package, Envelope, Storefront,
   ShieldCheck, Sparkle,
@@ -377,6 +378,7 @@ function WaitlistForm({ compact = false }) {
     setSubmitting(true);
     try {
       await api.post("/waitlist", { email, roles });
+      track("request_access", { roles: roles.join(",") || "consumer" });
       setSubmitted(true);
     } catch {
       setSubmitted(true); // graceful UX

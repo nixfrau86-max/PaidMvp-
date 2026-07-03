@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { track } from "../lib/firebase";
 import { logError } from "../lib/log";
 
 export default function AuthCallback() {
@@ -28,6 +29,7 @@ export default function AuthCallback() {
         // We deliberately do NOT persist the token in JS (XSS-safe; cookie-only auth).
         const { data } = await api.post("/auth/session", { session_id });
         setUser(data.user);
+        track(data.is_new_user ? "sign_up" : "login", { method: "google" });
         // Clean hash from URL
         window.history.replaceState(null, "", "/dashboard");
         navigate("/dashboard", { state: { user: data.user } });

@@ -56,6 +56,10 @@ export default function WaveDetail() {
   useEffect(() => { if (authorised) reload(); }, [reload, authorised]);
 
   useEffect(() => {
+    if (w?.wave_id) track("wave_view", { wave_id: w.wave_id, category: w.category, region_id: w.region_id });
+  }, [w?.wave_id, w?.category, w?.region_id]);
+
+  useEffect(() => {
     if (w?.category === "tyres") {
       api.get("/garages").then(({ data }) => setGarages(data)).catch(() => setGarages([]));
     }
