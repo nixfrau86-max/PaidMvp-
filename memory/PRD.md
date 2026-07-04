@@ -25,6 +25,15 @@ Build a real-time demand aggregation platform that turns fragmented consumer int
 - Backend: `POST /api/admin/regional-waves` (admin-only, takes `supplier_id` + wave payload, validates supplier active) and `POST /api/admin/wave-image` (admin image upload); shared `_create_wave_for_supplier` / `_store_wave_image` helpers so supplier + admin paths share logic.
 - **Verified:** testing agent iteration_15 — 8/8 new backend tests + 4/4 frontend scenarios (admin create, admin no-supplier validation, supplier create regression, supplier edit regression). All test data cleaned up.
 
+### 📊 Firebase Analytics conversion events (DONE, verified)
+- Added higher-value GA4 events on top of existing `page_view`/`wave_join`/`logout`:
+  - `sign_up` / `login` with `{method}` — email (Login.jsx), SMS (Login.jsx), Google (AuthCallback.jsx). Social/SMS use `data.is_new_user ? sign_up : login` (field not yet returned by backend → currently resolves to `login`; auth backend untouched by design).
+  - `request_access` `{roles}` — landing waitlist form (Landing.jsx).
+  - `wave_view` `{wave_id, category, region_id}` — WaveDetail.jsx (fires once per wave).
+  - `checkout_completed` `{transaction_id, value, currency}` — WavePaymentSuccess.jsx, ref-guarded against double-fire.
+- **Verified:** live beacon capture confirmed `request_access` reaches measurement ID `G-CES43X2L3W`; all events share the same verified `lib/firebase.track()` pipeline. Frontend compiles clean.
+- Firebase = frontend Analytics only (project `the-collective-savers-paid-mvp`, `G-CES43X2L3W`); connection verified healthy.
+
 ## What's implemented (latest — 2026-06-27d)
 ### 🧱 Tech-debt refactor sprint — build_router split + WaveDetail split (DONE, verified)
 - **Backend `routes/waves.py`:** extracted the 4 heaviest handler bodies (`join_wave`, `supplier_order_summary`, `admin_wave_financials`, `update_wave`) into module-level logic functions (`_join_wave_logic`, `_supplier_order_summary_logic`, `_wave_financials_logic`, `_apply_wave_update`); in-router handlers now just auth + delegate. **`build_router` cyclomatic complexity 152 → 1** (radon); extracted fns are 14–22. Behaviour identical — **71/71 wave tests pass**, backend boots clean.
