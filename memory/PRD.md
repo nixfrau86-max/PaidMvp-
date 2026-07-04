@@ -34,6 +34,11 @@ Build a real-time demand aggregation platform that turns fragmented consumer int
 - **Verified:** live beacon capture confirmed `request_access` reaches measurement ID `G-CES43X2L3W`; all events share the same verified `lib/firebase.track()` pipeline. Frontend compiles clean.
 - Firebase = frontend Analytics only (project `the-collective-savers-paid-mvp`, `G-CES43X2L3W`); connection verified healthy.
 
+### 🧱 WaveForm.jsx complexity refactor (code review 2026-07-04) — DONE
+- Extracted the two heaviest blocks of the 243-line/complexity-64 `WaveForm.jsx` into presentational sub-components: `components/wave/WaveImageField.jsx` and `components/wave/WaveProductEditor.jsx` (with internal `ProductBlock`/`VariantRow`). All props wired identically; every `data-testid` preserved. CRA compiles clean; smoke-tested (admin Create Wave renders + add-product works).
+- Code-review criticals re-verified as **false positives**: pyflakes = 0 undefined vars; ESLint `exhaustive-deps` = 0 across all 5 flagged files. Cosmetic items (nested ternaries in legacy VPPDetail/TyreWaveDetail, inline-object props) not actioned — low value on legacy/deprecated pages.
+- Still deferred backlog: `wave_payments.py`/`admin_users.py` `build_router` complexity; `HeroWaves.jsx` split.
+
 ## What's implemented (latest — 2026-06-27d)
 ### 🧱 Tech-debt refactor sprint — build_router split + WaveDetail split (DONE, verified)
 - **Backend `routes/waves.py`:** extracted the 4 heaviest handler bodies (`join_wave`, `supplier_order_summary`, `admin_wave_financials`, `update_wave`) into module-level logic functions (`_join_wave_logic`, `_supplier_order_summary_logic`, `_wave_financials_logic`, `_apply_wave_update`); in-router handlers now just auth + delegate. **`build_router` cyclomatic complexity 152 → 1** (radon); extracted fns are 14–22. Behaviour identical — **71/71 wave tests pass**, backend boots clean.

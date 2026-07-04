@@ -1,7 +1,9 @@
 import React, { useState } from "react";
 import { toast } from "sonner";
-import { Plus, Trash, X, Package } from "@phosphor-icons/react";
+import { X } from "@phosphor-icons/react";
 import { api } from "../../lib/api";
+import { WaveImageField } from "./WaveImageField";
+import { WaveProductEditor } from "./WaveProductEditor";
 
 const uid = () => (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `k_${Math.random().toString(36).slice(2)}`);
 const emptyVariant = () => ({ _key: uid(), label: "", supplier_cost: "", retail_price: "", wave_price: "", inventory_qty: "" });
@@ -186,69 +188,26 @@ export default function WaveForm({ regions, categories, editing, onClose, onSave
             <Field label="Fulfilment ETA"><input value={form.eta} onChange={upd("eta")} className="inp" placeholder="Dispatched within 7 days of activation" data-testid="form-eta" /></Field>
             {!isEdit && <Field label="Open for (days)"><input type="number" min="1" value={form.deadline_days} onChange={upd("deadline_days")} className="inp" /></Field>}
             <Field label="Description" full><textarea value={form.description} onChange={upd("description")} rows={2} className="inp" /></Field>
-            <Field label="Product image (shown on the live wave card)" full>
-              <div className="flex flex-col sm:flex-row gap-3 items-start" data-testid="wave-image-section">
-                <div className="w-28 h-28 shrink-0 border-2 border-ink bg-[#FAFAFA] overflow-hidden flex items-center justify-center" data-testid="wave-image-preview">
-                  {form.image_url ? (
-                    <img src={form.image_url} alt="Wave preview" className="w-full h-full object-cover" />
-                  ) : (
-                    <Package weight="duotone" size={28} className="text-[#3A3A3A]" />
-                  )}
-                </div>
-                <div className="flex-1 w-full space-y-2">
-                  <label className={`inline-flex items-center gap-2 bg-white border-2 border-ink px-3 py-2 text-[10px] font-bold uppercase tracking-widest shadow-brut-sm hover-brut cursor-pointer ${uploading ? "opacity-60 pointer-events-none" : ""}`} data-testid="wave-image-upload-label">
-                    <Plus weight="bold" size={10} /> {uploading ? "Uploading…" : "Upload image"}
-                    <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" onChange={onPickImage} className="hidden" data-testid="wave-image-file" />
-                  </label>
-                  <div className="text-[9px] font-mono uppercase tracking-widest text-[#3A3A3A]">JPG / PNG / GIF / WEBP · max 5MB · or paste a URL below</div>
-                  <input value={form.image_url} onChange={upd("image_url")} className="inp" placeholder="https://…/product.jpg" data-testid="wave-image-url" />
-                  {form.image_url && (
-                    <button type="button" onClick={() => setForm((f) => ({ ...f, image_url: "" }))} className="text-[10px] font-bold uppercase tracking-widest text-[#FF5400] inline-flex items-center gap-1" data-testid="wave-image-clear"><X weight="bold" size={10} /> Remove image</button>
-                  )}
-                </div>
-              </div>
-            </Field>
+            <WaveImageField
+              imageUrl={form.image_url}
+              uploading={uploading}
+              onPickImage={onPickImage}
+              onUrlChange={upd("image_url")}
+              onClear={() => setForm((f) => ({ ...f, image_url: "" }))}
+            />
           </div>
 
-          <div className="border-t-2 border-ink pt-4">
-            <div className="flex items-center justify-between mb-2">
-              <div className="font-display text-lg uppercase">Products & options</div>
-              <button type="button" onClick={addProduct} className="bg-white border-2 border-ink px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest shadow-brut-sm hover-brut inline-flex items-center gap-1" data-testid="add-product-btn"><Plus weight="bold" size={10} /> Add product</button>
-            </div>
-            {form.products.map((p, pi) => (
-              <div key={p._key} className="border-2 border-ink mb-3" data-testid={`product-block-${pi}`}>
-                <div className="flex items-center gap-2 p-2 border-b-2 border-ink bg-[#FAFAFA]">
-                  <label className={`relative w-12 h-12 shrink-0 border-2 border-ink bg-white overflow-hidden flex items-center justify-center cursor-pointer ${productUploading[pi] ? "opacity-60 pointer-events-none" : ""}`} data-testid={`product-image-label-${pi}`} title="Add product photo">
-                    {p.image_url ? (
-                      <img src={p.image_url} alt={p.model || "product"} className="w-full h-full object-cover" data-testid={`product-image-preview-${pi}`} />
-                    ) : (
-                      <Plus weight="bold" size={16} className="text-[#3A3A3A]" />
-                    )}
-                    <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" onChange={onPickProductImage(pi)} className="hidden" data-testid={`product-image-file-${pi}`} />
-                  </label>
-                  <input value={p.model} onChange={(e) => updProduct(pi, "model", e.target.value)} className="inp flex-1" placeholder="Model (e.g. EcoContact 6)" data-testid={`product-model-${pi}`} />
-                  {p.image_url && <button type="button" onClick={() => updProduct(pi, "image_url", "")} className="p-2 border-2 border-ink" data-testid={`product-image-clear-${pi}`} title="Remove photo"><X weight="bold" size={12} /></button>}
-                  {form.products.length > 1 && <button type="button" onClick={() => removeProduct(pi)} className="p-2 border-2 border-ink"><Trash weight="bold" size={12} /></button>}
-                </div>
-                <div className="p-2 space-y-2">
-                  <div className="hidden sm:grid grid-cols-[1.3fr_1fr_1fr_1fr_0.8fr_auto] gap-2 font-mono text-[9px] uppercase tracking-widest text-[#3A3A3A] px-1">
-                    <span>Option / size</span><span>Cost £</span><span>RRP £</span><span>Wave £</span><span>Stock</span><span></span>
-                  </div>
-                  {p.variants.map((v, vi) => (
-                    <div key={v._key} className="grid grid-cols-2 sm:grid-cols-[1.3fr_1fr_1fr_1fr_0.8fr_auto] gap-2" data-testid={`variant-row-${pi}-${vi}`}>
-                      <input value={v.label} onChange={(e) => updVariant(pi, vi, "label", e.target.value)} className="inp" placeholder="225/65 R18" />
-                      <input type="number" step="0.01" value={v.supplier_cost} onChange={(e) => updVariant(pi, vi, "supplier_cost", e.target.value)} className="inp" placeholder="0" />
-                      <input type="number" step="0.01" value={v.retail_price} onChange={(e) => updVariant(pi, vi, "retail_price", e.target.value)} className="inp" placeholder="0" />
-                      <input type="number" step="0.01" value={v.wave_price} onChange={(e) => updVariant(pi, vi, "wave_price", e.target.value)} className="inp" placeholder="0" />
-                      <input type="number" value={v.inventory_qty} onChange={(e) => updVariant(pi, vi, "inventory_qty", e.target.value)} className="inp" placeholder="0" />
-                      {p.variants.length > 1 ? <button type="button" onClick={() => removeVariant(pi, vi)} className="p-2 border-2 border-ink"><X weight="bold" size={12} /></button> : <span />}
-                    </div>
-                  ))}
-                  <button type="button" onClick={() => addVariant(pi)} className="text-[10px] font-bold uppercase tracking-widest text-[#FF5400] inline-flex items-center gap-1" data-testid={`add-variant-${pi}`}><Plus weight="bold" size={10} /> Add option</button>
-                </div>
-              </div>
-            ))}
-          </div>
+          <WaveProductEditor
+            products={form.products}
+            productUploading={productUploading}
+            updProduct={updProduct}
+            updVariant={updVariant}
+            addProduct={addProduct}
+            removeProduct={removeProduct}
+            addVariant={addVariant}
+            removeVariant={removeVariant}
+            onPickProductImage={onPickProductImage}
+          />
         </div>
         <div className="border-t-2 border-ink p-4 flex justify-end gap-2 sticky bottom-0 bg-white">
           <button type="button" onClick={onClose} className="border-2 border-ink px-4 py-2 text-xs font-bold uppercase tracking-widest">Cancel</button>
