@@ -97,7 +97,7 @@ function PODetail({ poId, onClose, onChanged }) {
             <div className="text-[10px] font-bold uppercase tracking-widest text-[#3A3A3A] mb-2">Destinations ({po.destinations.length})</div>
             <div className="space-y-2">
               {po.destinations.map((d, i) => (
-                <div key={i} className="border-2 border-ink p-3">
+                <div key={`${d.destination}-${i}`} className="border-2 border-ink p-3">
                   <div className="flex items-center gap-1.5 font-bold uppercase text-xs mb-1">
                     {d.type === "garage" ? <Wrench weight="bold" size={13} /> : <MapPin weight="bold" size={13} />} {d.destination} <span className="text-[#3A3A3A] font-normal">· {d.units} units</span>
                   </div>
@@ -112,7 +112,7 @@ function PODetail({ poId, onClose, onChanged }) {
             <div className="text-[10px] font-bold uppercase tracking-widest text-[#3A3A3A] mb-2">Customer contacts ({po.customers.length})</div>
             <div className="border-2 border-ink divide-y divide-ink/20">
               {po.customers.map((c, i) => (
-                <div key={i} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-[11px]">
+                <div key={`${c.email}-${i}`} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-[11px]">
                   <span className="font-bold">{c.name}</span>
                   <span className="text-[#3A3A3A]">{c.email} · {c.phone}</span>
                   <span>{c.units}u → {c.destination}{c.fitting_slot ? ` · ${c.fitting_slot}` : ""}</span>

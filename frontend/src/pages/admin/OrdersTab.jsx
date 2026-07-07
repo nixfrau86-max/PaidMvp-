@@ -59,7 +59,7 @@ function OrderDetail({ order, onClose }) {
             <div className="text-[10px] font-bold uppercase tracking-widest text-[#3A3A3A] mb-2">Items ({order.units} units)</div>
             <div className="border-2 border-ink">
               {order.items.map((it, i) => (
-                <div key={i} className="flex items-center justify-between px-3 py-2 border-b border-ink/20 last:border-0">
+                <div key={`${it.model}-${it.label}-${i}`} className="flex items-center justify-between px-3 py-2 border-b border-ink/20 last:border-0">
                   <span>{it.model} · {it.label} × {it.qty}</span>
                   <span className="font-bold">{fmt(it.wave_price)}</span>
                 </div>
