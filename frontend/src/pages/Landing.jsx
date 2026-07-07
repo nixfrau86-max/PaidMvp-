@@ -250,7 +250,7 @@ export default function Landing() {
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 mb-10">
             <div className="flex items-center gap-3">
               <span className="inline-flex items-center justify-center w-12 h-12 bg-white border-2 border-white overflow-hidden">
-                <img src="https://customer-assets.emergentagent.com/job_party-power-1/artifacts/yz1zsziz_Collectivesaverslogo.png.png" alt="" className="w-full h-full object-contain p-0.5" />
+                <img src="https://static.prod-images.emergentagent.com/jobs/8302a754-91f7-49b5-ba02-d8c6bf96caec/images/cc0a7a6c9540456d9fc927899cd77c0dc3ed58cda0a8283dcc71f5307966d590.png" alt="" className="w-full h-full object-contain p-0.5" />
               </span>
               <div>
                 <div className="font-display text-xl uppercase tracking-tighter">The Collective Savers™</div>

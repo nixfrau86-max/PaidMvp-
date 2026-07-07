@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { SignOut } from "@phosphor-icons/react";
 
-const LOGO_URL = "https://customer-assets.emergentagent.com/job_party-power-1/artifacts/yz1zsziz_Collectivesaverslogo.png.png";
+const LOGO_URL = "https://static.prod-images.emergentagent.com/jobs/8302a754-91f7-49b5-ba02-d8c6bf96caec/images/cc0a7a6c9540456d9fc927899cd77c0dc3ed58cda0a8283dcc71f5307966d590.png";
 
 export default function Navbar() {
   const { user, logout } = useAuth();
