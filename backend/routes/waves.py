@@ -20,6 +20,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Response
 from pydantic import BaseModel, Field
+from pymongo import ReturnDocument
 
 import storage
 from email_service import send_join_confirmation, send_wave_activation
@@ -103,6 +104,14 @@ class WaveCreateRequest(BaseModel):
 
 class AdminWaveCreateRequest(WaveCreateRequest):
     supplier_id: str                 # admin chooses which supplier the wave belongs to
+
+
+class PurchaseOrderCreate(BaseModel):
+    wave_id: str
+
+
+class POStatusUpdate(BaseModel):
+    status: str                      # draft | sent | fulfilled
 
 
 class WaveUpdateRequest(BaseModel):
@@ -957,6 +966,92 @@ async def _admin_orders_logic(db) -> dict:
     return {"orders": orders, "stats": stats}
 
 
+async def _next_po_number(db) -> str:
+    doc = await db.counters.find_one_and_update(
+        {"_id": "purchase_order"}, {"$inc": {"seq": 1}},
+        upsert=True, return_document=ReturnDocument.AFTER,
+    )
+    seq = int((doc or {}).get("seq", 1))
+    return f"PO-{_now().year}-{seq:04d}"
+
+
+async def _build_bundled_po_data(db, wave: dict) -> dict:
+    """Bundle all PAID (captured) consumer orders in a wave into one supplier PO:
+    per-variant totals (qty × supplier_cost), per-destination breakdown, and the
+    customer contact list for fulfilment."""
+    wave_id = wave["wave_id"]
+    parts = await db.wave_participations.find(
+        {"wave_id": wave_id, "$or": [{"payment_status": "paid"}, {"status": "captured"}]}, {"_id": 0}
+    ).to_list(5000)
+
+    vidx: Dict[str, dict] = {}
+    for p in wave.get("products", []):
+        for v in p.get("variants", []):
+            vidx[v["variant_id"]] = {
+                "model": p["model"], "label": v["label"],
+                "supplier_cost": float(v.get("supplier_cost", 0) or 0),
+                "wave_price": float(v.get("wave_price", 0) or 0),
+            }
+
+    uids = list({p["user_id"] for p in parts})
+    users: Dict[str, dict] = {}
+    async for u in db.users.find({"user_id": {"$in": uids}}, {"_id": 0, "user_id": 1, "name": 1, "email": 1, "phone": 1}):
+        users[u["user_id"]] = u
+
+    is_tyres = wave["category"] == "tyres"
+    line_items: Dict[str, dict] = {}
+    destinations: Dict[str, dict] = {}
+    customers: List[dict] = []
+    total_units = 0
+    total_cost = 0.0
+    total_revenue = 0.0
+    source_ids: List[str] = []
+
+    for p in parts:
+        source_ids.append(p["participation_id"])
+        u = users.get(p["user_id"], {})
+        dest = p.get("garage_name") or p.get("delivery_address") or "—"
+        d = destinations.setdefault(dest, {"destination": dest, "type": "garage" if is_tyres else "delivery", "units": 0, "items": {}, "fittings": []})
+        cust_items = []
+        for it in p.get("items", []):
+            vi = vidx.get(it["variant_id"], {})
+            qty = int(it["qty"])
+            uc = float(vi.get("supplier_cost", 0) or 0)
+            wp = float(it.get("wave_price", vi.get("wave_price", 0)) or 0)
+            model = vi.get("model") or it.get("model")
+            label = vi.get("label") or it.get("label")
+            li = line_items.setdefault(it["variant_id"], {"variant_id": it["variant_id"], "model": model, "label": label, "unit_cost": round(uc, 2), "qty": 0, "line_total": 0.0})
+            li["qty"] += qty
+            li["line_total"] = round(li["line_total"] + uc * qty, 2)
+            total_units += qty
+            total_cost += uc * qty
+            total_revenue += wp * qty
+            d["units"] += qty
+            ik = f"{model} · {label}"
+            d["items"][ik] = d["items"].get(ik, 0) + qty
+            cust_items.append({"model": model, "label": label, "qty": qty})
+        if p.get("fitting_slot_label"):
+            d["fittings"].append({"slot": p["fitting_slot_label"], "customer": u.get("name") or "—", "units": int(p.get("units", 0))})
+        customers.append({
+            "name": u.get("name") or "—", "email": u.get("email") or "—", "phone": u.get("phone") or "—",
+            "units": int(p.get("units", 0)), "destination": dest,
+            "fitting_slot": p.get("fitting_slot_label"), "items": cust_items,
+        })
+
+    dest_list = []
+    for d in destinations.values():
+        d["items"] = [{"label": k, "qty": v} for k, v in d["items"].items()]
+        dest_list.append(d)
+
+    return {
+        "line_items": list(line_items.values()),
+        "destinations": dest_list,
+        "customers": customers,
+        "source_order_ids": source_ids,
+        "totals": {"units": total_units, "orders": len(parts), "supplier_cost": round(total_cost, 2), "wave_revenue": round(total_revenue, 2)},
+    }
+
+
 # --------------------------------------------------------------------------
 # Router
 # --------------------------------------------------------------------------
@@ -1255,6 +1350,106 @@ def build_router(deps: Dict[str, Any]) -> APIRouter:
         """All consumer purchase orders across every wave, with full details + rollup stats."""
         await require_role(user, ["admin"])
         return await _admin_orders_logic(db)
+
+    # ---- Bundled Purchase Orders (per wave, paid-only) --------------------
+    @router.get("/admin/purchase-orders")
+    async def admin_list_pos(user: dict = Depends(get_current_user)):
+        await require_role(user, ["admin"])
+        return await db.purchase_orders.find(
+            {}, {"_id": 0, "customers": 0, "line_items": 0, "destinations": 0, "source_order_ids": 0}
+        ).sort("created_at", -1).to_list(1000)
+
+    @router.get("/admin/purchase-orders/candidates")
+    async def admin_po_candidates(user: dict = Depends(get_current_user)):
+        """Waves that have paid orders — flagged whether a PO already exists."""
+        await require_role(user, ["admin"])
+        existing = set()
+        async for x in db.purchase_orders.find({}, {"_id": 0, "wave_id": 1}):
+            existing.add(x["wave_id"])
+        pipeline = [
+            {"$match": {"$or": [{"payment_status": "paid"}, {"status": "captured"}]}},
+            {"$group": {"_id": "$wave_id", "units": {"$sum": "$units"}, "orders": {"$sum": 1}}},
+        ]
+        rows = await db.wave_participations.aggregate(pipeline).to_list(2000)
+        wids = [r["_id"] for r in rows]
+        waves: Dict[str, dict] = {}
+        async for w in db.waves.find({"wave_id": {"$in": wids}}, {"_id": 0, "wave_id": 1, "title": 1, "region_name": 1, "supplier_id": 1}):
+            waves[w["wave_id"]] = w
+        sup_ids = list({w.get("supplier_id") for w in waves.values() if w.get("supplier_id")})
+        sups: Dict[str, str] = {}
+        async for s in db.suppliers.find({"supplier_id": {"$in": sup_ids}}, {"_id": 0, "supplier_id": 1, "business_name": 1}):
+            sups[s["supplier_id"]] = s.get("business_name")
+        out = []
+        for r in rows:
+            w = waves.get(r["_id"])
+            if not w:
+                continue
+            out.append({
+                "wave_id": r["_id"], "title": w.get("title") or "—", "region_name": w.get("region_name") or "—",
+                "supplier_name": sups.get(w.get("supplier_id")) or "—",
+                "paid_units": int(r["units"]), "paid_orders": int(r["orders"]), "has_po": r["_id"] in existing,
+            })
+        out.sort(key=lambda x: (x["has_po"], -x["paid_units"]))
+        return out
+
+    @router.post("/admin/purchase-orders")
+    async def admin_create_po(payload: PurchaseOrderCreate, user: dict = Depends(get_current_user)):
+        await require_role(user, ["admin"])
+        wave = await db.waves.find_one({"wave_id": payload.wave_id}, {"_id": 0})
+        if not wave:
+            raise HTTPException(status_code=404, detail="Wave not found")
+        if await db.purchase_orders.find_one({"wave_id": payload.wave_id}, {"_id": 1}):
+            raise HTTPException(status_code=409, detail="A purchase order already exists for this wave")
+        data = await _build_bundled_po_data(db, wave)
+        if data["totals"]["units"] == 0:
+            raise HTTPException(status_code=400, detail="No paid orders to bundle for this wave yet")
+        sup = await db.suppliers.find_one({"supplier_id": wave.get("supplier_id")}, {"_id": 0, "business_name": 1, "contact_email": 1})
+        po = {
+            "po_id": f"po_{uuid.uuid4().hex[:10]}",
+            "po_number": await _next_po_number(db),
+            "wave_id": wave["wave_id"], "wave_title": wave["title"], "region_name": wave.get("region_name"),
+            "category": wave["category"], "category_label": wave.get("category_label"),
+            "supplier_id": wave.get("supplier_id"),
+            "supplier_name": (sup or {}).get("business_name") or "—",
+            "supplier_email": (sup or {}).get("contact_email"),
+            "status": "draft", "basis": "paid",
+            "created_at": _iso(_now()), "sent_at": None, "fulfilled_at": None,
+            **data,
+        }
+        await db.purchase_orders.insert_one(dict(po))
+        po.pop("_id", None)
+        return po
+
+    @router.get("/admin/purchase-orders/{po_id}")
+    async def admin_get_po(po_id: str, user: dict = Depends(get_current_user)):
+        await require_role(user, ["admin"])
+        po = await db.purchase_orders.find_one({"po_id": po_id}, {"_id": 0})
+        if not po:
+            raise HTTPException(status_code=404, detail="Purchase order not found")
+        return po
+
+    @router.patch("/admin/purchase-orders/{po_id}/status")
+    async def admin_update_po_status(po_id: str, payload: POStatusUpdate, user: dict = Depends(get_current_user)):
+        await require_role(user, ["admin"])
+        if payload.status not in ("draft", "sent", "fulfilled"):
+            raise HTTPException(status_code=400, detail="Invalid status")
+        updates: Dict[str, Any] = {"status": payload.status}
+        if payload.status == "sent":
+            updates["sent_at"] = _iso(_now())
+        elif payload.status == "fulfilled":
+            updates["fulfilled_at"] = _iso(_now())
+        res = await db.purchase_orders.update_one({"po_id": po_id}, {"$set": updates})
+        if res.matched_count == 0:
+            raise HTTPException(status_code=404, detail="Purchase order not found")
+        return await db.purchase_orders.find_one({"po_id": po_id}, {"_id": 0})
+
+    @router.delete("/admin/purchase-orders/{po_id}")
+    async def admin_delete_po(po_id: str, user: dict = Depends(get_current_user)):
+        await require_role(user, ["admin"])
+        res = await db.purchase_orders.delete_one({"po_id": po_id})
+        if res.deleted_count == 0:
+            raise HTTPException(status_code=404, detail="Purchase order not found")
+        return {"success": True}
 
     @router.get("/admin/scheduled-waves")
     async def admin_list_scheduled_waves(user: dict = Depends(get_current_user)):

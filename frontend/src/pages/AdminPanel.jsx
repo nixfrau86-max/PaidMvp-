@@ -8,6 +8,7 @@ import { useAuth } from "../lib/auth";
 import { Shell, Stat } from "./admin/_shared";
 import WaveForm from "../components/wave/WaveForm";
 import OrdersTab from "./admin/OrdersTab";
+import BundledOrdersTab from "./admin/BundledOrdersTab";
 import WavesTab from "./admin/WavesTab";
 import PendingWavesTab from "./admin/PendingWavesTab";
 import SuppliersTab from "./admin/SuppliersTab";
@@ -171,6 +172,7 @@ export default function AdminPanel() {
           { id: "suppliers", label: `Suppliers (${suppliers.length})`, badge: stats.pending_suppliers },
           { id: "garages", label: "Garages" },
           { id: "orders", label: "Orders" },
+          { id: "bundled", label: "Bundled Orders" },
           { id: "users", label: "Users" },
           { id: "fees", label: "Fees & Payments" },
           { id: "terms", label: "T&Cs Audit" },
@@ -195,6 +197,7 @@ export default function AdminPanel() {
       {tab === "suppliers" && <SuppliersTab suppliers={suppliers} onVerify={verifySupplier} onReject={rejectSupplier} onSuspend={suspendSupplier} onUnsuspend={unsuspendSupplier} onDelete={deleteSupplier} onHardDelete={hardDeleteSupplier} />}
       {tab === "garages" && <GaragesTab />}
       {tab === "orders" && <OrdersTab />}
+      {tab === "bundled" && <BundledOrdersTab />}
       {tab === "fees" && <FeesTab />}
       {tab === "users" && <UsersTab />}
       {tab === "terms" && <TermsAuditTab />}

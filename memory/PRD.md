@@ -19,6 +19,14 @@ Build a real-time demand aggregation platform that turns fragmented consumer int
 7. Payment methods (admin-configurable fees + recommended flag + on/off): Open Banking (+£1, recommended), Apple Pay (+£3), Google Pay (+£3), Card (+£3), Bank Transfer (+£1.50). Wallet rails route through Stripe; OB/Bank Transfer mocked until TrueLayer/Faster Payments are wired.
 8. Admin role is restricted to `ADMIN_EMAILS` env allowlist.
 
+### 📦 Bundled Purchase Orders (per wave, paid-only) — DONE, verified
+- New admin **Bundled Orders** tab (`pages/admin/BundledOrdersTab.jsx`). Admin selects a wave with paid orders → **Generate PO** bundles ALL paid (captured) consumer orders into ONE saved supplier PO.
+- Saved PO records (`purchase_orders` collection) with sequential `po_number` (`PO-YYYY-NNNN` via `counters`), status workflow **Draft → Sent → Fulfilled** (timestamps stamped). One PO per wave (409 on duplicate).
+- PO detail modal shows: per-variant order lines (model/size/qty/unit cost/line total + grand total supplier cost), per-destination breakdown (garage/delivery + fitting slots), full customer contact list. **CSV export + Print/PDF** (print-scoped CSS).
+- Backend (`routes/waves.py`, admin-only): `GET /admin/purchase-orders`, `GET /admin/purchase-orders/candidates` (waves w/ paid units + has_po flag), `POST /admin/purchase-orders`, `GET /admin/purchase-orders/{id}`, `PATCH .../{id}/status`, `DELETE .../{id}`. Bundling via `_build_bundled_po_data` (paid-only, N+1-free).
+- **Verified:** curl (create/status/duplicate-block/delete) + live screenshot (PO-2026-0002: 5 orders, 10 units, £1,132 cost, full detail render).
+
+
 ### 🧾 Admin Orders tab — all purchase orders with complete details (DONE, verified)
 - New admin **Orders** tab (`pages/admin/OrdersTab.jsx`, wired into `AdminPanel.jsx`) listing ALL consumer purchase orders (wave participations) across every wave.
 - Backend `GET /api/admin/orders` (admin-only, `_admin_orders_logic` in `routes/waves.py`): each order enriched with customer (name/email/phone), wave (title/region/supplier), line items, units, subtotal, service/payment fees, total, payment status, fulfilment (garage+slot or delivery), timestamps + rollup stats. N+1-free via batched `$in`.
