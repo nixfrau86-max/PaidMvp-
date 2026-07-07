@@ -19,6 +19,16 @@ Build a real-time demand aggregation platform that turns fragmented consumer int
 7. Payment methods (admin-configurable fees + recommended flag + on/off): Open Banking (+£1, recommended), Apple Pay (+£3), Google Pay (+£3), Card (+£3), Bank Transfer (+£1.50). Wallet rails route through Stripe; OB/Bank Transfer mocked until TrueLayer/Faster Payments are wired.
 8. Admin role is restricted to `ADMIN_EMAILS` env allowlist.
 
+### 🧾 Admin Orders tab — all purchase orders with complete details (DONE, verified)
+- New admin **Orders** tab (`pages/admin/OrdersTab.jsx`, wired into `AdminPanel.jsx`) listing ALL consumer purchase orders (wave participations) across every wave.
+- Backend `GET /api/admin/orders` (admin-only, `_admin_orders_logic` in `routes/waves.py`): each order enriched with customer (name/email/phone), wave (title/region/supplier), line items, units, subtotal, service/payment fees, total, payment status, fulfilment (garage+slot or delivery), timestamps + rollup stats. N+1-free via batched `$in`.
+- Frontend: stat cards (total/paid/paid-units/revenue), status filters, search, CSV export, row-click detail modal with full fee + fulfilment breakdown.
+- **Verified:** 65 orders / £5,618 revenue render; detail modal complete (screenshot + curl).
+
+### 🎨 Logo refresh (DONE)
+- Recoloured emblem to gold hands + teal coin with a bold outlined gold **£** (was monochrome $). Updated `LOGO_URL` in `Navbar.jsx` + `Landing.jsx`.
+
+
 ### 🌊 Admin can create Regional Waves (on behalf of any supplier) — DONE, verified
 - Admin's top-right button renamed **"+ Create VPP" → "Create Wave"** (`create-wave-btn`); it now opens the full Regional Wave form (legacy `CreateVPPForm` no longer wired).
 - The supplier `WaveForm` was extracted into a shared component `src/components/wave/WaveForm.jsx`, reused by both the supplier console and admin. In `admin` mode it shows a **Supplier dropdown** (alphabetically sorted, active suppliers only) and posts to the new admin endpoints.

@@ -885,6 +885,78 @@ async def _store_wave_image(db, owner_id: str, file) -> dict:
     return {"image_url": f"/api/wave-images/{stored_path}"}
 
 
+async def _admin_orders_logic(db) -> dict:
+    """All consumer purchase orders (wave participations) with complete details,
+    enriched with customer / wave / supplier via batched $in queries (no N+1)."""
+    parts = await db.wave_participations.find({}, {"_id": 0}).sort("created_at", -1).to_list(5000)
+    uids = list({p["user_id"] for p in parts})
+    wids = list({p["wave_id"] for p in parts})
+    users: Dict[str, dict] = {}
+    async for u in db.users.find({"user_id": {"$in": uids}}, {"_id": 0, "user_id": 1, "name": 1, "email": 1, "phone": 1}):
+        users[u["user_id"]] = u
+    waves: Dict[str, dict] = {}
+    async for w in db.waves.find({"wave_id": {"$in": wids}}, {"_id": 0, "wave_id": 1, "title": 1, "region_name": 1, "category": 1, "category_label": 1, "supplier_id": 1}):
+        waves[w["wave_id"]] = w
+    sup_ids = list({w.get("supplier_id") for w in waves.values() if w.get("supplier_id")})
+    sups: Dict[str, str] = {}
+    async for s in db.suppliers.find({"supplier_id": {"$in": sup_ids}}, {"_id": 0, "supplier_id": 1, "business_name": 1}):
+        sups[s["supplier_id"]] = s.get("business_name")
+
+    orders: List[dict] = []
+    stats = {"total": len(parts), "paid": 0, "authorized": 0, "reserved": 0, "cancelled": 0, "revenue": 0.0, "paid_units": 0}
+    for p in parts:
+        bd = p.get("breakdown") or {}
+        st = p.get("status")
+        is_paid = p.get("payment_status") == "paid" or st == "captured"
+        if is_paid:
+            pay_state = "paid"
+        elif st == "authorized":
+            pay_state = "authorized"
+        elif st in ("cancelled", "expired", "refunded", "released"):
+            pay_state = "cancelled"
+        else:
+            pay_state = "reserved"
+        stats[pay_state] = stats.get(pay_state, 0) + 1
+        total = bd.get("final_total")
+        if is_paid:
+            stats["revenue"] += float(total if total is not None else p.get("subtotal", 0) or 0)
+            stats["paid_units"] += int(p.get("units", 0))
+        u = users.get(p["user_id"], {})
+        w = waves.get(p["wave_id"], {})
+        is_tyres = p.get("category") == "tyres"
+        orders.append({
+            "order_id": p["participation_id"],
+            "created_at": p.get("created_at"),
+            "paid_at": p.get("paid_at"),
+            "status": st,
+            "payment_status": pay_state,
+            "payment_method": p.get("payment_method"),
+            "category": p.get("category"),
+            "category_label": w.get("category_label") or p.get("category"),
+            "units": int(p.get("units", 0)),
+            "subtotal": p.get("subtotal"),
+            "service_fee": bd.get("service_fee"),
+            "payment_fee": bd.get("payment_fee"),
+            "total": total,
+            "customer": {"name": u.get("name") or "—", "email": u.get("email") or "—", "phone": u.get("phone") or "—"},
+            "wave": {
+                "wave_id": p["wave_id"],
+                "title": w.get("title") or "—",
+                "region_name": w.get("region_name") or "—",
+                "supplier_name": sups.get(w.get("supplier_id")) or "—",
+            },
+            "items": [{"model": it.get("model"), "label": it.get("label"), "qty": it.get("qty"), "wave_price": it.get("wave_price")} for it in p.get("items", [])],
+            "fulfilment": {
+                "type": "garage" if is_tyres else "delivery",
+                "garage_name": p.get("garage_name"),
+                "fitting_slot": p.get("fitting_slot_label"),
+                "delivery_address": p.get("delivery_address"),
+            },
+        })
+    stats["revenue"] = round(stats["revenue"], 2)
+    return {"orders": orders, "stats": stats}
+
+
 # --------------------------------------------------------------------------
 # Router
 # --------------------------------------------------------------------------
@@ -1177,6 +1249,12 @@ def build_router(deps: Dict[str, Any]) -> APIRouter:
     async def admin_upload_wave_image(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
         await require_role(user, ["admin"])
         return await _store_wave_image(db, "admin", file)
+
+    @router.get("/admin/orders")
+    async def admin_orders(user: dict = Depends(get_current_user)):
+        """All consumer purchase orders across every wave, with full details + rollup stats."""
+        await require_role(user, ["admin"])
+        return await _admin_orders_logic(db)
 
     @router.get("/admin/scheduled-waves")
     async def admin_list_scheduled_waves(user: dict = Depends(get_current_user)):
